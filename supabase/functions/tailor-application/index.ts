@@ -31,6 +31,7 @@ import {
 } from "../_shared/skillsPlacement.ts";
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
+import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
 
@@ -3403,6 +3404,13 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
    - COMPANY-FIRST BALANCE: Address the company directly - use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
 
+   THE LETTER MUST NOT RESTATE THE CV (measured: two paragraphs of a real letter shared 61% and 41% of their content words with CV bullets). The reviewer reads both documents, so a restated bullet wastes the one page that can say something new.
+   - Lead EVERY paragraph with the employer's problem, not the candidate's history. The first sentence of a paragraph must be about ${company}, the role, or the work the posting describes.
+   - AT MOST ONE past example per paragraph, ONE sentence long, and only as proof of a forward-looking claim. Never two achievements in one paragraph.
+   - NEVER reuse the wording of a CV bullet. If a bullet reads "Architected a UK retail client's migration to AWS microservices, delivering all 47 services in 11 months", the letter may not restate that achievement at all - pick a different angle or a different point. Any sentence sharing 45% or more of its content words with a bullet is deleted automatically before the letter is exported, so writing one wastes the paragraph.
+   - AT LEAST ONE paragraph must say something specific to ${company} drawn from the posting: their scale, their market, or the problem this role exists to solve.
+   - The CLOSING is exactly TWO sentences and restates nothing.
+
    GAP MITIGATION (CRITICAL - from Rule 13):
    - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
    - For each gap, demonstrate transferable experience or adjacent skills
@@ -4213,8 +4221,32 @@ ${
     // kept clearly separate from the titles actually held, which stay inside
     // PROFESSIONAL EXPERIENCE under their own employers.
     // ============================================================
+    // THE LINE UNDER THE NAME IS A JOB TITLE, NEVER THE EMPLOYER.
+    // Real output printed the company name there, twice. When the posting title
+    // is missing or is nothing but the company name, the candidate's most
+    // relevant HELD title is written instead.
+    const headlineRoles = Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : [];
+    const headlineHeldTitles = headlineRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean);
+    const headlineCurrentTitle = String(
+      (headlineRoles.find((role: any) => {
+        const end = String(role?.endDate || role?.end_date || role?.dateRange || role?.dates || "").trim();
+        return !end || /present|current/i.test(end);
+      }) || headlineRoles[0] || {})?.title || "",
+    ).trim();
+    const headlineDecision = chooseHeadline({
+      targetTitle: jobTitle || "",
+      company,
+      currentTitle: headlineCurrentTitle,
+      heldTitles: headlineHeldTitles,
+    });
+    if (headlineDecision.usedFallback) {
+      console.warn(`[HEADLINE] ${headlineDecision.reason}: "${headlineDecision.headline}"`);
+    }
+    result.headline = headlineDecision.headline;
+    result.headlineSource = headlineDecision.reason;
+
     const enforceTargetRoleLine = (resumeText: string): string => {
-      const target = (jobTitle || "").trim();
+      const target = (headlineDecision.headline || "").trim();
       if (!resumeText || !target) return resumeText;
       const lines = resumeText.split("\n");
       const nameIdx = lines.findIndex((l) => l.trim().toLowerCase() === candidateName.toLowerCase());
@@ -4250,6 +4282,9 @@ ${
         if (line.trim().toLowerCase() === target.toLowerCase()) {
           if (seen) lines[i] = "";
           seen = true;
+        } else if (isEmployerNameLine(line, company)) {
+          // The employer's name is not a headline, and it is never a second one.
+          lines[i] = "";
         } else if (isContact(line)) {
           lines[i] = line
             .replace(new RegExp(`\\s*\\|\\s*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "")
@@ -4410,6 +4445,29 @@ ${
       result.coverLetterFillerRemoved = scrubbed.removed;
       if (scrubbed.removed.length) {
         console.log(`[COVER LETTER] Removed ${scrubbed.removed.length} enthusiasm/praise/prediction sentences`);
+      }
+
+      // THE LETTER MUST NOT RESTATE THE CV.
+      // Any sentence sharing 45% or more of its content words with a CV bullet
+      // is the same claim read twice, and at most one past example survives per
+      // paragraph - used as proof of a forward-looking claim, never as history.
+      const cvBullets = (result.tailoredResume || "")
+        .split("\n")
+        .filter((l: string) => /^\s*[-•*]\s+\S/.test(l))
+        .map((l: string) => l.trim());
+      const original = enforceCoverLetterOriginality(result.tailoredCoverLetter, cvBullets);
+      result.tailoredCoverLetter = original.text;
+      result.coverLetterRestatementRemoved = original.removedSentences;
+      result.coverLetterOverlap = {
+        maxSentenceOverlap: Math.round(original.maxSentenceOverlap * 100),
+        paragraphOverlaps: original.paragraphOverlaps.map((p) => Math.round(p * 100)),
+        meaning:
+          "Percentage of a sentence's or paragraph's content words that also appear in a single CV bullet, measured on the exported letter. Anything at 45% or above was removed.",
+      };
+      if (original.removedSentences.length) {
+        console.warn(
+          `[COVER LETTER] Removed ${original.removedSentences.length} sentence(s) restating the CV or repeating a past example`,
+        );
       }
     }
 
