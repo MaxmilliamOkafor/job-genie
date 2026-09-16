@@ -134,10 +134,12 @@ describe('enforcement of a bad live summary', () => {
       'Meta professional. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
       CTX,
     );
-    expect(employerOpening).toEqual(expect.arrayContaining(['employer name: Meta', 'opener is not a held job title']));
+    expect(employerOpening).toEqual(
+      expect.arrayContaining(['employer name: Meta', 'does not open with the field']),
+    );
 
     const adjectiveAndRating = findViolations(
-      'Solutions Architect with a dynamic and expert background. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+      'Background in solutions architecture, with a dynamic and expert record. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
       CTX,
     );
     expect(adjectiveAndRating).toEqual(
@@ -145,11 +147,51 @@ describe('enforcement of a bad live summary', () => {
     );
   });
 
-  it('requires the held title to begin the opener and rejects noun-participle fragments', () => {
+  it('rejects a held job title, the posting title and a skills run in the first sentence', () => {
+    expect(
+      findViolations(
+        'Background in solutions architecture as a Data Analyst. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+        CTX,
+      ),
+    ).toContain('job title claimed: Data Analyst');
+
+    expect(
+      findViolations(
+        'Background in solutions architecture. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three. Seeking the Solutions Architect, Risk role.',
+        CTX,
+      ),
+    ).toContain("states the posting's title");
+
+    expect(
+      findViolations(
+        'Background in Python, SQL, Airflow, dbt. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+        CTX,
+      ),
+    ).toContain('comma-separated skill run');
+  });
+
+  it('requires the field opener and rejects noun-participle fragments', () => {
     const valid = buildSummary(CTX);
-    expect(findViolations(`Evidence-led ${valid}`, CTX)).toContain('opener is not a held job title');
+    expect(findViolations(`Evidence-led ${valid}`, CTX)).toContain('does not open with the field');
     expect(isGrammaticalOutcome('Impression reporting, cutting the overnight run from six hours to under one')).toBe(false);
     expect(isGrammaticalOutcome('Cut the overnight run from six hours to under one')).toBe(true);
+  });
+
+  it('names the field in the field own words, and a stated field wins', () => {
+    expect(deriveField(['Data Analyst'], 'Risk Analyst')).toBe('data analysis');
+    expect(deriveField(['Software Engineer'], 'Backend Engineer')).toBe('software engineering');
+    expect(deriveField(['AI Product Manager'], 'Product Manager')).toBe('AI product management');
+    expect(deriveField(['Data Analyst'], 'Risk Analyst', undefined, 'clinical research')).toBe('clinical research');
+  });
+
+  it('prefers an outcome the posting cares about over the biggest number', () => {
+    const bullets = [
+      '- Cut the overnight batch from six hours to one',
+      '- Trained 24 analysts across two offices in stakeholder management',
+    ];
+    const coaching = pickOutcomes(bullets, ['stakeholder management']);
+    expect(coaching[0]).toContain('24 analysts');
+    expect(pickOutcomes(bullets)[0]).toContain('six hours to one');
   });
 });
 
