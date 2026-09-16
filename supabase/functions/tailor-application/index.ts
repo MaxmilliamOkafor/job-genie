@@ -4776,22 +4776,29 @@ ${
     // "Native speaker" becomes "fluent" (native fluency names where someone is
     // from; an employer needs to know they can work in the language). Equipment
     // -- internet, a laptop, a webcam, a workspace, transportation -- leaves any
-    // skills line, because it is a condition in a room, not a capability. A
-    // sentence offering years of experience as a qualification goes, since years
-    // in one field never meet a stated requirement for years in another.
-    const resumeTruth = sanitiseDocument(result.tailoredResume || "");
+    // skills line, because it is a condition in a room, not a capability. Only a
+    // CROSS-FIELD years claim goes: years earned in one field offered as meeting
+    // a stated requirement for years in another is false on an application. A
+    // true within-field claim stays, including the closing line the extension's
+    // recruiter audit appends, so re-running a finished CV never strips it.
+    const yearsContext = {
+      candidateField: summaryContext.field || summaryContext.currentTitle || "",
+      postingField: jobTitle || "",
+    };
+    const resumeTruth = sanitiseDocument(result.tailoredResume || "", yearsContext);
     result.tailoredResume = resumeTruth.text;
-    const letterTruth = sanitiseDocument(result.tailoredCoverLetter || "");
+    const letterTruth = sanitiseDocument(result.tailoredCoverLetter || "", yearsContext);
     result.tailoredCoverLetter = letterTruth.text;
     const removedYearsClaims = [...resumeTruth.removedYearsClaims, ...letterTruth.removedYearsClaims];
     if (removedYearsClaims.length > 0) {
-      console.warn(`[TRUTHFULNESS] Removed years-of-experience claims: ${removedYearsClaims.join(" | ")}`);
+      console.warn(`[TRUTHFULNESS] Removed cross-field years claims: ${removedYearsClaims.join(" | ")}`);
     }
     result.truthfulness = {
       removedYearsClaims,
       meaning:
-        "Language proficiency is stated as fluent, equipment never appears as a skill, and no sentence offers years of experience as a qualification.",
+        "Language proficiency is stated as fluent, equipment never appears as a skill, and years earned in one field are never offered as meeting a stated requirement for years in another. A true within-field years statement is left as written.",
     };
+
 
 
 

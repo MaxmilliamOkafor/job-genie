@@ -23,8 +23,8 @@ describe('language proficiency', () => {
   });
 });
 
-describe('years of experience', () => {
-  it('drops a sentence offering years as a qualification', () => {
+describe('years of experience: cross-field only', () => {
+  it('drops years in one field offered as meeting a requirement in another', () => {
     const { text, removed } = removeYearsClaims(
       'Eight years of software engineering meets your 1+ years of hospitality operations requirement. Delivered the rota tool.',
     );
@@ -32,11 +32,28 @@ describe('years of experience', () => {
     expect(removed.length).toBe(1);
   });
 
+  it('keeps a true within-field claim, including the closing line the extension appends', () => {
+    const line =
+      "Interested in applying this experience to the Senior Backend Engineer role, bringing 9 years of relevant experience that meets the position's stated experience requirement.";
+    const out = removeYearsClaims(line, {
+      candidateField: 'software engineering',
+      postingField: 'Senior Backend Engineer',
+    });
+    expect(out.text).toBe(line);
+    expect(out.removed.length).toBe(0);
+  });
+
+  it('keeps a plain years statement that claims to meet nothing', () => {
+    const line = 'Nine years of software engineering across payments and data platforms.';
+    expect(removeYearsClaims(line).text).toBe(line);
+  });
+
   it('keeps a dated achievement that is not a years claim', () => {
     const line = 'Cut month-end close from nine working days to three in 2023.';
     expect(removeYearsClaims(line).text).toBe(line);
   });
 });
+
 
 describe('equipment is not a capability', () => {
   it('recognises conditions in a room', () => {
