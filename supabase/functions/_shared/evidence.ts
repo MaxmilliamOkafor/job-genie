@@ -648,6 +648,9 @@ export function buildRequirementList(
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
     if (isFurniture(key)) { removed.push(term); continue; }
+    // An output, a quality or a mood is not a skill: "custom reports" and
+    // "independence" can only ever show as a permanent miss.
+    if (isGenericOutcome(key)) { removed.push(term); continue; }
     // Incidental employer names are not skills.
     if (employers.has(key)) { removed.push(term); continue; }
     // A bare seniority word carries no requirement of its own.
