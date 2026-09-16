@@ -111,38 +111,101 @@ function mentionIsNegated(text: string, term: string): boolean {
   return NEGATION.test(text.slice(Math.max(0, idx - 60), idx));
 }
 
-/** Collects the profile into labelled, tiered evidence lines. */
+/**
+ * Unwraps whatever a profile field holds into readable text.
+ *
+ * An achievement stored as { text: "..." } used to stringify to
+ * "[object Object]", which matched nothing and read as corrupt evidence. Nested
+ * values are unwrapped instead of stringified, at every depth a profile uses.
+ */
+function evidenceText(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (depth > 3) return "";
+  if (Array.isArray(value)) {
+    return value.map((v) => evidenceText(v, depth + 1)).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    for (const key of ["text", "bullet", "achievement", "description", "detail", "summary", "name", "title", "label", "value"]) {
+      const inner = evidenceText(o[key], depth + 1);
+      if (inner) return inner;
+    }
+    return Object.values(o).map((v) => evidenceText(v, depth + 1)).filter(Boolean).join(", ");
+  }
+  return "";
+}
+
+/** Reads the first present alias of a field, so snake_case profiles are not invisible. */
+function alias(record: any, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0)) return value;
+  }
+  return undefined;
+}
+
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : value ? [value] : []);
+
+/**
+ * Collects the profile into labelled, tiered evidence lines.
+ *
+ * Reads every shape a profile arrives in: camelCase and snake_case keys, and on
+ * each role or project the bullets, description, achievements and
+ * responsibilities as demonstrations, with technologies, techStack, tech_stack
+ * and skills as records. A reader that knew only camelCase returned nothing at
+ * all against a stored snake_case profile, every requirement then classified as
+ * unsupported, and the tailoring had no evidence to write from.
+ *
+ * The same role reached through two aliases is one piece of evidence, so an
+ * identical source line is never pushed twice: duplication reads as
+ * corroboration that does not exist.
+ */
 export function buildEvidenceSources(profile: any): EvidenceSource[] {
   const sources: EvidenceSource[] = [];
+  const seen = new Set<string>();
   const push = (label: string, text: unknown, kind: EvidenceSource["kind"]) => {
-    const t = (text ?? "").toString().trim();
-    if (t) sources.push({ label, text: t, kind });
+    const t = evidenceText(text);
+    if (!t) return;
+    const key = `${kind}::${t.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    sources.push({ label, text: t, kind });
   };
 
   // Explicit records: skills, certifications, education, per-role tech lists.
-  const skills = profile?.skills;
+  const skills = alias(profile, "skills", "technicalSkills", "technical_skills");
   if (Array.isArray(skills)) {
     for (const s of skills) {
       if (typeof s === "string") push("saved skills", s, "record");
       else if (s && typeof s === "object") {
-        push("saved skills", [s.name, s.category, Array.isArray(s.items) ? s.items.join(", ") : s.items].filter(Boolean).join(": "), "record");
+        const entry = s as any;
+        push(
+          "saved skills",
+          [entry.name, entry.category, evidenceText(alias(entry, "items", "skills", "entries"))]
+            .filter(Boolean)
+            .join(": "),
+          "record",
+        );
       }
     }
   } else if (skills && typeof skills === "object") {
     for (const [group, items] of Object.entries(skills)) {
-      push(`saved skills (${group})`, Array.isArray(items) ? items.join(", ") : items, "record");
+      push(`saved skills (${group})`, items, "record");
     }
   }
-  for (const c of Array.isArray(profile?.certifications) ? profile.certifications : []) {
-    push("certification", typeof c === "string" ? c : (c as any)?.name, "record");
+  for (const c of asArray(alias(profile, "certifications", "certification"))) {
+    push("certification", typeof c === "string" ? c : alias(c, "name", "title", "text"), "record");
   }
-  for (const e of Array.isArray(profile?.education) ? profile.education : []) {
+  for (const e of asArray(alias(profile, "education"))) {
     if (typeof e === "string") push("education", e, "record");
     else push(
       "education",
       [
         (e as any)?.degree,
         (e as any)?.field_of_study,
+        (e as any)?.fieldOfStudy,
         (e as any)?.field,
         (e as any)?.major,
         (e as any)?.school,
@@ -153,20 +216,40 @@ export function buildEvidenceSources(profile: any): EvidenceSource[] {
   }
 
   // Demonstrations: achievement bullets on real roles, and project work.
-  for (const role of Array.isArray(profile?.professionalExperience) ? profile.professionalExperience : []) {
-    const label = [(role as any)?.title, (role as any)?.company].filter(Boolean).join(" at ") || "experience";
-    for (const b of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
-      push(label, b, "achievement");
+  for (const role of asArray(alias(profile, "professionalExperience", "professional_experience", "workExperience", "work_experience"))) {
+    const r = role as any;
+    const label = [r?.title, alias(r, "company", "employer")].filter(Boolean).map((v) => evidenceText(v)).filter(Boolean).join(" at ") || "experience";
+    const demonstrations = [
+      ...asArray(alias(r, "bullets", "highlights")),
+      ...asArray(alias(r, "achievements")),
+      ...asArray(alias(r, "responsibilities")),
+      ...asArray(alias(r, "description")),
+    ];
+    for (const b of demonstrations) {
+      const text = evidenceText(b);
+      // A description stored as one block is several bullets on one line.
+      for (const line of text.split(/\n+/)) push(label, line.replace(/^\s*[-•*]\s*/, ""), "achievement");
     }
-    const tech = (role as any)?.technologies ?? (role as any)?.techStack;
-    push(`${label} (recorded tools)`, Array.isArray(tech) ? tech.join(", ") : tech, "record");
+    push(
+      `${label} (recorded tools)`,
+      alias(r, "technologies", "techStack", "tech_stack", "skills", "tools"),
+      "record",
+    );
   }
-  for (const p of Array.isArray(profile?.relevantProjects) ? profile.relevantProjects : []) {
-    const label = (p as any)?.name || "project";
-    const stack = (p as any)?.techStack;
-    push(`${label} (recorded stack)`, Array.isArray(stack) ? stack.join(", ") : stack, "record");
-    push(label, (p as any)?.description, "achievement");
-    for (const b of Array.isArray((p as any)?.bullets) ? (p as any).bullets : []) push(label, b, "achievement");
+  for (const p of asArray(alias(profile, "relevantProjects", "relevant_projects", "projects"))) {
+    const proj = p as any;
+    const label = evidenceText(alias(proj, "name", "title")) || "project";
+    push(`${label} (recorded stack)`, alias(proj, "techStack", "tech_stack", "technologies", "skills"), "record");
+    const demonstrations = [
+      ...asArray(alias(proj, "description")),
+      ...asArray(alias(proj, "bullets", "highlights")),
+      ...asArray(alias(proj, "achievements")),
+      ...asArray(alias(proj, "responsibilities")),
+    ];
+    for (const b of demonstrations) {
+      const text = evidenceText(b);
+      for (const line of text.split(/\n+/)) push(label, line.replace(/^\s*[-•*]\s*/, ""), "achievement");
+    }
   }
   return sources;
 }
