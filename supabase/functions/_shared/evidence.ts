@@ -428,7 +428,7 @@ const VARIANT_QUALIFIERS = new Set([
   "modern", "enterprise", "full", "complete", "core", "day-to-day",
   // "ad-hoc data analysis" is "data analysis"; "custom reports" is "reports".
   "ad-hoc", "ad", "hoc", "custom", "bespoke", "various", "multiple", "complex",
-  "detailed", "data-driven",
+  "detailed",
 ]);
 
 const GENERIC_TAILS = new Set([
