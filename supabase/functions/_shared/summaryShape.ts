@@ -523,13 +523,12 @@ export function buildSummary(ctx: SummaryContext): string {
   };
 
 
-  // Trim in this order and never touch a figure: the third scope term, then the
-  // outcome clauses at their own comma boundaries, then the scope clause.
+  // Trim in this order and never touch a figure: the outcome clauses at their
+  // own comma boundaries, then the strengths clause.
   const attempts: string[] = [
     assemble(scopeTerms, 110),
-    assemble(scopeTerms.slice(0, 2), 110),
-    assemble(scopeTerms.slice(0, 2), 85),
-    assemble(scopeTerms.slice(0, 2), 65),
+    assemble(scopeTerms, 85),
+    assemble(scopeTerms, 65),
     assemble([], 110),
     assemble([], 85),
     assemble([], 65),
@@ -544,7 +543,7 @@ export function buildSummary(ctx: SummaryContext): string {
         /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
         (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
       ).split(/,\s+/)[0];
-      const expanded = `${title}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
+      const expanded = `Background in ${field}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
       if (expanded.length >= MIN_LEN && expanded.length <= MAX_LEN && findViolations(expanded, ctx).length === 0) {
         return expanded;
       }
