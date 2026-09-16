@@ -4214,8 +4214,32 @@ ${
     // kept clearly separate from the titles actually held, which stay inside
     // PROFESSIONAL EXPERIENCE under their own employers.
     // ============================================================
+    // THE LINE UNDER THE NAME IS A JOB TITLE, NEVER THE EMPLOYER.
+    // Real output printed the company name there, twice. When the posting title
+    // is missing or is nothing but the company name, the candidate's most
+    // relevant HELD title is written instead.
+    const headlineRoles = Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : [];
+    const headlineHeldTitles = headlineRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean);
+    const headlineCurrentTitle = String(
+      (headlineRoles.find((role: any) => {
+        const end = String(role?.endDate || role?.end_date || role?.dateRange || role?.dates || "").trim();
+        return !end || /present|current/i.test(end);
+      }) || headlineRoles[0] || {})?.title || "",
+    ).trim();
+    const headlineDecision = chooseHeadline({
+      targetTitle: jobTitle || "",
+      company,
+      currentTitle: headlineCurrentTitle,
+      heldTitles: headlineHeldTitles,
+    });
+    if (headlineDecision.usedFallback) {
+      console.warn(`[HEADLINE] ${headlineDecision.reason}: "${headlineDecision.headline}"`);
+    }
+    result.headline = headlineDecision.headline;
+    result.headlineSource = headlineDecision.reason;
+
     const enforceTargetRoleLine = (resumeText: string): string => {
-      const target = (jobTitle || "").trim();
+      const target = (headlineDecision.headline || "").trim();
       if (!resumeText || !target) return resumeText;
       const lines = resumeText.split("\n");
       const nameIdx = lines.findIndex((l) => l.trim().toLowerCase() === candidateName.toLowerCase());
