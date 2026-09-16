@@ -284,7 +284,7 @@ export function outcomeClause(line: string): string {
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
 
-const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced)\b/i;
+const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced|trained|coached|mentored|presented|negotiated|standardised|consolidated|grew|expanded|recovered|halved|doubled|tripled)\b/i;
 const FRAGMENT_OPENING = /^[^,.;]{2,50},\s+(?:cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i;
 const FINITE_PARTICIPLE: Record<string, string> = {
   cutting: "Cut",

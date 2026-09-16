@@ -5,6 +5,7 @@ import {
   evidencedRequirements,
   findViolations,
   pickHeldTitle,
+  deriveField,
   pickOutcomes,
   rankOutcome,
   shortenClause,
@@ -49,10 +50,10 @@ describe('scope clause', () => {
     expect(terms).not.toContain('Kubernetes');
   });
 
-  it('omits the clause entirely when fewer than two requirements qualify', () => {
+  it('omits the strengths clause entirely when fewer than two requirements qualify', () => {
     const summary = buildSummary({ ...CTX, requirements: ['regulatory reporting', 'Kubernetes'] });
-    expect(summary).not.toContain('working across');
-    expect(summary.startsWith('Solutions Architect.')).toBe(true);
+    expect(summary).not.toContain('strengths in');
+    expect(summary.startsWith('Background in solutions architecture.')).toBe(true);
   });
 });
 
@@ -98,18 +99,21 @@ describe('enforcement of a bad live summary', () => {
   const BAD =
     'Manager of Payroll Operations with a strong background in team leadership and operational excellence, ensuring compliance and accuracy in payroll delivery across multi-country environments.';
 
-  it('flags the unheld title and the unverifiable phrasing', () => {
+  it('flags the missing field opener and the unverifiable phrasing', () => {
     const violations = findViolations(BAD, CTX);
-    expect(violations.some((v) => v.includes('not a held job title'))).toBe(true);
+    expect(violations.some((v) => v.includes('does not open with the field'))).toBe(true);
     expect(violations.some((v) => v.includes('strong background'))).toBe(true);
     expect(violations.some((v) => v.includes('operational excellence'))).toBe(true);
     expect(violations.some((v) => v.includes('fewer than two figures'))).toBe(true);
   });
 
-  it('replaces it with the required shape', () => {
+  it('replaces it with the required shape, led by the field and never a job title', () => {
     const decision = enforceSummaryShape(BAD, CTX);
     expect(decision.rebuilt).toBe(true);
-    expect(decision.summary.startsWith('Solutions Architect')).toBe(true);
+    expect(decision.summary.startsWith('Background in solutions architecture')).toBe(true);
+    for (const title of CTX.heldTitles) {
+      expect(decision.summary.split('.')[0]).not.toContain(title);
+    }
     expect(findViolations(decision.summary, CTX)).toEqual([]);
   });
 
@@ -131,10 +135,12 @@ describe('enforcement of a bad live summary', () => {
       'Meta professional. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
       CTX,
     );
-    expect(employerOpening).toEqual(expect.arrayContaining(['employer name: Meta', 'opener is not a held job title']));
+    expect(employerOpening).toEqual(
+      expect.arrayContaining(['employer name: Meta', 'does not open with the field']),
+    );
 
     const adjectiveAndRating = findViolations(
-      'Solutions Architect with a dynamic and expert background. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+      'Background in solutions architecture, with a dynamic and expert record. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
       CTX,
     );
     expect(adjectiveAndRating).toEqual(
@@ -142,11 +148,51 @@ describe('enforcement of a bad live summary', () => {
     );
   });
 
-  it('requires the held title to begin the opener and rejects noun-participle fragments', () => {
+  it('rejects a held job title, the posting title and a skills run in the first sentence', () => {
+    expect(
+      findViolations(
+        'Background in solutions architecture as a Data Analyst. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+        CTX,
+      ),
+    ).toContain('job title claimed: Data Analyst');
+
+    expect(
+      findViolations(
+        'Background in solutions architecture. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three. Seeking the Solutions Architect, Risk role.',
+        CTX,
+      ),
+    ).toContain("states the posting's title");
+
+    expect(
+      findViolations(
+        'Background in Python, SQL, Airflow, dbt. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+        CTX,
+      ),
+    ).toContain('comma-separated skill run');
+  });
+
+  it('requires the field opener and rejects noun-participle fragments', () => {
     const valid = buildSummary(CTX);
-    expect(findViolations(`Evidence-led ${valid}`, CTX)).toContain('opener is not a held job title');
+    expect(findViolations(`Evidence-led ${valid}`, CTX)).toContain('does not open with the field');
     expect(isGrammaticalOutcome('Impression reporting, cutting the overnight run from six hours to under one')).toBe(false);
     expect(isGrammaticalOutcome('Cut the overnight run from six hours to under one')).toBe(true);
+  });
+
+  it('names the field in the field own words, and a stated field wins', () => {
+    expect(deriveField(['Data Analyst'], 'Risk Analyst')).toBe('data analysis');
+    expect(deriveField(['Software Engineer'], 'Backend Engineer')).toBe('software engineering');
+    expect(deriveField(['AI Product Manager'], 'Product Manager')).toBe('AI product management');
+    expect(deriveField(['Data Analyst'], 'Risk Analyst', undefined, 'clinical research')).toBe('clinical research');
+  });
+
+  it('prefers an outcome the posting cares about over the biggest number', () => {
+    const bullets = [
+      '- Cut the overnight batch from six hours to one',
+      '- Trained 24 analysts across two offices in stakeholder management',
+    ];
+    const coaching = pickOutcomes(bullets, ['stakeholder management']);
+    expect(coaching[0]).toContain('24 analysts');
+    expect(pickOutcomes(bullets)[0]).toContain('six hours to one');
   });
 });
 

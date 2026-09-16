@@ -4760,7 +4760,7 @@ ${
       rebuilt: summaryDecision.rebuilt,
       violations: summaryDecision.violations,
       meaning:
-        "Two sentences, 150-220 characters: a held job title, the posting requirements the experience evidences, then two figures joined with a semicolon.",
+        "Two sentences, 150-220 characters: the candidate's field in its own words, two capabilities the experience evidences, then two figures joined with a semicolon. Never a job title, employer, place name or total years.",
     };
 
     if (result.tailoredResume) {
@@ -4771,6 +4771,28 @@ ${
         console.error("[EDUCATION] Generated CV omitted EDUCATION despite saved profile rows; section restored from profile");
       }
     }
+
+    // BIAS AND TRUTHFULNESS, LAST WORD ON BOTH DOCUMENTS.
+    // "Native speaker" becomes "fluent" (native fluency names where someone is
+    // from; an employer needs to know they can work in the language). Equipment
+    // -- internet, a laptop, a webcam, a workspace, transportation -- leaves any
+    // skills line, because it is a condition in a room, not a capability. A
+    // sentence offering years of experience as a qualification goes, since years
+    // in one field never meet a stated requirement for years in another.
+    const resumeTruth = sanitiseDocument(result.tailoredResume || "");
+    result.tailoredResume = resumeTruth.text;
+    const letterTruth = sanitiseDocument(result.tailoredCoverLetter || "");
+    result.tailoredCoverLetter = letterTruth.text;
+    const removedYearsClaims = [...resumeTruth.removedYearsClaims, ...letterTruth.removedYearsClaims];
+    if (removedYearsClaims.length > 0) {
+      console.warn(`[TRUTHFULNESS] Removed years-of-experience claims: ${removedYearsClaims.join(" | ")}`);
+    }
+    result.truthfulness = {
+      removedYearsClaims,
+      meaning:
+        "Language proficiency is stated as fluent, equipment never appears as a skill, and no sentence offers years of experience as a qualification.",
+    };
+
 
 
 
