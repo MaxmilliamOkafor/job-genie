@@ -31,7 +31,7 @@ import {
 } from "../_shared/skillsPlacement.ts";
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { chooseHeadline, enforceCoverLetterOriginality } from "../_shared/coverLetter.ts";
+import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
 
