@@ -98,18 +98,21 @@ describe('enforcement of a bad live summary', () => {
   const BAD =
     'Manager of Payroll Operations with a strong background in team leadership and operational excellence, ensuring compliance and accuracy in payroll delivery across multi-country environments.';
 
-  it('flags the unheld title and the unverifiable phrasing', () => {
+  it('flags the missing field opener and the unverifiable phrasing', () => {
     const violations = findViolations(BAD, CTX);
-    expect(violations.some((v) => v.includes('not a held job title'))).toBe(true);
+    expect(violations.some((v) => v.includes('does not open with the field'))).toBe(true);
     expect(violations.some((v) => v.includes('strong background'))).toBe(true);
     expect(violations.some((v) => v.includes('operational excellence'))).toBe(true);
     expect(violations.some((v) => v.includes('fewer than two figures'))).toBe(true);
   });
 
-  it('replaces it with the required shape', () => {
+  it('replaces it with the required shape, led by the field and never a job title', () => {
     const decision = enforceSummaryShape(BAD, CTX);
     expect(decision.rebuilt).toBe(true);
-    expect(decision.summary.startsWith('Solutions Architect')).toBe(true);
+    expect(decision.summary.startsWith('Background in solutions architecture')).toBe(true);
+    for (const title of CTX.heldTitles) {
+      expect(decision.summary.split('.')[0]).not.toContain(title);
+    }
     expect(findViolations(decision.summary, CTX)).toEqual([]);
   });
 
