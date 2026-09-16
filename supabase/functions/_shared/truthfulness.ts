@@ -34,12 +34,15 @@ export function sanitiseLanguageProficiency(text: string): string {
     .replace(/\bfluent\s+fluent\b/gi, "fluent");
 }
 
-const YEARS_SPAN =
-  /\b(?:(\d{1,2})\s*\+?\s*(?:years|yrs)|over\s+(\d{1,2})\s+years|more\s+than\s+(\d{1,2})\s+years)\b/i;
+const WORD_NUMBER = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty";
+const YEARS_SPAN = new RegExp(
+  `\\b(?:\\d{1,2}\\s*\\+?|${WORD_NUMBER})\\s*(?:years|yrs)\\b`,
+  "gi",
+);
 
-/** Wording that offers the span as satisfying something the posting asks for. */
+/** Wording that offers a span as satisfying something the posting asks for. */
 const MEETS_REQUIREMENT =
-  /\b(?:meets?|meeting|satisfies|satisfying|fulfils?|fulfills?|exceeds?|as\s+required|required|requirement)\b/i;
+  /\b(?:meets?|meeting|satisfies|satisfying|fulfils?|fulfills?|exceeds?|covers?|covering|as\s+required|required|requirement)\b/i;
 
 /** Words that name no field, so they cannot make a claim cross-field. */
 const GENERIC_FIELD_WORDS = new Set([
@@ -47,7 +50,8 @@ const GENERIC_FIELD_WORDS = new Set([
   "work", "working", "hands", "on", "total", "combined", "overall", "the", "a", "an",
   "of", "in", "as", "at", "position", "positions", "role", "roles", "stated", "posting",
   "job", "years", "yrs", "requirement", "requirements", "and", "with", "for", "this",
-  "its", "their", "that", "which", "bringing", "brings",
+  "its", "their", "that", "which", "bringing", "brings", "your", "our", "my", "meets",
+  "meeting", "covers", "covering", "senior", "junior", "lead", "principal", "staff",
 ]);
 
 function fieldTokens(phrase: string): Set<string> {
@@ -71,6 +75,17 @@ export interface YearsContext {
   postingField?: string;
 }
 
+/** Every years span in the sentence, with the field named right after it. */
+function yearsFields(text: string): Set<string>[] {
+  const fields: Set<string>[] = [];
+  for (const match of text.matchAll(YEARS_SPAN)) {
+    const after = text.slice((match.index ?? 0) + match[0].length);
+    const phrase = after.match(/^\s*(?:of|in|as)?\s*([^.,;]{0,60})/i)?.[1] ?? "";
+    fields.push(fieldTokens(phrase));
+  }
+  return fields;
+}
+
 /**
  * True only when a sentence presents years earned in one field as meeting a
  * stated requirement for years in ANOTHER field. A true claim inside one field
@@ -79,24 +94,28 @@ export interface YearsContext {
  */
 export function statesYearsAsQualification(sentence: string, context: YearsContext = {}): boolean {
   const text = sentence || "";
-  const span = YEARS_SPAN.exec(text);
-  if (!span) return false;
   if (!MEETS_REQUIREMENT.test(text)) return false;
+  const fields = yearsFields(text).filter((f) => f.size > 0);
+  if (fields.length === 0) return false;
 
-  // What the years are claimed to be in, and what the requirement is stated in.
-  const after = text.slice(span.index + span[0].length);
-  const yearsField = fieldTokens(
-    (after.match(/^\s*(?:of|in|as)\s+([^.,;]{0,60})/i)?.[1] ?? "") + " " + (context.candidateField ?? ""),
-  );
-  const requirementField = fieldTokens(
-    (text.match(/\b(?:requirement|required|meets?|meeting|satisfies|fulfils?|fulfills?)\b[^.;]{0,60}/i)?.[0] ?? "")
-      + " " + (context.postingField ?? ""),
-  );
+  // Two spans naming two different fields: one is being offered for the other.
+  for (let i = 0; i < fields.length; i += 1) {
+    for (let j = i + 1; j < fields.length; j += 1) {
+      if (!overlaps(fields[i], fields[j])) return true;
+    }
+  }
 
-  // No field named on one side of the comparison: the claim is not cross-field.
-  if (yearsField.size === 0 || requirementField.size === 0) return false;
-  return !overlaps(yearsField, requirementField);
+  // A single span whose field is not the candidate's own: years earned
+  // elsewhere are being offered against this posting's requirement.
+  const candidate = fieldTokens(context.candidateField ?? "");
+  if (fields.length === 1 && candidate.size > 0 && !overlaps(fields[0], candidate)) {
+    const posting = fieldTokens(context.postingField ?? "");
+    if (posting.size === 0 || !overlaps(fields[0], posting) === false) return true;
+    return true;
+  }
+  return false;
 }
+
 
 /**
  * Drops only the cross-field years claims. A true within-field sentence, such
