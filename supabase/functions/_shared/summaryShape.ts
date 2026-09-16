@@ -499,19 +499,29 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
 
 /** Builds the required shape from the profile and posting. Empty when no figure exists. */
 export function buildSummary(ctx: SummaryContext): string {
-  const title = pickHeldTitle(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle);
-  const outcomes = pickOutcomes(ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets);
-  if (!title || outcomes.length === 0) return "";
+  const field = deriveField(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle, ctx.field);
+  const outcomes = pickOutcomes(
+    ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets,
+    ctx.requirements,
+  );
+  if (!field || outcomes.length === 0) return "";
 
-  const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
+  // Strength terms must be in the posting's wording and evidenced by an
+  // experience bullet, never by the skills list alone. Fewer than two qualifying
+  // and the clause is omitted rather than padded.
+  const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 2);
 
   const assemble = (terms: string[], clauseBudget: number) => {
     const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
     const outcomeSentence =
       shortened.length >= 2 ? `${upperFirst(shortened[0])}; ${lowerFirst(shortened[1])}.` : `${upperFirst(shortened[0])}.`;
-    const lead = terms.length >= 2 ? `${title} working across ${joinScope(terms)}.` : `${title}.`;
+    const lead =
+      terms.length >= 2
+        ? `Background in ${field}, with strengths in ${lowerFirst(terms[0])} and ${lowerFirst(terms[1])}.`
+        : `Background in ${field}.`;
     return `${lead} ${outcomeSentence}`.replace(/\s+/g, " ").trim();
   };
+
 
   // Trim in this order and never touch a figure: the third scope term, then the
   // outcome clauses at their own comma boundaries, then the scope clause.
