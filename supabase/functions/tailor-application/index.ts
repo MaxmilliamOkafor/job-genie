@@ -4275,6 +4275,9 @@ ${
         if (line.trim().toLowerCase() === target.toLowerCase()) {
           if (seen) lines[i] = "";
           seen = true;
+        } else if (isEmployerNameLine(line, company)) {
+          // The employer's name is not a headline, and it is never a second one.
+          lines[i] = "";
         } else if (isContact(line)) {
           lines[i] = line
             .replace(new RegExp(`\\s*\\|\\s*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "")
