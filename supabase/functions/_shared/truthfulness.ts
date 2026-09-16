@@ -184,7 +184,10 @@ export function stripEquipmentFromSkillsLine(line: string): string {
 }
 
 /** Applies every rule above to a whole document. */
-export function sanitiseDocument(text: string): { text: string; removedYearsClaims: string[] } {
+export function sanitiseDocument(
+  text: string,
+  context: YearsContext = {},
+): { text: string; removedYearsClaims: string[] } {
   if (!text) return { text, removedYearsClaims: [] };
   const withFluency = sanitiseLanguageProficiency(text);
   const lines = withFluency.split("\n").map((line) => {
@@ -195,6 +198,7 @@ export function sanitiseDocument(text: string): { text: string; removedYearsClai
     }
     return line;
   });
-  const { text: withoutYears, removed } = removeYearsClaims(lines.join("\n"));
+  const { text: withoutYears, removed } = removeYearsClaims(lines.join("\n"), context);
   return { text: withoutYears.replace(/\n{3,}/g, "\n\n"), removedYearsClaims: removed };
 }
+
