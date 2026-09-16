@@ -49,10 +49,10 @@ describe('scope clause', () => {
     expect(terms).not.toContain('Kubernetes');
   });
 
-  it('omits the clause entirely when fewer than two requirements qualify', () => {
+  it('omits the strengths clause entirely when fewer than two requirements qualify', () => {
     const summary = buildSummary({ ...CTX, requirements: ['regulatory reporting', 'Kubernetes'] });
-    expect(summary).not.toContain('working across');
-    expect(summary.startsWith('Solutions Architect.')).toBe(true);
+    expect(summary).not.toContain('strengths in');
+    expect(summary.startsWith('Background in solutions architecture.')).toBe(true);
   });
 });
 
