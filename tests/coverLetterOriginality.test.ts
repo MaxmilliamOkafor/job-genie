@@ -13,16 +13,43 @@ const BULLETS = [
 ];
 
 describe('the letter never restates a CV bullet', () => {
-  it('drops a paragraph sentence that re-tells the bullet', () => {
+  it('drops a restating sentence but keeps the paragraph that also has an original one', () => {
     const letter = [
       'Dear Hiring Team,',
-      'I architected a UK retail client\'s migration to AWS microservices and delivered all 47 services in 11 months.',
-      'Your platform team owns two roadmaps at once; the same tradeoff decisions are what I would take on here.',
+      'Your platform team owns two roadmaps at once; the same tradeoff decisions are what I would take on here. I architected a UK retail client\'s migration to AWS microservices and delivered all 47 services in 11 months.',
     ].join('\n\n');
     const out = enforceCoverLetterOriginality(letter, BULLETS);
     expect(out.text).not.toContain('47 services');
     expect(out.removedSentences.length).toBe(1);
     expect(out.text).toContain('two roadmaps');
+    expect(out.emptiedParagraphs).toEqual([]);
+  });
+
+  // A letter reached a real employer at 85 words of body, opening "Additionally,
+  // I mentored two junior engineers" with nothing in front of it.
+  it('thins a wholly restating paragraph instead of deleting it, and reports it', () => {
+    const letter = [
+      'Dear Hiring Team,',
+      'I architected a UK retail client\'s migration to AWS microservices and delivered all 47 services in 11 months. Automating triage with Python and Airflow cut the manual review queue by 40%.',
+      'Additionally, I mentored two junior engineers through their first on-call rotation.',
+    ].join('\n\n');
+    const out = enforceCoverLetterOriginality(letter, BULLETS);
+    const paragraphs = out.text.split('\n\n');
+    expect(paragraphs.length).toBe(3);
+    expect(paragraphs[1].trim().length).toBeGreaterThan(0);
+    expect(out.emptiedParagraphs.length).toBe(1);
+  });
+
+  it('strips a connective opening the first body paragraph, and leaves later ones alone', () => {
+    const letter = [
+      'Dear Hiring Team,',
+      'Additionally, two roadmaps served by one team is the constraint this role exists to remove.',
+      'Furthermore, the same judgement applies to the incident work the posting describes.',
+    ].join('\n\n');
+    const out = enforceCoverLetterOriginality(letter, BULLETS);
+    expect(out.text).toContain('Two roadmaps served by one team');
+    expect(out.text).not.toContain('Additionally');
+    expect(out.text).toContain('Furthermore, the same judgement');
   });
 
   it('keeps at most one past example in a paragraph', () => {
