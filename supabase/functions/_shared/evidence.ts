@@ -165,13 +165,36 @@ const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : v
 export function buildEvidenceSources(profile: any): EvidenceSource[] {
   const sources: EvidenceSource[] = [];
   const seen = new Set<string>();
-  const push = (label: string, text: unknown, kind: EvidenceSource["kind"]) => {
+  // Each array element is its own source. Joining a stack into one string made
+  // ["No Kafka experience", "Python"] a single line, and the negation test -
+  // which reads backwards from the term - then negated Python along with Kafka.
+  const push = (label: string, text: unknown, kind: EvidenceSource["kind"], depth = 0) => {
+    if (Array.isArray(text) && depth < 4) {
+      for (const item of text) push(label, item, kind, depth + 1);
+      return;
+    }
     const t = evidenceText(text);
     if (!t) return;
     const key = `${kind}::${t.toLowerCase()}`;
     if (seen.has(key)) return;
     seen.add(key);
     sources.push({ label, text: t, kind });
+  };
+
+  // Every spelling present is read, not just the first one found: a project
+  // carrying technologies: ["Kafka"] AND tech_stack: ["Python"] reported only
+  // Python, and Kafka came back unsupported on a profile that names it.
+  const pushEveryAlias = (
+    label: string,
+    record: any,
+    keys: string[],
+    kind: EvidenceSource["kind"],
+  ) => {
+    for (const key of keys) {
+      const value = record?.[key];
+      if (value === undefined || value === null) continue;
+      push(label, value, kind);
+    }
   };
 
   // Explicit records: skills, certifications, education, per-role tech lists.
@@ -230,16 +253,17 @@ export function buildEvidenceSources(profile: any): EvidenceSource[] {
       // A description stored as one block is several bullets on one line.
       for (const line of text.split(/\n+/)) push(label, line.replace(/^\s*[-•*]\s*/, ""), "achievement");
     }
-    push(
+    pushEveryAlias(
       `${label} (recorded tools)`,
-      alias(r, "technologies", "techStack", "tech_stack", "skills", "tools"),
+      r,
+      ["technologies", "techStack", "tech_stack", "skills", "tools"],
       "record",
     );
   }
   for (const p of asArray(alias(profile, "relevantProjects", "relevant_projects", "projects"))) {
     const proj = p as any;
     const label = evidenceText(alias(proj, "name", "title")) || "project";
-    push(`${label} (recorded stack)`, alias(proj, "techStack", "tech_stack", "technologies", "skills"), "record");
+    pushEveryAlias(`${label} (recorded stack)`, proj, ["techStack", "tech_stack", "technologies", "skills"], "record");
     const demonstrations = [
       ...asArray(alias(proj, "description")),
       ...asArray(alias(proj, "bullets", "highlights")),
