@@ -99,80 +99,130 @@ export function stripOpeningConnective(paragraph: string): string {
   return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
+const bodyWordCount = (paragraphs: string[]): number =>
+  paragraphs
+    .filter((p) => p.trim() && !isStructuralParagraph(p))
+    .reduce((n, p) => n + p.trim().split(/\s+/).filter(Boolean).length, 0);
+
 /**
  * Drops any sentence that restates a CV bullet, and keeps at most ONE past
  * example per paragraph. A sentence is a restatement when 45% or more of its
  * content words come from a single bullet: at that level a reviewer is reading
  * the same claim twice, whatever the wording.
+ *
+ * REMOVAL STOPS AT A 150-WORD BODY. Thinning paragraphs instead of deleting them
+ * keeps every paragraph in place but still allowed a letter to come out as three
+ * sentences. Once the surviving body would fall below 150 words there is no room
+ * for an opening, a proof and a close, so the least-restating removals are put
+ * back, lowest overlap first, until the body clears the floor. The paragraphs
+ * that needed restoring are reported for a rewrite.
  */
 export function enforceCoverLetterOriginality(
   letter: string,
   cvBullets: string[],
-  options: { restatementThreshold?: number } = {},
+  options: { restatementThreshold?: number; minBodyWords?: number } = {},
 ): CoverLetterOriginality {
   const threshold = options.restatementThreshold ?? 0.45;
+  const minBodyWords = options.minBodyWords ?? 150;
   const bullets = (cvBullets || []).map((b) => String(b || "").replace(/^\s*[-•*]\s*/, "")).filter(Boolean);
-  const removedSentences: string[] = [];
   const paragraphOverlaps: number[] = [];
-  const emptiedParagraphs: string[] = [];
+  const emptied = new Set<string>();
   let maxSentenceOverlap = 0;
-  let firstBodySeen = false;
 
-  const paragraphs = (letter || "").split(/\n{2,}/).map((para) => {
-    if (!para.trim() || isStructuralParagraph(para)) return para;
+  interface Slot {
+    sentence: string;
+    overlap: number;
+    kept: boolean;
+    paraIndex: number;
+  }
+
+  const rawParagraphs = (letter || "").split(/\n{2,}/);
+  const slots: Slot[] = [];
+  const structural = new Map<number, string>();
+
+  rawParagraphs.forEach((para, paraIndex) => {
+    if (!para.trim() || isStructuralParagraph(para)) {
+      structural.set(paraIndex, para);
+      return;
+    }
     let pastExampleKept = false;
-    const kept: string[] = [];
-    const sentences = splitSentences(para);
-    const dropped: { sentence: string; overlap: number }[] = [];
+    const paraSlots: Slot[] = [];
 
-    for (const sentence of sentences) {
+    for (const sentence of splitSentences(para)) {
       const best = bullets.reduce((max, b) => Math.max(max, overlapRatio(sentence, b)), 0);
+      let kept = true;
       if (bullets.length && best >= threshold) {
-        dropped.push({ sentence, overlap: best });
-        continue;
+        kept = false;
+      } else if (looksLikePastExample(sentence, bullets)) {
+        if (pastExampleKept) kept = false;
+        else pastExampleKept = true;
       }
-      if (looksLikePastExample(sentence, bullets)) {
-        if (pastExampleKept) {
-          dropped.push({ sentence, overlap: best });
-          continue;
-        }
-        pastExampleKept = true;
-      }
-      maxSentenceOverlap = Math.max(maxSentenceOverlap, best);
-      kept.push(sentence);
+      paraSlots.push({ sentence, overlap: best, kept, paraIndex });
     }
 
     // A paragraph is thinned, never deleted. When every sentence would go, the
     // least-restating one stays so the paragraph still exists, and the paragraph
     // is reported for a rewrite. The removal itself is not weakened: a paragraph
     // holding one restatement and one original sentence still loses the restatement.
-    if (!kept.length && dropped.length) {
-      const least = dropped.reduce((min, d) => (d.overlap < min.overlap ? d : min), dropped[0]);
-      kept.push(least.sentence);
-      maxSentenceOverlap = Math.max(maxSentenceOverlap, least.overlap);
-      for (const d of dropped) if (d !== least) removedSentences.push(d.sentence);
-      emptiedParagraphs.push(para.trim());
-    } else {
-      for (const d of dropped) removedSentences.push(d.sentence);
+    if (paraSlots.length && !paraSlots.some((s) => s.kept)) {
+      const least = paraSlots.reduce((min, s) => (s.overlap < min.overlap ? s : min), paraSlots[0]);
+      least.kept = true;
+      emptied.add(para.trim());
     }
+    slots.push(...paraSlots);
+  });
 
-    let rebuilt = kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
-    if (rebuilt) {
-      if (!firstBodySeen) {
+  const compose = (): string[] => {
+    const out: string[] = [];
+    let firstBodySeen = false;
+    rawParagraphs.forEach((para, paraIndex) => {
+      if (structural.has(paraIndex)) {
+        out.push(structural.get(paraIndex)!);
+        return;
+      }
+      let rebuilt = slots
+        .filter((s) => s.paraIndex === paraIndex && s.kept)
+        .map((s) => s.sentence)
+        .join(" ")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim();
+      if (rebuilt && !firstBodySeen) {
         firstBodySeen = true;
         rebuilt = stripOpeningConnective(rebuilt);
       }
-      paragraphOverlaps.push(bullets.reduce((max, b) => Math.max(max, overlapRatio(rebuilt, b)), 0));
+      out.push(rebuilt);
+    });
+    return out;
+  };
+
+  // Put the least-restating removals back, lowest overlap first, until the body
+  // clears the floor. A letter that survives removal is worth more than a letter
+  // with nothing left to read.
+  let composed = compose();
+  if (minBodyWords > 0 && bodyWordCount(composed) < minBodyWords) {
+    const restorable = slots.filter((s) => !s.kept).sort((a, b) => a.overlap - b.overlap);
+    for (const slot of restorable) {
+      slot.kept = true;
+      emptied.add(rawParagraphs[slot.paraIndex].trim());
+      composed = compose();
+      if (bodyWordCount(composed) >= minBodyWords) break;
     }
-    return rebuilt;
-  });
+  }
+
+  const removedSentences = slots.filter((s) => !s.kept).map((s) => s.sentence);
+  for (const s of slots) if (s.kept) maxSentenceOverlap = Math.max(maxSentenceOverlap, s.overlap);
+  for (const para of composed) {
+    if (para.trim() && !isStructuralParagraph(para)) {
+      paragraphOverlaps.push(bullets.reduce((max, b) => Math.max(max, overlapRatio(para, b)), 0));
+    }
+  }
 
   return {
-    text: paragraphs.filter((p) => p.trim()).join("\n\n"),
+    text: composed.filter((p) => p.trim()).join("\n\n"),
     removedSentences,
     maxSentenceOverlap,
     paragraphOverlaps,
-    emptiedParagraphs,
+    emptiedParagraphs: [...emptied],
   };
 }
 
