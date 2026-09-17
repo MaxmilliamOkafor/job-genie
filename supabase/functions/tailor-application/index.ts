@@ -4473,6 +4473,19 @@ ${
           `[COVER LETTER] ${original.emptiedParagraphs.length} paragraph(s) restated the CV throughout and should be rewritten`,
         );
       }
+      // Removal is capped by the document: sentences put back to clear the
+      // 150-word floor are reported so the letter can be regenerated.
+      result.coverLetterRestoredForLength = original.restoredForLength;
+      if (original.restoredForLength.length) {
+        console.warn(
+          `[COVER LETTER] ${original.restoredForLength.length} sentence(s) restored to keep the body above 150 words`,
+        );
+      }
+      // A demonstrative opening cannot be stripped without losing the subject.
+      result.coverLetterDanglingOpening = original.danglingOpening;
+      if (original.danglingOpening) {
+        console.warn("[COVER LETTER] first body paragraph opens on a demonstrative and should be rewritten");
+      }
       result.coverLetterOverlap = {
         maxSentenceOverlap: Math.round(original.maxSentenceOverlap * 100),
         paragraphOverlaps: original.paragraphOverlaps.map((p) => Math.round(p * 100)),
