@@ -130,31 +130,25 @@ describe('removal stops at a 150-word body', () => {
     'Grew pipeline coverage to 3.2x quota by rebuilding the territory list and qualifying inbound within one hour',
   ];
 
-  it('restores the least-restating removals rather than shipping a three-sentence letter', () => {
+  it('keeps a short letter whole rather than cutting it to three sentences', () => {
     const letter = [
       'Dear Hiring Team,',
-      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts.',
-      'I grew pipeline coverage to 3.2x quota by rebuilding the territory list and qualifying inbound within one hour of arrival.',
-      'Your team sells into mid-market operations buyers.',
+      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts. I grew pipeline coverage to 3.2x quota by rebuilding the territory list. Your team sells into mid-market operations buyers.',
       'Sincerely,\nMax Okafor',
     ].join('\n\n');
     const out = enforceCoverLetterOriginality(letter, LONG_BULLETS);
-    const body = out.text
-      .split('\n\n')
-      .filter((p) => !/^(dear|sincerely)/i.test(p.trim()))
-      .join(' ');
-    expect(body.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(150 - 60);
+    expect(out.text).toContain('42 qualified meetings');
+    expect(out.removedSentences.length).toBe(0);
     expect(out.emptiedParagraphs.length).toBeGreaterThan(0);
   });
 
   it('still removes a restatement when the letter is long enough to lose it', () => {
-    const filler = Array.from({ length: 14 }, (_, i) =>
-      `Your outbound motion depends on judgement about which accounts deserve a second touch and which do not, point ${i + 1} of that argument.`,
+    const filler = Array.from({ length: 16 }, (_, i) =>
+      `Your outbound motion depends on judgement about which accounts deserve a second touch and which do not, and that is the argument in its ${i + 1} form.`,
     ).join(' ');
     const letter = [
       'Dear Hiring Team,',
-      filler,
-      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts.',
+      `${filler} I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts.`,
       'Sincerely,\nMax Okafor',
     ].join('\n\n');
     const out = enforceCoverLetterOriginality(letter, LONG_BULLETS);
