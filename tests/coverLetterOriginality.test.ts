@@ -182,7 +182,7 @@ describe('the letter says what survives, not only what was removed', () => {
 
   it('reports nothing restored when the letter never went under the floor', () => {
     const body = Array.from({ length: 18 }, (_, i) =>
-      `Your outbound motion needs judgement about which accounts deserve a second touch, and that is argument ${i + 1}.`,
+      `Your buyers decide slowly and the judgement your team needs is about sequencing that patience, point ${i + 1}.`,
     ).join(' ');
     const out = enforceCoverLetterOriginality(`Dear Team,\n\n${body}\n\nSincerely,\nMax`, BULLETS_2);
     expect(out.restoredForLength).toEqual([]);
