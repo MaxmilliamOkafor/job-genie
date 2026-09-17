@@ -162,3 +162,43 @@ describe('removal stops at a 150-word body', () => {
     expect(out.removedSentences.length).toBe(0);
   });
 });
+
+describe('the letter says what survives, not only what was removed', () => {
+  const BULLETS_2 = [
+    'Booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts',
+  ];
+
+  it('reports the sentences put back to clear the 150-word floor', () => {
+    const letter = [
+      'Dear Hiring Team,',
+      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts. Your team sells to operations buyers.',
+      'Sincerely,\nMax Okafor',
+    ].join('\n\n');
+    const out = enforceCoverLetterOriginality(letter, BULLETS_2);
+    expect(out.restoredForLength.length).toBeGreaterThan(0);
+    expect(out.text).toContain('42 qualified meetings');
+    expect(out.removedSentences.length).toBe(0);
+  });
+
+  it('reports nothing restored when the letter never went under the floor', () => {
+    const body = Array.from({ length: 18 }, (_, i) =>
+      `Your buyers decide slowly and the judgement your team needs is about sequencing that patience, point ${i + 1}.`,
+    ).join(' ');
+    const out = enforceCoverLetterOriginality(`Dear Team,\n\n${body}\n\nSincerely,\nMax`, BULLETS_2);
+    expect(out.restoredForLength).toEqual([]);
+  });
+
+  // A real letter went out opening "This consultative approach resulted in improved
+  // patient outcomes", pointing back at a paragraph that had been deleted.
+  it('never strips a demonstrative opening, and reports it instead', () => {
+    const letter = 'Dear Team,\n\nThis consultative approach resulted in improved patient outcomes across the ward.\n\nSincerely,\nMax';
+    const out = enforceCoverLetterOriginality(letter, BULLETS_2);
+    expect(out.text).toContain('This consultative approach');
+    expect(out.danglingOpening).toContain('This consultative approach');
+  });
+
+  it('reports no dangling opening for an ordinary first paragraph', () => {
+    const out = enforceCoverLetterOriginality('Dear Team,\n\nYour outbound motion needs judgement.\n\nSincerely,\nMax', BULLETS_2);
+    expect(out.danglingOpening).toBeNull();
+  });
+});

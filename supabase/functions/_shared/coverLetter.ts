@@ -84,9 +84,23 @@ export interface CoverLetterOriginality {
    * invisible to the loop that made it.
    */
   emptiedParagraphs: string[];
+  /**
+   * Sentences put back because removal had taken the body under 150 words.
+   * Reported so the letter can be regenerated rather than the reader handed less.
+   */
+  restoredForLength: string[];
+  /**
+   * A first body paragraph opening on a demonstrative (This, These, Those, That,
+   * Such, It) points back at a paragraph that went, but the word cannot be cut:
+   * removing it leaves a sentence with no subject. Reported for a rewrite instead.
+   * A real letter went out opening "This consultative approach resulted in
+   * improved patient outcomes".
+   */
+  danglingOpening: string | null;
 }
 
 const LEADING_CONNECTIVE = /^(additionally|furthermore|moreover|in addition|also|secondly|similarly|likewise)\b[\s,:-]*/i;
+const LEADING_DEMONSTRATIVE = /^(this|these|those|that|such|it)\b/i;
 
 /**
  * A connective at the start of the FIRST body paragraph points back at something
@@ -97,6 +111,11 @@ export function stripOpeningConnective(paragraph: string): string {
   const stripped = paragraph.replace(LEADING_CONNECTIVE, "");
   if (stripped === paragraph || !stripped.trim()) return paragraph;
   return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+}
+
+/** True when the paragraph opens on a demonstrative with nothing above it to refer to. */
+export function hasDanglingOpening(paragraph: string): boolean {
+  return LEADING_DEMONSTRATIVE.test(paragraph.trim());
 }
 
 const bodyWordCount = (paragraphs: string[]): number =>
@@ -197,12 +216,15 @@ export function enforceCoverLetterOriginality(
 
   // Put the least-restating removals back, lowest overlap first, until the body
   // clears the floor. A letter that survives removal is worth more than a letter
-  // with nothing left to read.
+  // with nothing left to read, and what came back is reported so the letter can
+  // be regenerated rather than the reader handed less.
+  const restoredForLength: string[] = [];
   let composed = compose();
   if (minBodyWords > 0 && bodyWordCount(composed) < minBodyWords) {
     const restorable = slots.filter((s) => !s.kept).sort((a, b) => a.overlap - b.overlap);
     for (const slot of restorable) {
       slot.kept = true;
+      restoredForLength.push(slot.sentence);
       emptied.add(rawParagraphs[slot.paraIndex].trim());
       composed = compose();
       if (bodyWordCount(composed) >= minBodyWords) break;
@@ -211,10 +233,9 @@ export function enforceCoverLetterOriginality(
 
   const removedSentences = slots.filter((s) => !s.kept).map((s) => s.sentence);
   for (const s of slots) if (s.kept) maxSentenceOverlap = Math.max(maxSentenceOverlap, s.overlap);
-  for (const para of composed) {
-    if (para.trim() && !isStructuralParagraph(para)) {
-      paragraphOverlaps.push(bullets.reduce((max, b) => Math.max(max, overlapRatio(para, b)), 0));
-    }
+  const body = composed.filter((p) => p.trim() && !isStructuralParagraph(p));
+  for (const para of body) {
+    paragraphOverlaps.push(bullets.reduce((max, b) => Math.max(max, overlapRatio(para, b)), 0));
   }
 
   return {
@@ -223,6 +244,8 @@ export function enforceCoverLetterOriginality(
     maxSentenceOverlap,
     paragraphOverlaps,
     emptiedParagraphs: [...emptied],
+    restoredForLength,
+    danglingOpening: body.length && hasDanglingOpening(body[0]) ? body[0].trim() : null,
   };
 }
 
