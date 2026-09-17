@@ -217,3 +217,42 @@ describe('practices demonstrated by real achievements', () => {
     expect(report.alignment.percent).toBe(100);
   });
 });
+
+// ============================================================
+// EVERY SPELLING IS READ, AND EVERY ARRAY ENTRY IS ITS OWN SOURCE
+//
+// alias() returned the first field it found, so a project carrying
+// technologies: ["Kafka"] and tech_stack: ["Python"] reported only Python and
+// Kafka came back unsupported on a profile that names it. Joining a stack into
+// one string also let a negation reach across entries.
+// ============================================================
+describe('evidence reading, second pass', () => {
+  it('reads every spelling of a project stack, not just the first present', () => {
+    const sources = buildEvidenceSources({
+      relevantProjects: [{ name: 'Pipeline', technologies: ['Kafka'], tech_stack: ['Python'] }],
+    });
+    expect(classifyTerm('Kafka', sources).tier).toBe('explicit');
+    expect(classifyTerm('Python', sources).tier).toBe('explicit');
+  });
+
+  it('reads every spelling of a role tool list', () => {
+    const sources = buildEvidenceSources({
+      professionalExperience: [
+        { title: 'Engineer', company: 'Acme', technologies: ['Terraform'], tools: ['Datadog'], skills: ['Go'] },
+      ],
+    });
+    for (const term of ['Terraform', 'Datadog', 'Go']) {
+      expect(classifyTerm(term, sources).tier).toBe('explicit');
+    }
+  });
+
+  it('keeps each array entry a separate source, so a negation cannot reach the next one', () => {
+    const sources = buildEvidenceSources({
+      professionalExperience: [
+        { title: 'Engineer', company: 'Acme', technologies: ['No Kafka experience', 'Python'] },
+      ],
+    });
+    expect(classifyTerm('Kafka', sources).tier).toBe('unsupported');
+    expect(classifyTerm('Python', sources).tier).toBe('explicit');
+  });
+});
