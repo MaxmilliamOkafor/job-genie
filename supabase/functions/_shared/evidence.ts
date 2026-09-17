@@ -253,16 +253,17 @@ export function buildEvidenceSources(profile: any): EvidenceSource[] {
       // A description stored as one block is several bullets on one line.
       for (const line of text.split(/\n+/)) push(label, line.replace(/^\s*[-•*]\s*/, ""), "achievement");
     }
-    push(
+    pushEveryAlias(
       `${label} (recorded tools)`,
-      alias(r, "technologies", "techStack", "tech_stack", "skills", "tools"),
+      r,
+      ["technologies", "techStack", "tech_stack", "skills", "tools"],
       "record",
     );
   }
   for (const p of asArray(alias(profile, "relevantProjects", "relevant_projects", "projects"))) {
     const proj = p as any;
     const label = evidenceText(alias(proj, "name", "title")) || "project";
-    push(`${label} (recorded stack)`, alias(proj, "techStack", "tech_stack", "technologies", "skills"), "record");
+    pushEveryAlias(`${label} (recorded stack)`, proj, ["techStack", "tech_stack", "technologies", "skills"], "record");
     const demonstrations = [
       ...asArray(alias(proj, "description")),
       ...asArray(alias(proj, "bullets", "highlights")),
