@@ -18,7 +18,8 @@ describe('the letter never restates a CV bullet', () => {
       'Dear Hiring Team,',
       'Your platform team owns two roadmaps at once; the same tradeoff decisions are what I would take on here. I architected a UK retail client\'s migration to AWS microservices and delivered all 47 services in 11 months.',
     ].join('\n\n');
-    const out = enforceCoverLetterOriginality(letter, BULLETS);
+    // Short fixture: the floor is set aside so the removal rule itself is what is measured.
+    const out = enforceCoverLetterOriginality(letter, BULLETS, { minBodyWords: 0 });
     expect(out.text).not.toContain('47 services');
     expect(out.removedSentences.length).toBe(1);
     expect(out.text).toContain('two roadmaps');
@@ -55,7 +56,7 @@ describe('the letter never restates a CV bullet', () => {
   it('keeps at most one past example in a paragraph', () => {
     const para =
       'Your despatch volumes need triage that holds. Automating triage with Python cut a review queue by 40%. Migrating services to AWS microservices delivered 47 of them.';
-    const out = enforceCoverLetterOriginality(`Dear Team,\n\n${para}`, BULLETS);
+    const out = enforceCoverLetterOriginality(`Dear Team,\n\n${para}`, BULLETS, { minBodyWords: 0 });
     const sentences = out.text.split(/(?<=\.)\s+/).filter((s) => /\w/.test(s));
     const examples = sentences.filter((s) => /40%|47/.test(s));
     expect(examples.length).toBeLessThanOrEqual(1);
