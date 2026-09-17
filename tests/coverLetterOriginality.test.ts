@@ -121,3 +121,49 @@ describe('the line under the name is a job title, never the company', () => {
     expect(isEmployerNameLine('Platform Engineer', 'Mercury')).toBe(false);
   });
 });
+
+// Thinning kept every paragraph in place but still let a letter come out as
+// three sentences. Removal now stops at a 150-word body.
+describe('removal stops at a 150-word body', () => {
+  const LONG_BULLETS = [
+    'Booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts',
+    'Grew pipeline coverage to 3.2x quota by rebuilding the territory list and qualifying inbound within one hour',
+  ];
+
+  it('restores the least-restating removals rather than shipping a three-sentence letter', () => {
+    const letter = [
+      'Dear Hiring Team,',
+      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts.',
+      'I grew pipeline coverage to 3.2x quota by rebuilding the territory list and qualifying inbound within one hour of arrival.',
+      'Your team sells into mid-market operations buyers.',
+      'Sincerely,\nMax Okafor',
+    ].join('\n\n');
+    const out = enforceCoverLetterOriginality(letter, LONG_BULLETS);
+    const body = out.text
+      .split('\n\n')
+      .filter((p) => !/^(dear|sincerely)/i.test(p.trim()))
+      .join(' ');
+    expect(body.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(150 - 60);
+    expect(out.emptiedParagraphs.length).toBeGreaterThan(0);
+  });
+
+  it('still removes a restatement when the letter is long enough to lose it', () => {
+    const filler = Array.from({ length: 14 }, (_, i) =>
+      `Your outbound motion depends on judgement about which accounts deserve a second touch and which do not, point ${i + 1} of that argument.`,
+    ).join(' ');
+    const letter = [
+      'Dear Hiring Team,',
+      filler,
+      'I booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot for mid-market accounts.',
+      'Sincerely,\nMax Okafor',
+    ].join('\n\n');
+    const out = enforceCoverLetterOriginality(letter, LONG_BULLETS);
+    expect(out.text).not.toContain('42 qualified meetings');
+  });
+
+  it('honours an explicit floor of zero for callers that want raw removal', () => {
+    const letter = 'Dear Team,\n\nI booked 42 qualified meetings a quarter by running outbound sequences across Outreach and HubSpot.';
+    const out = enforceCoverLetterOriginality(letter, LONG_BULLETS, { minBodyWords: 0 });
+    expect(out.removedSentences.length).toBe(0);
+  });
+});
