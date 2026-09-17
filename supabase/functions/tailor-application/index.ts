@@ -4459,6 +4459,14 @@ ${
       const original = enforceCoverLetterOriginality(result.tailoredCoverLetter, cvBullets);
       result.tailoredCoverLetter = original.text;
       result.coverLetterRestatementRemoved = original.removedSentences;
+      // A paragraph is thinned, never emptied: where every sentence restated a
+      // bullet the least-restating one stays and the paragraph is reported here.
+      result.coverLetterParagraphsToRewrite = original.emptiedParagraphs;
+      if (original.emptiedParagraphs.length) {
+        console.warn(
+          `[COVER LETTER] ${original.emptiedParagraphs.length} paragraph(s) restated the CV throughout and should be rewritten`,
+        );
+      }
       result.coverLetterOverlap = {
         maxSentenceOverlap: Math.round(original.maxSentenceOverlap * 100),
         paragraphOverlaps: original.paragraphOverlaps.map((p) => Math.round(p * 100)),
