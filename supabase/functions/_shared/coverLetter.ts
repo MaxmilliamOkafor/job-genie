@@ -114,22 +114,26 @@ export function enforceCoverLetterOriginality(
   const bullets = (cvBullets || []).map((b) => String(b || "").replace(/^\s*[-•*]\s*/, "")).filter(Boolean);
   const removedSentences: string[] = [];
   const paragraphOverlaps: number[] = [];
+  const emptiedParagraphs: string[] = [];
   let maxSentenceOverlap = 0;
+  let firstBodySeen = false;
 
   const paragraphs = (letter || "").split(/\n{2,}/).map((para) => {
     if (!para.trim() || isStructuralParagraph(para)) return para;
     let pastExampleKept = false;
     const kept: string[] = [];
+    const sentences = splitSentences(para);
+    const dropped: { sentence: string; overlap: number }[] = [];
 
-    for (const sentence of splitSentences(para)) {
+    for (const sentence of sentences) {
       const best = bullets.reduce((max, b) => Math.max(max, overlapRatio(sentence, b)), 0);
       if (bullets.length && best >= threshold) {
-        removedSentences.push(sentence);
+        dropped.push({ sentence, overlap: best });
         continue;
       }
       if (looksLikePastExample(sentence, bullets)) {
         if (pastExampleKept) {
-          removedSentences.push(sentence);
+          dropped.push({ sentence, overlap: best });
           continue;
         }
         pastExampleKept = true;
@@ -138,8 +142,26 @@ export function enforceCoverLetterOriginality(
       kept.push(sentence);
     }
 
-    const rebuilt = kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+    // A paragraph is thinned, never deleted. When every sentence would go, the
+    // least-restating one stays so the paragraph still exists, and the paragraph
+    // is reported for a rewrite. The removal itself is not weakened: a paragraph
+    // holding one restatement and one original sentence still loses the restatement.
+    if (!kept.length && dropped.length) {
+      const least = dropped.reduce((min, d) => (d.overlap < min.overlap ? d : min), dropped[0]);
+      kept.push(least.sentence);
+      maxSentenceOverlap = Math.max(maxSentenceOverlap, least.overlap);
+      for (const d of dropped) if (d !== least) removedSentences.push(d.sentence);
+      emptiedParagraphs.push(para.trim());
+    } else {
+      for (const d of dropped) removedSentences.push(d.sentence);
+    }
+
+    let rebuilt = kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
     if (rebuilt) {
+      if (!firstBodySeen) {
+        firstBodySeen = true;
+        rebuilt = stripOpeningConnective(rebuilt);
+      }
       paragraphOverlaps.push(bullets.reduce((max, b) => Math.max(max, overlapRatio(rebuilt, b)), 0));
     }
     return rebuilt;
@@ -150,6 +172,7 @@ export function enforceCoverLetterOriginality(
     removedSentences,
     maxSentenceOverlap,
     paragraphOverlaps,
+    emptiedParagraphs,
   };
 }
 
