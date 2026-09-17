@@ -61,7 +61,46 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
+        // A strict schema, not json_object: valid JSON in the wrong shape has
+        // every record rejected by the extension's validator, and the user then
+        // sees a posting with no skills in it rather than a schema problem.
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "skills_evidence",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["skills"],
+              properties: {
+                skills: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: [
+                      "term",
+                      "category",
+                      "evidence",
+                      "requirement",
+                      "review_required",
+                      "review_reason",
+                    ],
+                    properties: {
+                      term: { type: "string" },
+                      category: { type: "string", enum: ["hard_skill", "soft_skill"] },
+                      evidence: { type: "string" },
+                      requirement: { type: "string", enum: ["required", "preferred", "unspecified"] },
+                      review_required: { type: "boolean" },
+                      review_reason: { type: ["string", "null"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         messages: [
           { role: "system", content: EXTRACTION_SPEC },
           // The posting stays a separate message, as untrusted data.
