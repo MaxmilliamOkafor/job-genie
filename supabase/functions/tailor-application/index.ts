@@ -3389,7 +3389,13 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
    Dear Hiring Manager,
 
-   [Four paragraphs, EVIDENCE FIRST. 1) Open on the single most relevant piece of the candidate's own recorded work for this posting - what was built or delivered, the method, and the recorded result. No statement of interest, no compliment. 2) A second specific achievement addressing a different requirement of this posting, quoting its figure exactly as the CV states it. 3) The connection to the work this posting describes, in that role's own terms. 4) A one-line close: availability and a request to discuss. Nothing else.
+   [FOUR PARAGRAPHS, ALWAYS, IN THIS ORDER. A letter missing one of them is not deliverable.
+   1) OPENING: what the candidate's background is and which part of THIS posting's work it bears on. Never open by announcing the application ("I am applying for the X position at Y", "I am writing to apply for..."): the "Re: Application for ${jobTitle}" line sits directly above the salutation, so that sentence repeats what is immediately above it.
+   2) PROOF: one specific thing the candidate did and what came of it, compressed to its point. Never a retelling of a CV bullet - a measured pair went out at 61% and 41% word overlap with the CV's own bullets, and a reviewer holding both documents reads the same claim twice.
+   3) THIS EMPLOYER: the specific thing about this company or its work, connected to the candidate's own.
+   4) CLOSE: one sentence. Never a paragraph of thanks.
+   NEVER begin any paragraph with a connective ("Additionally", "Furthermore", "Moreover", "In addition", "Also", "Secondly", "Similarly", "Likewise").
+   LENGTH: the body between the salutation and the sign-off is at least 150 words and at most 350. Below 150 words there is no room for an opening, a proof and a close, so one of the three is missing.
 
    COVER LETTER: NO ENTHUSIASM, NO PRAISE, NO PREDICTIONS. These are all forbidden and must not appear in any form: expressions of excitement or eagerness ("excited", "thrilled", "delighted", "eager", "keen to", "passionate"); praise of the employer ("industry leader", "impressive", "admire", "innovative culture", "world-class team", "cutting-edge work"); and predictions about the candidate's future behaviour ("would adapt quickly", "quick learner", "hit the ground running", "confident I would thrive", "ramp up fast", "eager to learn"). A prediction is not evidence and a reviewer discounts it entirely. Every sentence must either state something the candidate has actually done, or state something the posting actually says. If a sentence does neither, delete it.
 
