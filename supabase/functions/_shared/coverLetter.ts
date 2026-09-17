@@ -75,6 +75,28 @@ export interface CoverLetterOriginality {
   maxSentenceOverlap: number;
   /** Paragraph-level overlap with the CV, measured after removal, 0-1. */
   paragraphOverlaps: number[];
+  /**
+   * Paragraphs where EVERY sentence restated a bullet. The least-restating one
+   * is kept so the paragraph still exists, and the paragraph is reported here as
+   * one the writing model should redo: a letter reached a real employer at 85
+   * words, opening "Additionally, I mentored two junior engineers" with nothing
+   * in front of it, because each individual removal was correct and the hole was
+   * invisible to the loop that made it.
+   */
+  emptiedParagraphs: string[];
+}
+
+const LEADING_CONNECTIVE = /^(additionally|furthermore|moreover|in addition|also|secondly|similarly|likewise)\b[\s,:-]*/i;
+
+/**
+ * A connective at the start of the FIRST body paragraph points back at something
+ * that is not there. A connective in a later paragraph refers to the paragraph
+ * above it, which is ordinary English, so it is left alone.
+ */
+export function stripOpeningConnective(paragraph: string): string {
+  const stripped = paragraph.replace(LEADING_CONNECTIVE, "");
+  if (stripped === paragraph || !stripped.trim()) return paragraph;
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 /**
