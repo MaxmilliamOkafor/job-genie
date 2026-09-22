@@ -340,22 +340,40 @@ serve(async (req) => {
       ).terms;
 
 
-    for (const key of [
-      "required_skills", "preferred_skills", "experience_requirements",
-      "education_requirements", "key_responsibilities", "soft_skills",
-      "tools_and_platforms", "industry_keywords", "priority_keywords",
-    ]) {
-      keywords[key] = clean(keywords[key]);
+    // A reply that is not an object has no buckets to read, and indexing
+    // into it silently yields nothing from every one of them.
+    if (!keywords || typeof keywords !== "object" || Array.isArray(keywords)) {
+      keywords = {};
     }
 
-    // Build categorized output for the extension UI
-    const allKeywords = [
-      ...(keywords.priority_keywords || []),
-      ...(keywords.required_skills || []),
-      ...(keywords.preferred_skills || []),
-      ...(keywords.tools_and_platforms || []),
-      ...(keywords.soft_skills || []),
+    const PRIMARY = [
+      "priority_keywords", "required_skills", "preferred_skills",
+      "tools_and_platforms", "soft_skills",
     ];
+    const SECONDARY = [
+      "experience_requirements", "education_requirements",
+      "key_responsibilities", "industry_keywords",
+    ];
+
+    // Counted BEFORE our own filters run, so "the model returned nothing" can
+    // be told apart from "we threw everything it returned away".
+    let rawTotal = 0;
+    for (const key of [...PRIMARY, ...SECONDARY]) {
+      const raw = Array.isArray(keywords[key]) ? keywords[key] : [];
+      rawTotal += raw.length;
+      keywords[key] = clean(raw);
+    }
+
+    // Build categorized output for the extension UI. The secondary buckets are
+    // a fallback, never a merge: a responsibility on a keyword chip reads as a
+    // miss, so they are read only when every skill bucket came back empty.
+    let allKeywords = PRIMARY.flatMap((k) => keywords[k] || []);
+    if (allKeywords.length === 0) {
+      allKeywords = SECONDARY.flatMap((k) => keywords[k] || []);
+      if (allKeywords.length > 0) {
+        console.log(`[User ${userId}] Primary buckets empty; recovered ${allKeywords.length} from ${SECONDARY.join(", ")}`);
+      }
+    }
 
     // Duplicate phrasings collapse, but a distinct requirement is never cut for
     // being past a cap: an unextracted requirement can never be matched.
@@ -400,9 +418,13 @@ serve(async (req) => {
         userId,
         'extract-keywords-ai',
         {
-          error: 'No keywords could be extracted from this job description',
+          error: rawTotal > 0
+            ? `Model returned ${rawTotal} term(s), all of which were filtered out as boilerplate`
+            : 'No keywords could be extracted from this job description',
           errorCode: 'ai_upstream',
-          userMessage: 'No keywords could be extracted from this posting. It may hold no stated requirements, or the text may not have loaded fully.',
+          userMessage: rawTotal > 0
+            ? 'The posting was read, but everything in it was benefits, logistics or boilerplate rather than stated requirements.'
+            : 'No keywords could be extracted from this posting. It may hold no stated requirements, or the text may not have loaded fully.',
           provider: 'OpenAI',
           providerStatus: 422,
           retryable: false,
