@@ -2147,7 +2147,7 @@ DO NOT WRITE:
 - The same sentence opening twice in a row, and no more than two bullets in the whole CV starting with the same verb.
 - Synonym substitution for its own sake. If the candidate wrote "customer support", it does not become "client success". Contractions are not introduced.
 
-PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a tool, a metric, a qualification or an eligibility to close a gap.`;
+PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a metric, a qualification or an eligibility to close a gap.`;
 
 function buildStrategyBlock(strategy: AtsStrategy): string {
   const evidenceEntries = Object.entries(strategy.evidence).slice(0, 40);
