@@ -335,6 +335,30 @@ export type Database = {
         }
         Relationships: []
       }
+      job_companies: {
+        Row: {
+          board: string
+          created_at: string
+          id: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          board: string
+          created_at?: string
+          id?: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          board?: string
+          created_at?: string
+          id?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       job_contacts: {
         Row: {
           checked_at: string
@@ -547,6 +571,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      job_postings: {
+        Row: {
+          board: string | null
+          body: string | null
+          company: string | null
+          department: string | null
+          exported_at: string | null
+          first_seen_at: string
+          id: string
+          location: string | null
+          posted_at: string | null
+          remote: boolean | null
+          title: string | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          board?: string | null
+          body?: string | null
+          company?: string | null
+          department?: string | null
+          exported_at?: string | null
+          first_seen_at?: string
+          id?: string
+          location?: string | null
+          posted_at?: string | null
+          remote?: boolean | null
+          title?: string | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          board?: string | null
+          body?: string | null
+          company?: string | null
+          department?: string | null
+          exported_at?: string | null
+          first_seen_at?: string
+          id?: string
+          location?: string | null
+          posted_at?: string | null
+          remote?: boolean | null
+          title?: string | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       job_sources: {
         Row: {
@@ -1093,6 +1165,7 @@ export type Database = {
         Returns: string
       }
       jp_seniority: { Args: { v: string }; Returns: string }
+      prune_old_job_postings: { Args: never; Returns: number }
       search_job_pool: {
         Args: {
           p_company?: string
