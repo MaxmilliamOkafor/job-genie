@@ -6,9 +6,11 @@ import Explore from './Explore';
 import Jobs from './Jobs';
 import JobQueue from './JobQueue';
 import Applications from './Applications';
+import JobSearch from './JobSearch';
 
 const TABS = [
   { value: 'overview', label: 'Overview', element: <Dashboard /> },
+  { value: 'search', label: 'Job search', element: <JobSearch /> },
   { value: 'live', label: 'Live feed', element: <Explore /> },
   { value: 'jobs', label: 'Saved jobs', element: <Jobs /> },
   { value: 'queue', label: 'Queue', element: <JobQueue /> },

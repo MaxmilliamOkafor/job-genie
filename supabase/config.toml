@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.find-job-contacts]
 verify_jwt = false
+
+[functions.fetch-board-jobs]
+verify_jwt = true
+
+[functions.add-board-company]
+verify_jwt = true
