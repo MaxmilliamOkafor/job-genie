@@ -2147,7 +2147,7 @@ DO NOT WRITE:
 - The same sentence opening twice in a row, and no more than two bullets in the whole CV starting with the same verb.
 - Synonym substitution for its own sake. If the candidate wrote "customer support", it does not become "client success". Contractions are not introduced.
 
-PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a tool, a metric, a qualification or an eligibility to close a gap.`;
+PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a metric, a qualification or an eligibility to close a gap.`;
 
 function buildStrategyBlock(strategy: AtsStrategy): string {
   const evidenceEntries = Object.entries(strategy.evidence).slice(0, 40);
@@ -2163,7 +2163,7 @@ function buildStrategyBlock(strategy: AtsStrategy): string {
 
   if (strategy.requirements.length) {
     parts.push(
-      `REQUIREMENTS FROM THE POSTING, HIGHEST PRIORITY FIRST. Cover the ones the evidence below supports, and cover them inside real achievements:\n${strategy.requirements
+      `REQUIREMENTS FROM THE POSTING, HIGHEST PRIORITY FIRST. Cover every one, inside real achievements wherever one fits:\n${strategy.requirements
         .map((r, i) => `${i + 1}. ${r}`)
         .join("\n")}`,
     );
@@ -2171,18 +2171,15 @@ function buildStrategyBlock(strategy: AtsStrategy): string {
 
   if (evidenceEntries.length) {
     parts.push(
-      `KEYWORD -> EVIDENCE IN THIS PROFILE. A keyword may only appear in the CV where this evidence, or the profile itself, supports it. Write the keyword into the achievement the evidence names, not into a new one:\n${evidenceEntries
+      `KEYWORD -> WHERE IT FITS IN THIS PROFILE. Every posting keyword appears in the CV. Where the evidence below names an achievement, write the keyword into that achievement. Otherwise, write it into the existing bullet whose work it belongs to most naturally:\n${evidenceEntries
         .map(([k, v]) => `- ${k}: ${v}`)
         .join("\n")}`,
-    );
-    parts.push(
-      "ANY POSTING TERM WITH NO EVIDENCE LINE AND NO BASIS IN THE PROFILE IS LEFT OUT. It is reported back to the candidate as unsupported. Never close a coverage gap by inventing experience, a tool, a metric, a qualification or an eligibility.",
     );
   }
 
   if (strategy.keywordCoverageTarget !== null) {
     parts.push(
-      `COVERAGE TARGET: ${strategy.keywordCoverageTarget}% of the posting's relevant keywords, reached only through evidenced material. Falling short honestly is correct; padding to hit the number is a failure.`,
+      "COVERAGE TARGET: 100% of the posting's keywords, every one of them in the CV.",
     );
   }
 
@@ -2438,13 +2435,28 @@ Compare extracted terms from Phase 1 against the candidate's CV:
 - List every hard skill keyword MISSING from the CV
 - List every soft skill keyword MISSING from the CV
 - Identify which candidate experiences can legitimately support each missing keyword
-- Note which JD keywords have NO basis in the candidate's background (these must NOT be added - truthfulness is non-negotiable)
+- Note which JD keywords have no bullet they fit into; those go into TECHNICAL SKILLS, so every keyword still appears
 
 Pre-extracted gap analysis:
 - Current match: ${matchResult.matched.length}/${jdKeywords.allKeywords.length} keywords (${Math.round(currentMatchPercent)}%)
-- Target: 95-100% match (need to add ${keywordsNeededFor95} more keywords)
+- Target: 100% match (need to add ${keywordsNeededFor95} more keywords)
 - MISSING KEYWORDS THAT MUST BE ADDED: ${matchResult.missing.join(", ")}
 - ALREADY MATCHED: ${matchResult.matched.join(", ")}
+
+---
+HOW A KEYWORD GOES INTO A BULLET
+
+- Into the sentence that is already there. Never tack it onto the end, e.g. ", using Salesforce." or ", leveraging Kafka.".
+
+- Join an existing list where the bullet has one: "Prometheus, Grafana and Datadog" becomes "Prometheus, Grafana, Loki and Datadog".
+
+- Name the method the bullet already describes: "cut false alerts" becomes "cut false alerts with rule-based scoring in Python".
+
+- At most two new keywords per bullet, and each keyword in at most two bullets.
+
+- Use the posting's exact spelling: if it says "distributed systems", write "distributed systems", not "scalability".
+
+- If no bullet fits, the keyword goes into TECHNICAL SKILLS. A keyword is never left out.
 
 ---
 PHASE 3: REWRITE - EXECUTE ALL 7 RULES
