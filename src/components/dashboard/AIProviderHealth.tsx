@@ -32,10 +32,14 @@ export function AIProviderHealth() {
   const load = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
+    // A failure older than 24 hours is history, not a live problem: showing a
+    // week-old refusal as current tells the user a cleared issue is ongoing.
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await (supabase as any)
       .from('ai_error_log')
       .select('id, function_name, error_code, provider, provider_status, user_message, created_at')
       .eq('user_id', user.id)
+      .gte('created_at', cutoff)
       .order('created_at', { ascending: false })
       .limit(1);
 
