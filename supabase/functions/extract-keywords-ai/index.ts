@@ -418,9 +418,13 @@ serve(async (req) => {
         userId,
         'extract-keywords-ai',
         {
-          error: 'No keywords could be extracted from this job description',
+          error: rawTotal > 0
+            ? `Model returned ${rawTotal} term(s), all of which were filtered out as boilerplate`
+            : 'No keywords could be extracted from this job description',
           errorCode: 'ai_upstream',
-          userMessage: 'No keywords could be extracted from this posting. It may hold no stated requirements, or the text may not have loaded fully.',
+          userMessage: rawTotal > 0
+            ? 'The posting was read, but everything in it was benefits, logistics or boilerplate rather than stated requirements.'
+            : 'No keywords could be extracted from this posting. It may hold no stated requirements, or the text may not have loaded fully.',
           provider: 'OpenAI',
           providerStatus: 422,
           retryable: false,
