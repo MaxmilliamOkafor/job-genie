@@ -126,11 +126,35 @@ export function classifyProviderStatus(
     };
   }
 
-  if (status === 402 || status === 403) {
+  if (status === 402) {
     return {
       error: `${providerName} refused the request for billing reasons (${status})`,
       errorCode: "ai_billing",
       userMessage: `${providerName} refused the request for billing reasons (${status}). Your credit balance or spend limit is exhausted, so no CV can be generated until you top up or enable auto-reload. Provider said: ${snippet}`,
+      provider: providerName,
+      providerStatus: status,
+      retryable: false,
+    };
+  }
+
+  if (status === 403) {
+    const billing = /billing|quota|credit/i.test(snippet);
+
+    if (billing) {
+      return {
+        error: `${providerName} refused the request for billing reasons (${status})`,
+        errorCode: "ai_billing",
+        userMessage: `${providerName} refused the request for billing reasons (${status}). Your credit balance or spend limit is exhausted, so no CV can be generated until you top up or enable auto-reload. Provider said: ${snippet}`,
+        provider: providerName,
+        providerStatus: status,
+        retryable: false,
+      };
+    }
+
+    return {
+      error: `${providerName} refused the request (403)`,
+      errorCode: "ai_billing",
+      userMessage: `${providerName} refused this request (403). The key's project may not allow this model or these permissions. Create a key with All permissions in the default project. Provider said: ${snippet}`,
       provider: providerName,
       providerStatus: status,
       retryable: false,
@@ -143,7 +167,7 @@ export function classifyProviderStatus(
       error: `${providerName} returned 429`,
       errorCode: insufficient ? "ai_billing" : "ai_rate_limit",
       userMessage: insufficient
-        ? `${providerName} returned 429 insufficient_quota. This is a billing problem, not a rate limit: your credit balance is exhausted. Top up or enable auto-reload. Provider said: ${snippet}`
+        ? `${providerName} says the organisation or project this key belongs to has no quota (429 insufficient_quota). If your billing page shows credit, the key was created in a different organisation or project, or a monthly usage limit is reached. Create a new key in the organisation that holds the credit. Provider said: ${snippet}`
         : `${providerName} is rate limiting your requests (429). Wait a moment and retry. Provider said: ${snippet}`,
       provider: providerName,
       providerStatus: status,

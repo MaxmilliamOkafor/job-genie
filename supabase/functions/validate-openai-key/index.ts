@@ -33,18 +33,60 @@ serve(async (req) => {
 
     if (response.ok) {
       const data = await response.json();
-      const modelCount = data.data?.length || 0;
-      
+
       // Check if gpt-4o-mini is available
       const hasGpt4oMini = data.data?.some((model: any) => model.id === 'gpt-4o-mini');
-      
-      return new Response(JSON.stringify({ 
-        valid: true, 
-        message: `API key is valid! Access to ${modelCount} models.`,
-        hasGpt4oMini,
+
+      // Listing models only proves the key can read. Make one real request so the
+      // test proves the key can actually generate.
+      const genResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: "ok" }],
+          max_tokens: 1,
+        }),
+      });
+
+      if (genResponse.ok) {
+        return new Response(JSON.stringify({
+          valid: true,
+          message: "API key works: gpt-4o-mini answered.",
+          hasGpt4oMini,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const genBody = await genResponse.text();
+      const snippet = genBody.slice(0, 200);
+      console.error("OpenAI generation check failed:", genResponse.status, genBody);
+
+      const rejected = (error: string) => new Response(JSON.stringify({
+        valid: false,
+        error,
       }), {
+        status: 200, // Return 200 so frontend can handle the error gracefully
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+
+      if (genResponse.status === 429 && /insufficient_quota/i.test(genBody)) {
+        return rejected("This key is valid but its organisation or project has no quota. If your OpenAI billing page shows credit, this key was created in a different organisation or project, or a monthly usage limit is reached. Create a new key in the organisation that holds the credit and paste it here.");
+      }
+
+      if (genResponse.status === 403) {
+        return rejected(`This key cannot use gpt-4o-mini (403). Its project may restrict models or permissions. Create a key with All permissions in the default project. ${snippet}`);
+      }
+
+      if (genResponse.status === 404 && /model_not_found/i.test(genBody)) {
+        return rejected("This key's project has no access to gpt-4o-mini.");
+      }
+
+      return rejected(`OpenAI returned ${genResponse.status} when asked to generate: ${snippet}`);
     } else {
       const errorData = await response.text();
       console.error("OpenAI API validation failed:", response.status, errorData);
