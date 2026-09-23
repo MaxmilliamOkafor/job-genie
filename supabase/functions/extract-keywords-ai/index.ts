@@ -86,6 +86,13 @@ NEVER RETURN any of these, wherever they appear in the posting:
 - a degree subject or a generic degree (e.g. STEM, Bachelor's, Engineering Degree)
 - the job title or a word from it on its own (e.g. Senior, Manager, Launch)
 - anything from the company description, mission or culture paragraphs
+- equipment or home-office kit the candidate must own: RAM, 8GB RAM, 16GB, SSD, HD, HD webcam, webcam, headset, noise-cancelling headset, internet speed, Mbps, Core i5, laptop or desktop specs, backup power
+- shift and time-zone lines: night shift, graveyard shift, US hours, EST, PST, "PH time", any country or currency code on its own (PH, PHP as a currency, IN, CA, AU, INR, USD, EUR)
+- pre-employment checks and medicals (PRE, pre-employment)
+- half of a hyphenated word: "PRE-EMPLOYMENT" is never "PRE", "PRE-SALES" is never "PRE"
+- a word used as a verb: "Please express your interest" is never "Express"; Express is only the Node.js framework, returned when the posting names Node.js or Express.js
+- "Compensation" from a pay line; return it only when the posting asks for the HR skill (compensation planning, compensation analysis, compensation benchmarking, comp and ben)
+- "Languages" on its own; return the language the posting asks for (English, German) instead, and "Languages" only when the posting asks for multilingual, bilingual or additional languages
 If you are unsure whether a word is a requirement, ask: would a recruiter type this into an ATS search to find candidates for this job? If not, leave it out.
 Do NOT over-filter: reliability, availability, automation, scalability, observability, collaboration and stakeholder management ARE real requirements on technical and management postings. Keep them.
 
@@ -358,6 +365,7 @@ serve(async (req) => {
             const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             return !new RegExp(`\\b${escaped}\\b`).test(kw);
           })
+          .filter((k) => !/^express$/i.test(k) || /\bnode(?:\.js|js)?\b|\bexpress\.?js\b/i.test(jobDescription))
           .map((k) => (isLiftedProse(k) ? salvageRequirement(k) : k))
           // A gerund skill ("Machine Learning") and a five-word certification
           // ("AWS Certified Solutions Architect Associate") are requirements,

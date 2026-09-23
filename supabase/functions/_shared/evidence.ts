@@ -386,6 +386,13 @@ export function isFurniture(term: string): boolean {
   if (new RegExp(`^(?:minimum\\s+|at least\\s+)?\\d+\\s*(?:\\+|plus)?\\s*years?(?:${YEARS_TAIL})?$`).test(key)) return true;
   if (new RegExp(`^\\d+\\s*-\\s*\\d+\\s*years?(?:${YEARS_TAIL})?$`).test(key)) return true;
   if (/^(?:bachelor(?:'s|s)?|master(?:'s|s)?|doctoral|doctorate|phd)(?:\s+degree)?(?:\s+in\s+.+)?$/.test(key)) return true;
+  // Kit, shifts, codes and half-words: never a CV keyword.
+  if (/^\d+\s?(?:gb|tb|mb|ghz|mbps)\b/.test(key)) return true;
+  if (/^(?:ram|hd|ssd|cpu|ups|webcam|hd webcam|headset|noise[- ]cancell?ing headset|internet connection|internet speed|backup power|night shift|graveyard shift|pre|pre-employment|ph|ph time|est|pst|cst|us hours)$/.test(key)) return true;
+  if (/^(?:ph|in|ca|au|nz|sg|de|fr|es|nl|pl|pt|mx|br|za|ae|inr|aud|cad|sgd|chf|usd|eur|gbp)$/.test(key)) return true;
+  if (key === 'languages') return true;
+  // A compensation HR skill is a real requirement; a pay line is not.
+  if (/^(?:compensation (?:planning|analysis|analytics|strategy|benchmarking|design|administration)|comp(?:ensation)? (?:and|&) ben(?:efits)?|executive compensation)$/.test(key)) return false;
   // Phrases that only ever describe the package or the process.
   return /\b(salary|compensation|benefit|benefits|insurance|401k|pto|vacation|holiday|perk|perks|bonus|equity vest|apply|application process|recruiter|interview process|eoe|equal opportunity)\b/.test(
     key,
