@@ -153,7 +153,7 @@ export function classifyProviderStatus(
 
     return {
       error: `${providerName} refused the request (403)`,
-      errorCode: "ai_billing",
+      errorCode: "ai_upstream",
       userMessage: `${providerName} refused this request (403). The key's project may not allow this model or these permissions. Create a key with All permissions in the default project. Provider said: ${snippet}`,
       provider: providerName,
       providerStatus: status,
