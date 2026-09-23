@@ -49,6 +49,7 @@ const MAX_STRING_SHORT = 200;
 const MAX_STRING_MEDIUM = 500;
 const MAX_STRING_LONG = 50000;
 const MAX_ARRAY_SIZE = 50;
+const MAX_REQUIREMENTS = 200;
 
 function validateString(value: any, maxLength: number, fieldName: string): string {
   if (typeof value !== "string") {
@@ -337,7 +338,7 @@ function validateRequest(data: any): TailorRequest {
   const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"), company);
 
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
-  const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, "requirements");
+  const requirements = validateStringArray(data.requirements || [], MAX_REQUIREMENTS, MAX_STRING_MEDIUM, "requirements");
   const location = data.location ? validateString(data.location, MAX_STRING_SHORT, "location") : undefined;
   const extractedCity = data.extractedCity
     ? validateString(data.extractedCity, MAX_STRING_SHORT, "extractedCity")
