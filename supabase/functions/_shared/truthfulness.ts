@@ -23,16 +23,16 @@
  *    in a room. They are never capabilities and never belong under skills.
  */
 
-const NATIVE_LANGUAGE =
-  /\b(?:native\s+(?:speaker|level|proficiency|fluency|language|tongue)?|mother\s+tongue|first\s+language)\b/gi;
-
 /** Rewrites native-language wording as fluency, leaving right-to-work statements alone. */
 export function sanitiseLanguageProficiency(text: string): string {
   if (!text) return text;
+  const LANGS = "english|irish|gaelic|french|german|spanish|italian|portuguese|dutch|flemish|polish|czech|swedish|danish|norwegian|finnish|greek|turkish|arabic|hebrew|russian|ukrainian|romanian|hungarian|mandarin|cantonese|chinese|japanese|korean|hindi|urdu|bengali|punjabi|tamil|malay|indonesian|vietnamese|thai|tagalog|swahili|yoruba|igbo|hausa";
   return text
-    .replace(/\bnative\s+speaker\s+of\b/gi, "fluent in")
+    .replace(/\bnative\s+speakers?\s+of\b/gi, "fluent in")
+    .replace(/\(\s*(?:native(?:\s+speakers?)?|mother\s+tongue|first\s+language)\s*\)/gi, "(fluent)")
+    .replace(/\bnative(?:[\s-]+(?:speakers?|level|proficiency|fluency))\b/gi, "fluent")
     .replace(/\b(?:mother\s+tongue|first\s+language)\b/gi, "fluent")
-    .replace(NATIVE_LANGUAGE, "fluent")
+    .replace(new RegExp("\\bnative(?=\\s+(?:" + LANGS + ")\\b)", "gi"), "fluent")
     .replace(/\bfluent\s+fluent\b/gi, "fluent");
 }
 
