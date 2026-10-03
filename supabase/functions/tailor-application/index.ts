@@ -32,6 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
+import { BANNED_PHRASES, checkCoverLetter, coverLetterBlock, humanWordingBlock, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -2203,6 +2204,14 @@ serve(async (req) => {
 
     const rawData = await req.json();
 
+    // A confirmation, sign-in or error page is not a job: refuse before any AI call.
+    if (isNotAJobTitle(String(rawData?.jobTitle ?? ""))) {
+      return new Response(
+        JSON.stringify({ error: "not-a-job", userMessage: "This page is not a job posting. Open the job itself." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Support both 'description' and 'jobDescription' for extension compatibility
     if (rawData.jobDescription && !rawData.description) {
       rawData.description = rawData.jobDescription;
@@ -2359,6 +2368,17 @@ serve(async (req) => {
     jdKeywords.allKeywords = requirementList.terms;
 
     const strategyBlock = buildStrategyBlock(atsStrategy);
+
+    // PROTECTED KEYWORDS: job keywords the original CV already contains.
+    const originalRoleList = originalRoles(userProfile.professionalExperience);
+    const protectedList = protectedKeywords(jdKeywords.allKeywords, originalCvText(userProfile as any));
+    const topRequirements = (mergedRequirements.length >= 3 ? mergedRequirements : jdKeywords.allKeywords).slice(0, 3);
+    const guardBlock = [
+      protectionBlock(jdKeywords.allKeywords, protectedList),
+      coverLetterBlock(company, topRequirements),
+      humanWordingBlock(jdKeywords.allKeywords),
+    ].join("\n\n");
+    console.log(`[PROTECTED] ${protectedList.length} protected keywords; top requirements: ${topRequirements.join(" | ")}`);
 
     // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
@@ -3569,6 +3589,7 @@ ${
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
             ...(strategyBlock ? [{ role: "user", content: strategyBlock }] : []),
+            { role: "user", content: guardBlock },
           ],
           max_tokens: apiConfig.maxTokens,
           temperature: apiConfig.temperature,
@@ -4833,6 +4854,59 @@ ${
     if (removedYearsClaims.length > 0) {
       console.warn(`[TRUTHFULNESS] Removed cross-field years claims: ${removedYearsClaims.join(" | ")}`);
     }
+    // PROTECTED KEYWORD AND ROLE CHECK: one pass, no model call.
+    if (result.tailoredResume) {
+      const restored = restoreProtected(result.tailoredResume, protectedList, originalRoleList, userProfile.skills);
+      result.tailoredResume = restored.text;
+      if (restored.restoredKeywords.length || restored.restoredRoles.length) {
+        console.log(`[PROTECTED] Restored keywords: ${restored.restoredKeywords.join(", ") || "none"}; restored roles: ${restored.restoredRoles.join(", ") || "none"}`);
+      }
+    }
+
+    // COVER LETTER CHECK: employer named outside the greeting, 2 of 3 requirements. One retry at most.
+    if (result.tailoredCoverLetter) {
+      const firstFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements);
+      if (firstFailed.length) {
+        console.log(`[COVER LETTER CHECK] Failed: ${firstFailed.join(" | ")}`);
+        try {
+          const retryRes = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              max_tokens: apiConfig.maxTokens,
+              temperature: apiConfig.temperature,
+              messages: [
+                { role: "system", content: systemPrompt },
+                {
+                  role: "user",
+                  content: `${coverLetterBlock(company, topRequirements)}\n\n${humanWordingBlock(jdKeywords.allKeywords)}\n\nThis cover letter failed these checks:\n- ${firstFailed.join("\n- ")}\n\nCV:\n${result.tailoredResume || ""}\n\nCOVER LETTER:\n${result.tailoredCoverLetter}\n\nReturn only the corrected cover letter as plain text. Keep the same structure and length, change only what fixes the checks, and claim nothing the CV does not show.`,
+                },
+              ],
+            }),
+          });
+          if (retryRes.ok) {
+            const retryData = await retryRes.json();
+            const revised = sanitiseDocument(
+              stripDashes(String(retryData.choices?.[0]?.message?.content || "").replace(/```[a-z]*\s*/gi, "").trim()),
+              yearsContext,
+            ).text;
+            if (revised.length >= 100) {
+              const secondFailed = checkCoverLetter(revised, company, topRequirements);
+              if (secondFailed.length < firstFailed.length) result.tailoredCoverLetter = revised;
+              console.log(`[COVER LETTER CHECK] Retry failed checks: ${secondFailed.length}; kept ${secondFailed.length < firstFailed.length ? "retry" : "original"}`);
+            }
+          } else {
+            console.log(`[COVER LETTER CHECK] Retry request failed: ${retryRes.status}`);
+          }
+        } catch (e) {
+          console.log(`[COVER LETTER CHECK] Retry error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    }
+    if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripDashes(result.tailoredCoverLetter);
+
     result.truthfulness = {
       removedYearsClaims,
       meaning:
