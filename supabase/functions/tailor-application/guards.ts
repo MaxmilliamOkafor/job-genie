@@ -153,7 +153,7 @@ export function restoreProtected(
   const has = (s: string) => !s || lines.join("\n").toLowerCase().includes(s.toLowerCase());
 
   for (const role of roles) {
-    if (has(role.company) && has(role.title)) continue;
+    if (!role.company || has(role.company)) continue;
     const range = sectionRange(lines, /^(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EXPERIENCE)$/i);
     const block = ["", `${role.title} | ${role.company}${role.dates ? ` | ${role.dates}` : ""}`, ...role.bullets.map((b) => `• ${b}`)];
     const at = range ? range[1] : lines.length;
