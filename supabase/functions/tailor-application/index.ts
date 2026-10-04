@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { checkCoverLetter, coverLetterBlock, humanWordingBlock, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -81,6 +81,7 @@ interface TailorRequest {
   location?: string;
   extractedCity?: string; // City extracted by extension for "[CITY] | open to relocation" CV format
   jobId?: string;
+  contactName?: string;
   userProfile: {
     firstName: string;
     lastName: string;
@@ -102,6 +103,8 @@ interface TailorRequest {
     relevantProjects?: any[];
     languages?: any[];
     citizenship?: string;
+    workAuthorizedCountries?: string[];
+    noticePeriod?: string;
     city?: string;
     country?: string;
     address?: string;
@@ -384,6 +387,8 @@ function validateRequest(data: any): TailorRequest {
                       Array.isArray(profile.relevant_projects) ? profile.relevant_projects.slice(0, 10) : [],
     languages: Array.isArray(profile.languages) ? profile.languages.slice(0, 20) : [],
     citizenship: profile.citizenship ? validateString(profile.citizenship, MAX_STRING_SHORT, "citizenship") : "",
+    workAuthorizedCountries: validateStringArray(profile.workAuthorizedCountries || profile.work_authorized_countries || [], MAX_ARRAY_SIZE, MAX_STRING_SHORT, "workAuthorizedCountries"),
+    noticePeriod: profile.noticePeriod || profile.notice_period ? validateString(profile.noticePeriod || profile.notice_period, MAX_STRING_SHORT, "noticePeriod") : "",
   };
 
   // Cover letter tone selection
@@ -398,6 +403,7 @@ function validateRequest(data: any): TailorRequest {
     location,
     extractedCity,
     jobId,
+    contactName: data.contactName ? validateString(data.contactName, MAX_STRING_SHORT, "contactName") : "",
     userProfile,
     includeReferral: !!data.includeReferral,
     coverLetterTone: coverLetterTone as "professional" | "enthusiastic" | "concise",
@@ -2274,6 +2280,8 @@ serve(async (req) => {
         relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
         languages: Array.isArray(profileData.languages) ? profileData.languages : [],
         citizenship: profileData.citizenship || "",
+        workAuthorizedCountries: Array.isArray(profileData.work_authorized_countries) ? profileData.work_authorized_countries : [],
+        noticePeriod: profileData.notice_period || "",
       };
 
       console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
@@ -2287,6 +2295,7 @@ serve(async (req) => {
       location,
       extractedCity,
       jobId,
+      contactName,
       userProfile,
       includeReferral,
       coverLetterTone,
@@ -2373,9 +2382,13 @@ serve(async (req) => {
     const originalRoleList = originalRoles(userProfile.professionalExperience);
     const protectedList = protectedKeywords(jdKeywords.allKeywords, originalCvText(userProfile as any));
     const topRequirements = (mergedRequirements.length >= 3 ? mergedRequirements : jdKeywords.allKeywords).slice(0, 3);
+    const rightToWork = rightToWorkStatement(userProfile.citizenship || "", userProfile.workAuthorizedCountries || [], location || "");
+    console.log(`[RIGHT TO WORK] job location "${location || ""}": ${rightToWork || "none added"}`);
     const guardBlock = [
       protectionBlock(jdKeywords.allKeywords, protectedList),
+      cvContentBlock(topRequirements),
       coverLetterBlock(company, topRequirements),
+      coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork),
       humanWordingBlock(jdKeywords.allKeywords),
     ].join("\n\n");
     console.log(`[PROTECTED] ${protectedList.length} protected keywords; top requirements: ${topRequirements.join(" | ")}`);
@@ -4861,6 +4874,11 @@ ${
       if (restored.restoredKeywords.length || restored.restoredRoles.length) {
         console.log(`[PROTECTED] Restored keywords: ${restored.restoredKeywords.join(", ") || "none"}; restored roles: ${restored.restoredRoles.join(", ") || "none"}`);
       }
+      // TITLES, EMPLOYERS AND DATES: put the original wording back once, no model call.
+      const headings = restoreRoleHeadings(result.tailoredResume, originalRoleList);
+      result.tailoredResume = headings.text;
+      if (headings.restored.length) console.log(`[HEADINGS] Restored: ${headings.restored.join(" | ")}`);
+      result.tailoredResume = applyRightToWork(result.tailoredResume, rightToWork, userProfile.email, userProfile.phone);
     }
 
     // COVER LETTER CHECK: employer named outside the greeting, 2 of 3 requirements. One retry at most.
@@ -4904,6 +4922,47 @@ ${
         }
       }
     }
+    // COVER LETTER LENGTH: over 280 words gets one request to shorten below 250.
+    if (result.tailoredCoverLetter && wordCount(result.tailoredCoverLetter) > 280) {
+      const before = wordCount(result.tailoredCoverLetter);
+      const currentFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements).length;
+      try {
+        const shortRes = await fetch(apiConfig.endpoint, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: apiConfig.model,
+            max_tokens: apiConfig.maxTokens,
+            temperature: apiConfig.temperature,
+            messages: [
+              { role: "system", content: systemPrompt },
+              {
+                role: "user",
+                content: `${coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork)}\n\n${humanWordingBlock(jdKeywords.allKeywords)}\n\nThis cover letter is ${before} words. Shorten it to under 250 words. Keep the employer's name "${company}" and the requirements it names (${topRequirements.join("; ")}). Add nothing new.\n\nCOVER LETTER:\n${result.tailoredCoverLetter}\n\nReturn only the shortened cover letter as plain text.`,
+              },
+            ],
+          }),
+        });
+        if (shortRes.ok) {
+          const shortData = await shortRes.json();
+          const shorter = sanitiseDocument(
+            stripDashes(String(shortData.choices?.[0]?.message?.content || "").replace(/```[a-z]*\s*/gi, "").trim()),
+            yearsContext,
+          ).text;
+          const after = wordCount(shorter);
+          const failed = checkCoverLetter(shorter, company, topRequirements).length;
+          const keep = after >= 100 && after < before && failed === 0 && currentFailed === 0
+            || (currentFailed > 0 && after >= 100 && after < before && failed <= currentFailed);
+          if (keep) result.tailoredCoverLetter = shorter;
+          console.log(`[COVER LETTER LENGTH] ${before} -> ${after} words, failed checks ${failed}; kept ${keep ? "shorter" : "original"}`);
+        } else {
+          console.log(`[COVER LETTER LENGTH] Shorten request failed: ${shortRes.status}`);
+        }
+      } catch (e) {
+        console.log(`[COVER LETTER LENGTH] Shorten error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
     if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripDashes(result.tailoredCoverLetter);
 
