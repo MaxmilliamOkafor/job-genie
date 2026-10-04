@@ -307,9 +307,24 @@ function matchCountry(text: string, map: Record<string, string[]>): string | nul
   return null;
 }
 
+const US_STATE_CODES = new Set(["al", "ak", "az", "ar", "ca", "co", "ct", "de", "dc", "fl", "ga", "hi", "id", "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv", "wi", "wy"]);
+const US_STATE_NAMES = new Set(["alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"]);
+const CA_PROVINCE_CODES = new Set(["on", "qc", "bc", "ab", "mb", "ns", "nb", "nl", "pe", "sk"]);
+const CA_PROVINCE_NAMES = new Set(["ontario", "quebec", "québec", "british columbia", "alberta", "manitoba", "nova scotia", "new brunswick", "newfoundland and labrador", "prince edward island", "saskatchewan"]);
+
 /** The job's country from its location text, or null when unknown. */
 export function jobCountry(location: string): string | null {
   if (!location || !location.trim()) return null;
+  const parts = String(location).split(",").map((p) => p.trim().replace(/\.+$/, "").toLowerCase());
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    if (US_STATE_CODES.has(last) || US_STATE_NAMES.has(last)) return "united states";
+    if (CA_PROVINCE_CODES.has(last) || CA_PROVINCE_NAMES.has(last)) return "canada";
+  } else {
+    const whole = parts[0];
+    if (US_STATE_NAMES.has(whole)) return "united states";
+    if (CA_PROVINCE_NAMES.has(whole)) return "canada";
+  }
   return matchCountry(location, EU_EEA) || matchCountry(location, OTHER_COUNTRIES);
 }
 
