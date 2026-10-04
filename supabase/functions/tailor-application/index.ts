@@ -245,30 +245,7 @@ async function logApiUsage(supabase: any, userId: string, functionName: string, 
  * employment-type / location suffixes) from a JD title, while keeping
  * legitimate digits like "Dynamics 365" or "SAP S/4HANA".
  */
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-// Format a stored date token (2023-01, 01/2023, 2023) as "January 2023"; passes through "Present".
-function formatMonthYear(raw?: string): string {
-  const t = (raw || "").toString().trim();
-  if (!t) return "";
-  if (/present|current/i.test(t)) return "Present";
-  let y = "", m = "";
-  const iso = t.match(/^((?:19|20)\d{2})[-\/](\d{1,2})/);
-  const my = t.match(/^(\d{1,2})[-\/]((?:19|20)\d{2})/);
-  if (iso) { y = iso[1]; m = iso[2]; }
-  else if (my) { y = my[2]; m = my[1]; }
-  else return t;
-  const idx = parseInt(m, 10) - 1;
-  return MONTH_NAMES[idx] ? `${MONTH_NAMES[idx]} ${y}` : y;
-}
-// Build an ATS-safe range: "January 2023 - Present" (full month names, plain hyphen).
-function formatDateRangeATS(start?: string, end?: string, fallbackEnd = ""): string {
-  const s = formatMonthYear(start);
-  const e = formatMonthYear(end) || fallbackEnd;
-  if (!s && !e) return "";
-  if (!e) return s;
-  if (!s) return e;
-  return `${s} - ${e}`;
-}
+import { formatDateRangeATS } from "./guards.ts";
 
 function normaliseJobTitle(raw: string, company?: string): string {
   let t = String(raw || "").trim();
