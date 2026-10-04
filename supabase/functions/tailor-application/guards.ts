@@ -320,6 +320,10 @@ export function jobCountry(location: string): string | null {
     const last = parts[parts.length - 1];
     if (US_STATE_CODES.has(last) || US_STATE_NAMES.has(last)) return "united states";
     if (CA_PROVINCE_CODES.has(last) || CA_PROVINCE_NAMES.has(last)) return "canada";
+  } else {
+    const whole = parts[0];
+    if (US_STATE_NAMES.has(whole)) return "united states";
+    if (CA_PROVINCE_NAMES.has(whole)) return "canada";
   }
   return matchCountry(location, EU_EEA) || matchCountry(location, OTHER_COUNTRIES);
 }
