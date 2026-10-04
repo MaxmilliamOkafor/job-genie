@@ -427,8 +427,12 @@ export function restoreRoleHeadings(resume: string, roles: OriginalRole[]): { te
     if (anchor < 0) continue;
     used.add(anchor);
     const near = [lines[anchor - 1] || "", lines[anchor], lines[anchor + 1] || ""].join("\n");
-    const titleOk = !role.title || near.includes(role.title);
-    const datesOk = !role.dates || near.includes(role.dates);
+    const squash = (s: string) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const titleOk = !role.title || squash(near).includes(squash(role.title));
+    const years = role.dates.match(/(?:19|20)\d{2}/g) || [];
+    const hasEnd = /\b(?:present|current)\b/i.test(role.dates) || years.length >= 2;
+    const datesOk = !role.dates
+      || (years.every((y) => near.includes(y)) && (hasEnd || /\b(?:present|current)\b/i.test(near)));
     if (titleOk && datesOk) continue;
     const segs = lines[anchor].split(/\s+\|\s+/);
     if (segs.length < 2) continue;
