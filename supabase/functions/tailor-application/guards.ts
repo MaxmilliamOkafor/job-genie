@@ -7,6 +7,31 @@
 const NOT_A_JOB =
   /^(?:thanks?\b|thank you\b|application (?:submitted|received|complete|completed|sent|successful)\b|(?:your |the )?application (?:has been|was|is) (?:submitted|received|sent|complete)\b|you(?:'ve| have)? (?:successfully )?(?:applied|submitted)\b|successfully (?:submitted|applied)\b|we(?:'ve| have) (?:received|got) your application\b|(?:job )?application(?: form)?$|apply(?: now| here| for this (?:job|role|position))?$|sign ?in$|log ?in$|page not found$|404\b)/i;
 
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// Format a stored date token (2023-01, 01/2023, 2023) as "January 2023"; passes through "Present".
+export function formatMonthYear(raw?: string): string {
+  const t = (raw || "").toString().trim();
+  if (!t) return "";
+  if (/present|current/i.test(t)) return "Present";
+  let y = "", m = "";
+  const iso = t.match(/^((?:19|20)\d{2})[-\/](\d{1,2})/);
+  const my = t.match(/^(\d{1,2})[-\/]((?:19|20)\d{2})/);
+  if (iso) { y = iso[1]; m = iso[2]; }
+  else if (my) { y = my[2]; m = my[1]; }
+  else return t;
+  const idx = parseInt(m, 10) - 1;
+  return MONTH_NAMES[idx] ? `${MONTH_NAMES[idx]} ${y}` : y;
+}
+// Build an ATS-safe range: "January 2023 - Present" (full month names, plain hyphen).
+export function formatDateRangeATS(start?: string, end?: string, fallbackEnd = ""): string {
+  const s = formatMonthYear(start);
+  const e = formatMonthYear(end) || fallbackEnd;
+  if (!s && !e) return "";
+  if (!e) return s;
+  if (!s) return e;
+  return `${s} - ${e}`;
+}
+
 export function isNotAJobTitle(title: string): boolean {
   const t = String(title || "").trim().replace(/[.!]+$/, "").trim();
   return NOT_A_JOB.test(t);
@@ -87,7 +112,7 @@ export function originalRoles(experience: any[]): OriginalRole[] {
     return {
       title: String(e?.title || e?.role || e?.position || "").trim(),
       company: String(e?.company || e?.employer || "").trim(),
-      dates: [e?.startDate || e?.start_date || "", e?.endDate || e?.end_date || ""].filter(Boolean).join(" - "),
+      dates: e?.dates || formatDateRangeATS(e?.startDate || e?.start_date, e?.endDate || e?.end_date, "Present"),
       bullets: raw.map((b: any) => String(b || "").replace(/^[\s\u2022*-]+/, "").trim()).filter(Boolean),
     };
   });
