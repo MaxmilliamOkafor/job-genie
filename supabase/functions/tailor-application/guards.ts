@@ -379,8 +379,13 @@ export function cvContentBlock(top3: string[]): string {
   return `=== CV CONTENT: RESULTS FIRST ===
 TOP 3 REQUIREMENTS (posting's own words): ${JSON.stringify(top3)}
 - Every bullet leads with the result, then how: "Cut vendor review time by 30% by moving assessments into ServiceNow", not "Responsible for vendor assessments". Use only numbers that are in the original CV; never invent one.
-- Roles that ended more than 12 years ago get at most one bullet each. Keep their title, employer and dates.
-- The professional summary is at most 2 lines: what the candidate does, in this job's field, and the job's top 2 requirements with evidence from the CV. Do not open with years of experience or adjectives.
+- BULLET LENGTH: each experience and project bullet is either one full line of 85 to 105 characters, or two full lines of 175 to 210 characters. Never 106 to 174 characters and never over 210.
+- BULLETS PER ROLE: the two most recent roles get 4 to 5 bullets, older roles 2 to 3, roles that ended more than 10 years ago 1 to 2. Keep their title, employer and dates.
+- HEADLINE UNDER THE NAME: the target job title only when the candidate has held that title or one level below it; otherwise the most recent title and field, for example "Software Engineer | AI and Data Platforms". Never a VP, Director, Head or Chief title the candidate has not held.
+- PROFESSIONAL SUMMARY: at most 2 lines. Start with what the candidate does (role and field), then the two strongest results with numbers from the CV that match the job's top requirements. Never write "Interested in applying this experience to"; never open with years of experience or adjectives.
+- SKILLS: labelled lines, one per group, in this order and only groups with items: "Programming: ...", "Frameworks: ...", "Cloud & DevOps: ...", "Data & ML: ...", "Risk & Compliance: ...", "Professional: ...", "Languages: ...". Spoken languages only on the Languages line. Never citizenship, visa or right-to-work wording (it is in the header). Skills, tools and methods only: never job titles, groups of people (for example "Industrial Designers") or company values. Keep every job keyword the CV supports.
+- SHORT CONTRACTS: when the CV shows a role was a contract, add "(Contract)" after the job title.
+- Never use em dashes.
 - Each of the top 3 requirements that the CV supports appears in the summary or in at least one bullet that shows it being used, not only in the skills list.
 - Job titles, employers and dates are copied exactly as in the original CV.`;
 }
@@ -400,9 +405,11 @@ export function coverLetterShapeBlock(contactName: string, noticePeriod: string,
   return `=== COVER LETTER SHAPE (replaces any earlier length or paragraph guidance) ===
 - 150 to 250 words, 3 short paragraphs plus greeting and sign-off.
 - Greeting: "${first ? `Dear ${first},` : "Dear Hiring Team,"}"
-- Paragraph 1: the role, and one specific reason for this employer taken from the posting.
-- Paragraph 2: the 2 requirements with evidence (as already required).
-- Paragraph 3: one or two plain sentences with the practical facts the profile gives${facts.length ? ` (${facts.join("; ")})` : " (none recorded, so skip them)"}. Then one plain line inviting a conversation.
+- Paragraph 1: the role and the company by name, and the one strongest reason the candidate fits, with a result.
+- Paragraph 2: two more results that answer the job's top requirements. Name each employer once only.
+- Paragraph 3: the right to work statement and the notice period when given, from the practical facts the profile gives${facts.length ? ` (${facts.join("; ")})` : " (none recorded, so skip them)"}. Then one plain line inviting a conversation.
+- Claim only skills the CV shows. Never write ${LETTER_BANNED.map((b) => `"${b}"`).join(", ")}.
+- No date line and no "Date:" label; the date is added afterwards.
 - Never state a notice period or right to work the profile does not give. No em dashes.`;
 }
 
