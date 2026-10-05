@@ -508,7 +508,7 @@ export function employerToolSentences(letter: string, experience: any[], tools: 
     company: String(e?.company || e?.employer || "").trim(),
     text: entryText(e),
   })).filter((r) => r.company);
-  const list = [...new Set(tools.map((t) => String(t || "").trim()).filter((t) => t.length > 1 && !NOT_A_TOOL.test(t) || /^(go|r|c)$/i.test(t)))];
+  const list = [...new Set(tools.map((t) => String(t || "").trim()).filter((t) => t && !NOT_A_TOOL.test(t)))];
   for (const p of String(letter || "").split(/\n{2,}/)) {
     const t = p.trim();
     if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) continue;
@@ -907,7 +907,8 @@ export const LETTER_BANNED = [
 ];
 
 /** Removes the banned cover-letter phrases that a model may still write. */
-export function stripLetterBanned(letter: string): string {
+export function stripLetterBanned(letter: string, protectText = ""): string {
+  if (protectText) return withProtected(letter, protectText, (x) => stripLetterBanned(x));
   const cap = (_m: string, pre: string, c: string) => pre + c.toUpperCase();
   return String(letter || "")
     // Whole sentences built on a banned stock phrase go.

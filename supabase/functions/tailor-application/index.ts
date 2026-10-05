@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -5031,19 +5031,21 @@ ${
         contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
       }, rewordings, { openingStory: story, company, role: jobTitle });
       result.tailoredCoverLetter = shaped.text;
-      const rtw = enforceLetterRightToWork(result.tailoredCoverLetter, rightToWork);
+      // The opening story is never changed after it is restored.
+      const storySentences = protectedSentences(story);
+      const rtw = enforceLetterRightToWork(result.tailoredCoverLetter, rightToWork, storySentences);
       if (rtw.removed.length) console.log(`[COVER LETTER RIGHT TO WORK] removed: ${rtw.removed.join(" | ")}`);
       result.tailoredCoverLetter = rtw.text;
-      const toolNames = [...jdKeywords.allKeywords, ...(userProfile.skills || []).map((x: any) => typeof x === "string" ? x : x?.name || "")];
-      const badTools = employerToolSentences(result.tailoredCoverLetter, userProfile.professionalExperience || [], toolNames);
+      const toolNames = letterToolList(userProfile.skills || [], jdKeywords.allKeywords);
+      const badTools = employerToolSentences(result.tailoredCoverLetter, userProfile.professionalExperience || [], toolNames, storySentences);
       if (badTools.length) console.log(`[COVER LETTER TOOLS] removed: ${badTools.join(" | ")}`);
-      result.tailoredCoverLetter = dropSentences(result.tailoredCoverLetter, badTools);
+      result.tailoredCoverLetter = dropSentences(result.tailoredCoverLetter, badTools, storySentences);
       if (shaped.notes.length) console.log(`[COVER LETTER SHAPE] ${shaped.notes.join("; ")}`);
     }
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
-    if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(applySignOff(stripLetterBanned(result.tailoredCoverLetter), location || ""), location || "");
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(applySignOff(stripLetterBanned(result.tailoredCoverLetter, userProfile.openingStory || ""), location || ""), location || "");
     if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
-    if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripDashes(result.tailoredCoverLetter);
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = withProtected(result.tailoredCoverLetter, userProfile.openingStory || "", stripDashes);
 
     result.truthfulness = {
       removedYearsClaims,
