@@ -470,3 +470,302 @@ export function restoreRoleHeadings(resume: string, roles: OriginalRole[]): { te
   }
   return { text: lines.join("\n"), restored };
 }
+
+// ---------------------------------------------------------------------------
+// CV and cover letter layout rules, enforced after generation.
+
+const BULLET_RE = /^(\s*)([•\-*▪·])\s+(.*)$/;
+
+export function bulletLengthOk(len: number): boolean {
+  return (len >= 85 && len <= 105) || (len >= 175 && len <= 210);
+}
+
+/** The nearer of the two allowed shapes for a bullet of this length. */
+export function bulletTarget(len: number): string {
+  return len <= 140 ? "one line, 85 to 105 characters" : "two lines, 175 to 210 characters";
+}
+
+export interface BadBullet { line: number; text: string; length: number; target: string }
+
+/** Experience and project bullets outside the allowed lengths. */
+export function findBadBullets(resume: string): BadBullet[] {
+  const lines = String(resume || "").split("\n");
+  const out: BadBullet[] = [];
+  for (const heading of [/^(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EXPERIENCE)$/i, /^(PROJECTS|RELEVANT PROJECTS|KEY PROJECTS)$/i]) {
+    const range = sectionRange(lines, heading);
+    if (!range) continue;
+    for (let i = range[0] + 1; i < range[1]; i++) {
+      const m = lines[i].match(BULLET_RE);
+      if (!m) continue;
+      const text = m[3].trim();
+      if (!bulletLengthOk(text.length)) out.push({ line: i, text, length: text.length, target: bulletTarget(text.length) });
+    }
+  }
+  return out;
+}
+
+function numbersIn(s: string): string[] {
+  return String(s || "").match(/\d+(?:[.,]\d+)*/g) || [];
+}
+
+/** A rewrite is kept only when the length is right and no number, tool or keyword is lost. */
+export function acceptRewrite(original: string, rewritten: string, keywords: string[]): boolean {
+  const r = String(rewritten || "").replace(/^[\s•*\-▪·]+/, "").trim();
+  if (!r || !bulletLengthOk(r.length)) return false;
+  if (!numbersIn(original).every((n) => r.includes(n))) return false;
+  return keywords.filter((k) => containsTerm(original, k)).every((k) => containsTerm(r, k));
+}
+
+export function bulletRewritePrompt(bad: BadBullet[], keywords: string[]): string {
+  return `Rewrite each bullet to the target length shown, keeping every number, every tool name and these job keywords: ${JSON.stringify(keywords)}. Same facts, plain words, start with the result.
+Return only a JSON array of strings, one rewritten bullet per input, in the same order, with no bullet symbol.
+
+${bad.map((b, i) => `${i + 1}. [target: ${b.target}; now ${b.length} characters] ${b.text}`).join("\n")}`;
+}
+
+export function applyBulletRewrites(resume: string, bad: BadBullet[], rewrites: string[], keywords: string[]): { text: string; accepted: number } {
+  const lines = String(resume || "").split("\n");
+  let accepted = 0;
+  bad.forEach((b, i) => {
+    const r = rewrites[i];
+    if (typeof r !== "string" || !acceptRewrite(b.text, r, keywords)) return;
+    const m = lines[b.line].match(BULLET_RE);
+    if (!m) return;
+    lines[b.line] = `${m[1]}${m[2]} ${r.replace(/^[\s•*\-▪·]+/, "").trim()}`;
+    accepted++;
+  });
+  return { text: lines.join("\n"), accepted };
+}
+
+// Bullets per role.
+
+function endYear(e: any): number | null {
+  const end = String(e?.endDate || e?.end_date || "").trim();
+  if (!end || /present|current/i.test(end)) return null;
+  const y = end.match(/(?:19|20)\d{2}/);
+  return y ? parseInt(y[0], 10) : null;
+}
+
+/** Allowed bullet range for each role, in profile order (most recent first). */
+export function bulletLimits(experience: any[], now = new Date()): { min: number; max: number }[] {
+  const list = Array.isArray(experience) ? experience : [];
+  return list.map((e, i) => {
+    const end = endYear(e);
+    if (end !== null && now.getFullYear() - end > 10) return { min: 1, max: 2 };
+    return i < 2 ? { min: 4, max: 5 } : { min: 2, max: 3 };
+  });
+}
+
+/** Drops bullets beyond a role's maximum, keeping the ones with the most job keywords and numbers. */
+export function enforceBulletCounts(resume: string, roles: OriginalRole[], limits: { min: number; max: number }[], keywords: string[]): { text: string; notes: string[] } {
+  const lines = String(resume || "").split("\n");
+  const notes: string[] = [];
+  const range = sectionRange(lines, /^(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EXPERIENCE)$/i);
+  if (!range) return { text: resume, notes };
+  const anchors = roles.map((r) => r.company
+    ? lines.findIndex((l, i) => i > range[0] && i < range[1] && !BULLET_RE.test(l) && l.toLowerCase().includes(r.company.toLowerCase()))
+    : -1);
+  const drop = new Set<number>();
+  roles.forEach((role, ri) => {
+    const a = anchors[ri];
+    if (a < 0 || !limits[ri]) return;
+    const nextStarts = anchors.filter((x) => x > a);
+    const stop = Math.min(range[1], ...nextStarts);
+    const bullets: number[] = [];
+    for (let i = a + 1; i < stop; i++) if (BULLET_RE.test(lines[i])) bullets.push(i);
+    const { min, max } = limits[ri];
+    if (bullets.length < min) notes.push(`${role.company}: ${bullets.length} bullets, fewer than ${min}`);
+    if (bullets.length <= max) return;
+    const score = (i: number) => keywords.filter((k) => containsTerm(lines[i], k)).length * 2 + numbersIn(lines[i]).length;
+    const ranked = [...bullets].sort((x, y) => score(y) - score(x) || x - y);
+    ranked.slice(max).forEach((i) => drop.add(i));
+    notes.push(`${role.company}: ${bullets.length} bullets cut to ${max}`);
+  });
+  return { text: lines.filter((_, i) => !drop.has(i)).join("\n"), notes };
+}
+
+// Headline under the name.
+
+const EXEC_TITLE = /\b(vp|vice president|svp|evp|director|head|chief|c[eotf]o|cxo|president)\b/i;
+const LEVEL_WORDS = /\b(intern|trainee|graduate|junior|jr\.?|associate|mid|senior|sr\.?|lead|staff|principal|manager|head|director|vp|vice president|chief|i{1,3}|iv)\b/gi;
+
+function titleLevel(t: string): number {
+  const s = t.toLowerCase();
+  if (/\b(chief|c[eotf]o|president|vp|vice president)\b/.test(s)) return 6;
+  if (/\b(director|head)\b/.test(s)) return 5;
+  if (/\b(principal|staff|manager)\b/.test(s)) return 4;
+  if (/\b(lead)\b/.test(s)) return 3.5;
+  if (/\b(senior|sr\.?)\b/.test(s)) return 3;
+  if (/\b(junior|jr\.?|associate|graduate|trainee|intern)\b/.test(s)) return 1;
+  return 2;
+}
+
+function titleBase(t: string): string {
+  return t.toLowerCase().replace(/\(.*?\)/g, " ").replace(LEVEL_WORDS, " ").replace(/[^a-z0-9+#.& ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The target title only when it, or one level below it, has been held.
+ * Otherwise the most recent held title and its field. Never an executive
+ * title the candidate has not held.
+ */
+export function chooseHeldHeadline(target: string, heldTitles: string[], currentTitle: string, field: string): string {
+  const t = String(target || "").trim();
+  const held = heldTitles.map((h) => String(h || "").trim()).filter(Boolean);
+  const fallbackTitle = String(currentTitle || held[0] || "").trim();
+  const fallback = fallbackTitle && field ? `${fallbackTitle} | ${field}` : fallbackTitle;
+  if (!t) return fallback;
+  const base = titleBase(t);
+  const level = titleLevel(t);
+  const qualifies = held.some((h) => {
+    const hb = titleBase(h);
+    const sameField = !!base && !!hb && (hb === base || hb.includes(base) || base.includes(hb));
+    return sameField && titleLevel(h) >= level - 1 && (!EXEC_TITLE.test(t) || EXEC_TITLE.test(h) && titleLevel(h) >= level);
+  });
+  return qualifies ? t : (fallback || t);
+}
+
+// Skills lines.
+
+export const SKILL_GROUPS = ["Programming", "Frameworks", "Cloud & DevOps", "Data & ML", "Risk & Compliance", "Professional", "Languages"] as const;
+
+const SPOKEN = /^(english|irish|gaelic|french|german|spanish|italian|portuguese|dutch|polish|czech|swedish|danish|norwegian|finnish|greek|turkish|arabic|hebrew|russian|ukrainian|romanian|hungarian|mandarin|cantonese|chinese|japanese|korean|hindi|urdu|bengali|punjabi|tamil|malay|indonesian|vietnamese|thai|tagalog|swahili|yoruba|igbo|hausa)\b/i;
+const GROUP_TESTS: [typeof SKILL_GROUPS[number], RegExp][] = [
+  ["Programming", /^(python|java|javascript|typescript|c\+\+|c#|c|go|golang|rust|ruby|php|scala|kotlin|swift|r|sql|bash|shell|perl|matlab|vba|html|css|dart|elixir|haskell|lua|objective-c|solidity|t-sql|pl\/sql)$/i],
+  ["Frameworks", /(react|angular|vue|next\.?js|node\.?js|express|django|flask|fastapi|spring|\.net|rails|laravel|svelte|tailwind|redux|graphql|jquery|nestjs|flutter|react native)/i],
+  ["Cloud & DevOps", /(aws|azure|gcp|google cloud|docker|kubernetes|terraform|ansible|jenkins|ci\/cd|github actions|gitlab|git\b|linux|helm|cloudformation|serverless|lambda|devops|infrastructure as code|prometheus|grafana|datadog|nginx|openshift)/i],
+  ["Data & ML", /(machine learning|deep learning|\bml\b|\bai\b|nlp|llm|pytorch|tensorflow|scikit|pandas|numpy|spark|hadoop|kafka|airflow|dbt|snowflake|databricks|bigquery|redshift|tableau|power bi|looker|etl|data|analytics|statistics|postgres|mysql|mongodb|redis|elasticsearch|excel|computer vision|generative ai)/i],
+  ["Risk & Compliance", /(risk|compliance|kyc|aml|gdpr|sox|iso ?27001|pci|audit|regulat|fraud|basel|mifid|sanctions|governance|controls|nist|soc ?2|dora|aml\/cft)/i],
+];
+const NOT_A_SKILL = /(citizen|citizenship|visa|sponsorship|right to work|work permit|work authori[sz]ation|eligible to work|passport)/i;
+const PEOPLE_GROUP = /^(?:[a-z&/ -]+ )?(designers|engineers|developers|managers|analysts|scientists|stakeholders|customers|clients|users|teams|leaders|executives|partners|recruiters|architects|specialists|consultants|people)$/i;
+const COMPANY_VALUE = /^(integrity|respect|excellence|customer obsession|ownership mindset|bias for action|be bold|one team|inclusion|diversity|trust|humility|courage|passion|innovation mindset|think big|deliver results|earn trust)$/i;
+
+function labelGroup(label: string): typeof SKILL_GROUPS[number] | null {
+  const l = label.toLowerCase();
+  if (/spoken|^languages?$/.test(l) && !/program/.test(l)) return "Languages";
+  if (/program|coding|languages/.test(l)) return "Programming";
+  if (/framework|librar/.test(l)) return "Frameworks";
+  if (/cloud|devops|infra|platform/.test(l)) return "Cloud & DevOps";
+  if (/data|ml|machine|analytic|ai\b|database/.test(l)) return "Data & ML";
+  if (/risk|compliance|regulat|governance|security/.test(l)) return "Risk & Compliance";
+  if (/professional|soft|method|business|management|core/.test(l)) return "Professional";
+  return null;
+}
+
+/**
+ * Rewrites the skills section as labelled lines in the fixed order, with
+ * spoken languages only on the Languages line, and drops citizenship or visa
+ * wording, job titles, groups of people and company values.
+ */
+export function formatSkillsSection(resume: string): { text: string; dropped: string[] } {
+  const lines = String(resume || "").split("\n");
+  const range = sectionRange(lines, /^(TECHNICAL SKILLS|SKILLS|CORE SKILLS|KEY SKILLS)$/i);
+  if (!range) return { text: resume, dropped: [] };
+  const groups = new Map<string, string[]>(SKILL_GROUPS.map((g) => [g, []]));
+  const dropped: string[] = [];
+  const seen = new Set<string>();
+  for (let i = range[0] + 1; i < range[1]; i++) {
+    const raw = lines[i].replace(/^[\s•*\-▪·]+/, "").trim();
+    if (!raw) continue;
+    const m = raw.match(/^([^:]{2,40}):\s*(.*)$/);
+    const label = m ? m[1] : "";
+    const fromLabel = label ? labelGroup(label) : null;
+    for (let item of (m ? m[2] : raw).split(/\s*[,;|]\s*/)) {
+      item = item.replace(/\.$/, "").trim();
+      if (!item) continue;
+      const key = item.toLowerCase();
+      if (seen.has(key)) continue;
+      if (NOT_A_SKILL.test(item) || PEOPLE_GROUP.test(item) || COMPANY_VALUE.test(item)) { dropped.push(item); continue; }
+      seen.add(key);
+      const bare = item.replace(/\s*\(.*\)$/, "");
+      let g: string | null = SPOKEN.test(bare) && (fromLabel === "Languages" || /\((?:fluent|native|professional|basic|conversational|intermediate|b\d|c\d|a\d)/i.test(item) || !GROUP_TESTS[0][1].test(bare)) ? "Languages" : null;
+      if (!g) g = GROUP_TESTS.find(([, re]) => re.test(bare))?.[0] || null;
+      if (!g || (g === "Data & ML" && fromLabel && fromLabel !== "Languages" && fromLabel !== "Professional")) g = fromLabel && fromLabel !== "Languages" ? fromLabel : g;
+      groups.get(g || "Professional")!.push(item);
+    }
+  }
+  const body = SKILL_GROUPS.filter((g) => groups.get(g)!.length).map((g) => `${g}: ${groups.get(g)!.join(", ")}`);
+  const out = [...lines.slice(0, range[0] + 1), ...body, ...(range[1] < lines.length ? [""] : []), ...lines.slice(range[1])];
+  return { text: out.join("\n"), dropped };
+}
+
+// Contract roles.
+
+export function isContractRole(e: any): boolean {
+  const fields = [e?.employmentType, e?.employment_type, e?.type, e?.contractType, e?.contract_type].map((v) => String(v || ""));
+  if (e?.contract === true || e?.isContract === true) return true;
+  if (fields.some((f) => /contract|freelance|fixed[- ]term/i.test(f))) return true;
+  return /\b(contract(?:or)?|freelance)\b/i.test(String(e?.title || ""));
+}
+
+/** Adds "(Contract)" after the job title in the heading of every contract role. */
+export function markContractRoles(resume: string, experience: any[]): { text: string; marked: string[] } {
+  const lines = String(resume || "").split("\n");
+  const marked: string[] = [];
+  const used = new Set<number>();
+  for (const e of Array.isArray(experience) ? experience : []) {
+    const company = String(e?.company || e?.employer || "").trim();
+    const title = String(e?.title || e?.role || e?.position || "").trim();
+    if (!company || !title || !isContractRole(e)) continue;
+    const idx = lines.findIndex((l, i) => !used.has(i) && !BULLET_RE.test(l) && l.toLowerCase().includes(company.toLowerCase()) && l.trim().length < 200);
+    if (idx < 0) continue;
+    used.add(idx);
+    const near = [idx - 1, idx, idx + 1].filter((i) => i >= 0 && i < lines.length);
+    if (near.some((i) => /\(contract\)/i.test(lines[i]))) continue;
+    const ti = near.find((i) => lines[i].toLowerCase().includes(title.toLowerCase()));
+    if (ti === undefined) continue;
+    const at = lines[ti].toLowerCase().indexOf(title.toLowerCase()) + title.length;
+    lines[ti] = `${lines[ti].slice(0, at)} (Contract)${lines[ti].slice(at)}`;
+    marked.push(`${title} at ${company}`);
+  }
+  return { text: lines.join("\n"), marked };
+}
+
+// Summary wording.
+
+export function stripSummaryFiller(resume: string): string {
+  return String(resume || "").replace(/[^.\n]*\binterested in applying (?:this|my|these) (?:experience|skills?)[^.\n]*\.?\s*/gi, "").replace(/[ \t]+\n/g, "\n");
+}
+
+// Cover letter.
+
+export const LETTER_BANNED = ["showing my capabilities", "showing effective", "I am excited", "leverage", "passionate"];
+
+export function letterLayoutBlock(): string {
+  return `=== COVER LETTER CONTENT (replaces any earlier paragraph guidance) ===
+- Paragraph 1: the role and the company by name, and the one strongest reason the candidate fits, with a result from the CV.
+- Paragraph 2: two more results that answer the job's top requirements. Name each employer once only.
+- Paragraph 3: the right to work statement, the notice period if given, and an invitation to talk.
+- Claim only skills the CV shows. Never write ${LETTER_BANNED.map((b) => `"${b}"`).join(", ")}.
+- No date line and no "Date:" label; the date is added afterwards.`;
+}
+
+/** Removes the banned cover-letter phrases that a model may still write. */
+export function stripLetterBanned(letter: string): string {
+  return String(letter || "")
+    .replace(/,?\s*showing my capabilities\b[^.,]*/gi, "")
+    .replace(/,?\s*showing effective\b[^.,]*/gi, "")
+    .replace(/\bI am excited (?:to|about|by)\b/gi, "I would like to")
+    .replace(/\bleverag(?:e|ed|es|ing)\b/gi, (m) => ({ leverage: "use", leveraged: "used", leverages: "uses", leveraging: "using" } as Record<string, string>)[m.toLowerCase()] || "use")
+    .replace(/\bpassionate about\b/gi, "focused on")
+    .replace(/\bpassionate\b/gi, "committed");
+}
+
+export function formatLetterDate(date: Date, us: boolean): string {
+  const d = date.getUTCDate(), m = MONTH_NAMES[date.getUTCMonth()], y = date.getUTCFullYear();
+  return us ? `${m} ${d}, ${y}` : `${d} ${m} ${y}`;
+}
+
+const DATE_LINE = new RegExp(`^\\s*(?:date\\s*:\\s*)?(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${MONTH_NAMES.join("|")})\\s+\\d{4}|(?:${MONTH_NAMES.join("|")})\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\s*$`, "i");
+
+/** One date line above the greeting, in the job country's style, with no "Date:" label. */
+export function applyLetterDate(letter: string, location: string, date = new Date()): string {
+  if (!letter) return letter;
+  const line = formatLetterDate(date, jobCountry(location) === "united states");
+  const lines = letter.split("\n").filter((l, i) => !(i < 12 && (DATE_LINE.test(l) || /^\s*date\s*:/i.test(l))));
+  const g = lines.findIndex((l) => /^\s*(dear|hello|hi|to whom)\b/i.test(l));
+  const at = g >= 0 && g < 10 ? g : 0;
+  lines.splice(at, 0, line, "");
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+/, "");
+}
