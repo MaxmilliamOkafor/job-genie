@@ -172,7 +172,7 @@ describe('cover letter rule fixes', () => {
   });
   it('the opening story comes out word for word', () => {
     const story = 'At Revolut I traced a fraud ring that had significantly drained 400 accounts. I am an Irish citizen who never forgot it.';
-    const letter = `Dear Hiring Team,\n\n${story} I am applying for the Fraud Analyst role at Acme.\n\nAt Revolut I wrote React tools.\n\nAcme fact.\n\nClose.\n\nKind regards,`;
+    const letter = `Dear Hiring Team,\n\n${story} I am applying for the Fraud Analyst role at Acme.\n\nAt Revolut I wrote React tools. I cut losses by 20%.\n\nAcme fact.\n\nClose.\n\nKind regards,`;
     const protect = protectedSentences(story);
     const exp = [{ company: 'Revolut', description: 'Python' }];
     let t = enforceLetterRightToWork(letter, '', protect).text;
