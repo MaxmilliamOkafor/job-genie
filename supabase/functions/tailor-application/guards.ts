@@ -881,8 +881,8 @@ export function shapeCoverLetter(letter: string, bullets: string[], header: { na
     return out.trim();
   }).filter(Boolean);
   if (body.length > 3) {
-    notes.push(`merged ${body.length - 3} extra paragraph(s) into paragraph 3`);
-    body = [body[0], body[1], body.slice(2).join(" ")];
+    notes.push(`merged ${body.length - 3} extra paragraph(s) into paragraph 2`);
+    body = [body[0], [body[1], ...body.slice(2, -1)].join(" "), body[body.length - 1]];
   }
   const out = [...head, ...body, ...tail];
   const name = String(header.name || "").trim();
