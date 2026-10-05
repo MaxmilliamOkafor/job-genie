@@ -847,17 +847,31 @@ export function stripSummaryFiller(resume: string): string {
 
 // Cover letter.
 
-export const LETTER_BANNED = ["showing my capabilities", "showing effective", "I am excited", "leverage", "passionate"];
+export const LETTER_BANNED = [
+  "aligns with your mission", "I welcome the opportunity", "I am excited about the opportunity", "impactful", "actionable insights",
+  "leverage", "utilize", "seamless", "robust", "significantly", "effectively", "showing my ability",
+  "Also,", "Additionally,", "Furthermore,", "Alongside that,",
+  "showing my capabilities", "showing effective", "I am excited", "passionate",
+];
 
 /** Removes the banned cover-letter phrases that a model may still write. */
 export function stripLetterBanned(letter: string): string {
+  const cap = (_m: string, pre: string, c: string) => pre + c.toUpperCase();
   return String(letter || "")
-    .replace(/,?\s*showing my capabilities\b[^.,]*/gi, "")
+    // Whole sentences built on a banned stock phrase go.
+    .replace(/[^.!?\n]*\b(aligns? with your mission|I welcome the opportunity|I am excited about the opportunity)\b[^.!?\n]*[.!?]?\s*/gi, "")
+    .replace(/,?\s*showing my (capabilities|ability)\b[^.,]*/gi, "")
     .replace(/,?\s*showing effective\b[^.,]*/gi, "")
     .replace(/\bI am excited (?:to|about|by)\b/gi, "I would like to")
     .replace(/\bleverag(?:e|ed|es|ing)\b/gi, (m) => ({ leverage: "use", leveraged: "used", leverages: "uses", leveraging: "using" } as Record<string, string>)[m.toLowerCase()] || "use")
+    .replace(/\butili[sz](?:e|ed|es|ing)\b/gi, (m) => ({ e: "use", ed: "used", es: "uses", ing: "using" } as Record<string, string>)[m.toLowerCase().replace(/^utili[sz]/, "")] || "use")
+    .replace(/\bactionable insights\b/gi, "insights")
+    .replace(/\s*\b(impactful|seamless(?:ly)?|robust|significantly|effectively)\b/gi, "")
+    .replace(/(^|[.!?]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
     .replace(/\bpassionate about\b/gi, "focused on")
-    .replace(/\bpassionate\b/gi, "committed");
+    .replace(/\bpassionate\b/gi, "committed")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.,;:])/g, "$1");
 }
 
 export function formatLetterDate(date: Date, us: boolean): string {
