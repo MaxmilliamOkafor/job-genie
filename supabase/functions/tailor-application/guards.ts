@@ -484,7 +484,7 @@ export function restoreRoleHeadings(resume: string, roles: OriginalRole[]): { te
 const BULLET_RE = /^(\s*)([•\-*▪·])\s+(.*)$/;
 
 export function bulletLengthOk(len: number): boolean {
-  return (len >= 85 && len <= 105) || (len >= 175 && len <= 210);
+  return (len >= 60 && len <= 105) || (len >= 175 && len <= 210);
 }
 
 /** The nearer of the two allowed shapes for a bullet of this length. */
@@ -641,11 +641,11 @@ const GROUP_TESTS: [typeof SKILL_GROUPS[number], RegExp][] = [
   ["Programming", /^(python|java|javascript|typescript|c\+\+|c#|c|go|golang|rust|ruby|php|scala|kotlin|swift|r|sql|bash|shell|perl|matlab|vba|html|css|dart|elixir|haskell|lua|objective-c|solidity|t-sql|pl\/sql)$/i],
   ["Frameworks", /(react|angular|vue|next\.?js|node\.?js|express|django|flask|fastapi|spring|\.net|rails|laravel|svelte|tailwind|redux|graphql|jquery|nestjs|flutter|react native)/i],
   ["Cloud & DevOps", /(aws|azure|gcp|google cloud|docker|kubernetes|terraform|ansible|jenkins|ci\/cd|github actions|gitlab|git\b|linux|helm|cloudformation|serverless|lambda|devops|infrastructure as code|prometheus|grafana|datadog|nginx|openshift)/i],
+  ["Risk & Compliance", /(data governance|data protection|data privacy|privacy|information security|third party risk|operational resilience|risk|compliance|kyc|aml|gdpr|sox|iso ?27001|pci|audit|regulat|fraud|basel|mifid|sanctions|governance|controls|nist|soc ?2|dora|aml\/cft)/i],
   ["Data & ML", /(machine learning|deep learning|\bml\b|\bai\b|nlp|llm|pytorch|tensorflow|scikit|pandas|numpy|spark|hadoop|kafka|airflow|dbt|snowflake|databricks|bigquery|redshift|tableau|power bi|looker|etl|data|analytics|statistics|postgres|mysql|mongodb|redis|elasticsearch|excel|computer vision|generative ai)/i],
-  ["Risk & Compliance", /(risk|compliance|kyc|aml|gdpr|sox|iso ?27001|pci|audit|regulat|fraud|basel|mifid|sanctions|governance|controls|nist|soc ?2|dora|aml\/cft)/i],
 ];
 const NOT_A_SKILL = /(citizen|citizenship|visa|sponsorship|right to work|work permit|work authori[sz]ation|eligible to work|passport)/i;
-const PEOPLE_GROUP = /^(?:[a-z&/ -]+ )?(designers|engineers|developers|managers|analysts|scientists|stakeholders|customers|clients|users|teams|leaders|executives|partners|recruiters|architects|specialists|consultants|people)$/i;
+const PEOPLE_GROUP = /^(?:[a-z&/ -]+ )?(designers|engineers|developers|managers|analysts|scientists|architects|specialists|consultants|recruiters|executives)$/i;
 const COMPANY_VALUE = /^(integrity|respect|excellence|customer obsession|ownership mindset|bias for action|be bold|one team|inclusion|diversity|trust|humility|courage|passion|innovation mindset|think big|deliver results|earn trust)$/i;
 
 function labelGroup(label: string): typeof SKILL_GROUPS[number] | null {
@@ -654,8 +654,8 @@ function labelGroup(label: string): typeof SKILL_GROUPS[number] | null {
   if (/program|coding|languages/.test(l)) return "Programming";
   if (/framework|librar/.test(l)) return "Frameworks";
   if (/cloud|devops|infra|platform/.test(l)) return "Cloud & DevOps";
-  if (/data|ml|machine|analytic|ai\b|database/.test(l)) return "Data & ML";
   if (/risk|compliance|regulat|governance|security/.test(l)) return "Risk & Compliance";
+  if (/data|ml|machine|analytic|ai\b|database/.test(l)) return "Data & ML";
   if (/professional|soft|method|business|management|core/.test(l)) return "Professional";
   return null;
 }
@@ -688,7 +688,7 @@ export function formatSkillsSection(resume: string): { text: string; dropped: st
       const bare = item.replace(/\s*\(.*\)$/, "");
       let g: string | null = SPOKEN.test(bare) && (fromLabel === "Languages" || /\((?:fluent|native|professional|basic|conversational|intermediate|b\d|c\d|a\d)/i.test(item) || !GROUP_TESTS[0][1].test(bare)) ? "Languages" : null;
       if (!g) g = GROUP_TESTS.find(([, re]) => re.test(bare))?.[0] || null;
-      if (!g || (g === "Data & ML" && fromLabel && fromLabel !== "Languages" && fromLabel !== "Professional")) g = fromLabel && fromLabel !== "Languages" ? fromLabel : g;
+      if (!g || (g === "Data & ML" && fromLabel !== "Risk & Compliance" && fromLabel && fromLabel !== "Languages" && fromLabel !== "Professional")) g = fromLabel && fromLabel !== "Languages" ? fromLabel : g;
       groups.get(g || "Professional")!.push(item);
     }
   }
@@ -762,8 +762,9 @@ export function applyLetterDate(letter: string, location: string, date = new Dat
   if (!letter) return letter;
   const line = formatLetterDate(date, jobCountry(location) === "united states");
   const lines = letter.split("\n").filter((l, i) => !(i < 12 && (DATE_LINE.test(l) || /^\s*date\s*:/i.test(l))));
+  const re = lines.findIndex((l, i) => i < 10 && /^\s*re\s*:/i.test(l));
   const g = lines.findIndex((l) => /^\s*(dear|hello|hi|to whom)\b/i.test(l));
-  const at = g >= 0 && g < 10 ? g : 0;
+  const at = re >= 0 ? re : g >= 0 && g < 10 ? g : 0;
   lines.splice(at, 0, line, "");
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+/, "");
 }
