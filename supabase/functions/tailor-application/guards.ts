@@ -739,15 +739,6 @@ export function stripSummaryFiller(resume: string): string {
 
 export const LETTER_BANNED = ["showing my capabilities", "showing effective", "I am excited", "leverage", "passionate"];
 
-export function letterLayoutBlock(): string {
-  return `=== COVER LETTER CONTENT (replaces any earlier paragraph guidance) ===
-- Paragraph 1: the role and the company by name, and the one strongest reason the candidate fits, with a result from the CV.
-- Paragraph 2: two more results that answer the job's top requirements. Name each employer once only.
-- Paragraph 3: the right to work statement, the notice period if given, and an invitation to talk.
-- Claim only skills the CV shows. Never write ${LETTER_BANNED.map((b) => `"${b}"`).join(", ")}.
-- No date line and no "Date:" label; the date is added afterwards.`;
-}
-
 /** Removes the banned cover-letter phrases that a model may still write. */
 export function stripLetterBanned(letter: string): string {
   return String(letter || "")

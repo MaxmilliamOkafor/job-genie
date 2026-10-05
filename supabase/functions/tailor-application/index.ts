@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, chooseHeldHeadline, enforceBulletCounts, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -4273,6 +4273,15 @@ ${
     if (headlineDecision.usedFallback) {
       console.warn(`[HEADLINE] ${headlineDecision.reason}: "${headlineDecision.headline}"`);
     }
+    // HEADLINE RULE: target title only when held at that level or one below.
+    {
+      const field = protectedList.slice(0, 2).join(" and ");
+      const held = chooseHeldHeadline(headlineDecision.headline, headlineHeldTitles, headlineCurrentTitle, field);
+      if (held !== headlineDecision.headline) {
+        console.log(`[HEADLINE] Target "${headlineDecision.headline}" not held; using "${held}"`);
+        headlineDecision.headline = held;
+      }
+    }
     result.headline = headlineDecision.headline;
     result.headlineSource = headlineDecision.reason;
 
@@ -4856,6 +4865,51 @@ ${
       result.tailoredResume = headings.text;
       if (headings.restored.length) console.log(`[HEADINGS] Restored: ${headings.restored.join(" | ")}`);
       result.tailoredResume = applyRightToWork(result.tailoredResume, rightToWork, userProfile.email, userProfile.phone);
+
+      // LAYOUT RULES: bullets per role, contract tags, skills lines, summary filler.
+      const counts = enforceBulletCounts(result.tailoredResume, originalRoleList, bulletLimits(userProfile.professionalExperience), jdKeywords.allKeywords);
+      result.tailoredResume = counts.text;
+      if (counts.notes.length) console.log(`[BULLETS PER ROLE] ${counts.notes.join(" | ")}`);
+      const contracts = markContractRoles(result.tailoredResume, userProfile.professionalExperience);
+      result.tailoredResume = contracts.text;
+      if (contracts.marked.length) console.log(`[CONTRACT] Marked: ${contracts.marked.join(", ")}`);
+      const skillsFmt = formatSkillsSection(result.tailoredResume);
+      result.tailoredResume = skillsFmt.text;
+      if (skillsFmt.dropped.length) console.log(`[SKILLS] Dropped non-skills: ${skillsFmt.dropped.join(", ")}`);
+      result.tailoredResume = stripSummaryFiller(result.tailoredResume);
+
+      // BULLET LENGTH: one extra request for out-of-range bullets only.
+      const bad = findBadBullets(result.tailoredResume);
+      if (bad.length) {
+        console.log(`[BULLET LENGTH] ${bad.length} bullets out of range`);
+        try {
+          const lenRes = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              max_tokens: apiConfig.maxTokens,
+              temperature: apiConfig.temperature,
+              messages: [
+                { role: "system", content: "You rewrite CV bullets to an exact length. Never add a fact, number or tool that is not in the bullet. No em dashes." },
+                { role: "user", content: bulletRewritePrompt(bad, jdKeywords.allKeywords) },
+              ],
+            }),
+          });
+          if (lenRes.ok) {
+            const lenData = await lenRes.json();
+            const raw = String(lenData.choices?.[0]?.message?.content || "").replace(/```[a-z]*\s*/gi, "").trim();
+            const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
+            const applied = applyBulletRewrites(result.tailoredResume, bad, Array.isArray(arr) ? arr.map((x: any) => stripDashes(String(x))) : [], jdKeywords.allKeywords);
+            result.tailoredResume = applied.text;
+            console.log(`[BULLET LENGTH] Accepted ${applied.accepted} of ${bad.length} rewrites`);
+          } else {
+            console.log(`[BULLET LENGTH] Rewrite request failed: ${lenRes.status}`);
+          }
+        } catch (e) {
+          console.log(`[BULLET LENGTH] Rewrite error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
     }
 
     // COVER LETTER CHECK: employer named outside the greeting, 2 of 3 requirements. One retry at most.
@@ -4940,6 +4994,7 @@ ${
       }
     }
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(stripLetterBanned(result.tailoredCoverLetter), location || "");
     if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripDashes(result.tailoredCoverLetter);
 
