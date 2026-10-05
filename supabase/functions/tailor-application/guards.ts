@@ -936,7 +936,12 @@ export function copiesBullet(sentence: string, bullets: string[]): boolean {
     const q = squash(b);
     if (q.split(" ").length < 6) return false;
     if (s.includes(q)) return true;
-    return s.split(" ").length >= 8 && q.includes(s);
+    if (s.split(" ").length >= 8 && q.includes(s)) return true;
+    // No run of 8 or more words may match the CV.
+    const w = s.split(" ");
+    const hay = ` ${q} `;
+    for (let i = 0; i + 8 <= w.length; i++) if (hay.includes(` ${w.slice(i, i + 8).join(" ")} `)) return true;
+    return false;
   });
 }
 
@@ -952,7 +957,7 @@ export function findCopiedSentences(letter: string, bullets: string[]): string[]
 }
 
 export function letterRewordPrompt(sentences: string[]): string {
-  return `Reword each sentence for a cover letter in first person, same facts, keep every number, tool name and employer, no new claims, at most 35 words.
+  return `Reword each sentence for a cover letter in first person, same facts, keep every number, tool name and employer, no new claims, at most 35 words. Each sentence must be grammatical, with a subject and a verb, and share no run of 8 or more words with the CV.
 Return only a JSON array of strings, one per input, in the same order.
 
 ${sentences.map((x, i) => `${i + 1}. ${x}`).join("\n")}`;
@@ -967,7 +972,7 @@ export function acceptLetterRewording(original: string, reworded: string, cvText
   return contentWords(r).every((w) => known.has(w));
 }
 
-export function shapeCoverLetter(letter: string, bullets: string[], header: { name: string; contact: string }, rewordings: Record<string, string> = {}): { text: string; notes: string[] } {
+export function shapeCoverLetter(letter: string, bullets: string[], header: { name: string; contact: string }, rewordings: Record<string, string> = {}, opts: { openingStory?: string; company?: string; role?: string } = {}): { text: string; notes: string[] } {
   const notes: string[] = [];
   if (!letter) return { text: letter, notes };
   const paras = String(letter).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
@@ -977,12 +982,15 @@ export function shapeCoverLetter(letter: string, bullets: string[], header: { na
   const head = g >= 0 ? paras.slice(0, g + 1) : [];
   const tail = paras.slice(close);
   let body = paras.slice(g + 1, close);
-  body = body.map((p) => {
-    // A copied sentence is reworded when an accepted rewording exists, never deleted.
+  const story = String(opts.openingStory || "").trim();
+  body = body.map((p, idx) => {
+    if (story && idx === 0 && p.startsWith(story)) return p;
+    // A copied or ungrammatical sentence is reworded when an accepted rewording exists, never deleted.
     const kept = splitSentences(p).map((s) => {
-      if (!copiesBullet(s, bullets)) return s;
-      if (rewordings[s]) { notes.push(`reworded copied CV bullet: ${s}`); return rewordings[s]; }
-      notes.push(`kept copied CV bullet (no accepted rewording): ${s}`);
+      const copied = copiesBullet(s, bullets);
+      if (!copied && !isFragment(s)) return s;
+      if (rewordings[s]) { notes.push(`reworded ${copied ? "copied CV bullet" : "fragment"}: ${s}`); return rewordings[s]; }
+      notes.push(`kept ${copied ? "copied CV bullet" : "fragment"} (no accepted rewording): ${s}`);
       return s;
     });
     let out = kept.join(" ");
@@ -993,9 +1001,17 @@ export function shapeCoverLetter(letter: string, bullets: string[], header: { na
     }
     return out.trim();
   }).filter(Boolean);
-  if (body.length > 3) {
-    notes.push(`merged ${body.length - 3} extra paragraph(s) into paragraph 2`);
-    body = [body[0], [body[1], ...body.slice(2, -1)].join(" "), body[body.length - 1]];
+  if (story && !(body[0] || "").startsWith(story)) {
+    // The opening story is kept word for word, followed by one sentence naming the role and company.
+    const names = [opts.company, opts.role].map((x) => String(x || "").trim()).filter((x) => x && !/^not specified$/i.test(x));
+    const naming = splitSentences(body[0] || "").find((x) => !story.includes(x) && names.some((n) => containsTerm(x, n)));
+    const p1 = naming ? `${story} ${naming}` : story;
+    if (body.length >= 4 || !body.length) body[0] = p1; else body.unshift(p1);
+    notes.push("restored opening story word for word");
+  }
+  if (body.length > 4) {
+    notes.push(`merged ${body.length - 4} extra paragraph(s) into paragraph 2`);
+    body = [body[0], [body[1], ...body.slice(2, -2)].join(" "), body[body.length - 2], body[body.length - 1]];
   }
   const out = [...head, ...body, ...tail];
   const name = String(header.name || "").trim();
