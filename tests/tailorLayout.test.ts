@@ -71,6 +71,17 @@ describe('cover letter shape', () => {
     expect(copiesBullet(bullet + '.', [bullet])).toBe(true);
     expect(text.split('\n\n').some((p) => /^Also,/.test(p))).toBe(false);
   });
+  it('four body paragraphs: extra middle paragraph joins paragraph 2, closing paragraph stays on its own', () => {
+    const letter = 'Dear Hiring Team,\n\nAcme needs an engineer who can secure its platform.\n\nLed ISO 27001 certification at Accenture across 4 delivery centres, closing 120 audit findings in 6 months.\n\nDelivered a £3.2m cost reduction at Accenture by consolidating 14 legacy reporting tools into Power BI.\n\nI am an Irish citizen with full right to work in the UK. My notice period is one month. I would welcome the chance to talk.\n\nKind regards,\nJane Doe';
+    const { text, notes } = shapeCoverLetter(letter, [], { name: 'Jane Doe', contact: '' });
+    const paras = text.split('\n\n');
+    expect(paras.length).toBe(6);
+    expect(notes.some((n) => n.includes('into paragraph 2'))).toBe(true);
+    expect(paras[2]).toBe('Acme needs an engineer who can secure its platform.');
+    expect(paras[3]).toContain('ISO 27001');
+    expect(paras[3]).toContain('£3.2m');
+    expect(paras[4]).toBe('I am an Irish citizen with full right to work in the UK. My notice period is one month. I would welcome the chance to talk.');
+  });
 });
 
 describe('skills format', () => {
