@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, chooseHeldHeadline, findBadBullets, formatLetterDate, formatSkillsSection,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, copiesBullet, dropClaimSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -22,21 +23,52 @@ describe('bullet length', () => {
   it('rejects a rewrite that loses a number or keyword', () => {
     expect(acceptRewrite(long, one, ['Python', 'SQL'])).toBe(true);
     expect(acceptRewrite(long, one.replace('Python and ', ''), ['Python'])).toBe(false);
-    expect(acceptRewrite(long, 'Cut month-end close from nine working days to three with Python and SQL jobs.', ['Python', 'SQL'])).toBe(true);
     expect(bulletTarget(140)).toBe('one line, 85 to 105 characters');
-    expect(bulletTarget(141)).toBe('two lines, 175 to 210 characters');
+    expect(bulletTarget(174)).toBe('one line, 85 to 105 characters');
+    expect(bulletTarget(211)).toBe('two lines, 175 to 210 characters');
     expect(acceptRewrite('Cut costs 30% using Python across teams', one, [])).toBe(false);
   });
 });
 
 describe('headline', () => {
-  it('uses the target when held or one level below', () => {
-    expect(chooseHeldHeadline('Senior Software Engineer', ['Software Engineer'], 'Software Engineer', 'AI')).toBe('Senior Software Engineer');
+  it('never writes a headline line into the CV text', () => {
+    const src = readFileSync('supabase/functions/tailor-application/index.ts', 'utf8');
+    expect(src).not.toContain('chooseHeldHeadline(');
+    expect(src).not.toContain('enforceTargetRoleLine(result.tailoredResume)');
   });
-  it('falls back for unheld executive titles', () => {
-    expect(chooseHeldHeadline('VP of Engineering', ['Software Engineer'], 'Software Engineer', 'AI and Data Platforms'))
-      .toBe('Software Engineer | AI and Data Platforms');
-    expect(chooseHeldHeadline('Head of Data', ['Data Engineer'], 'Data Engineer', '')).toBe('Data Engineer');
+});
+
+describe('bullet rewrite adds nothing', () => {
+  it('rejects longer rewrites and new content words', () => {
+    expect(acceptRewrite(long, one + ' enhancing overall system efficiency.'.slice(0, 5), ['Python'])).toBe(false);
+    expect(acceptRewrite(long, 'Cut month-end close from nine days to three with Python and SQL jobs, enhancing user experience.', ['Python', 'SQL'])).toBe(false);
+    expect(acceptRewrite(long, 'Cut month-end close from nine working days to three with Python and SQL jobs.', ['Python', 'SQL'])).toBe(false);
+    expect(acceptRewrite(long, 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.', ['Python', 'SQL'])).toBe(true);
+  });
+});
+
+describe('claim removal', () => {
+  it('drops the whole sentence, never only the words', () => {
+    const { text, removed } = dropClaimSentences('Dear Hiring Team,\nAt Acme I built a Figma library where I implemented Figma to refine user experiences. I cut costs by 20%.', ['Figma']);
+    expect(text).toBe('Dear Hiring Team,\nI cut costs by 20%.');
+    expect(removed.length).toBe(1);
+    expect(text).not.toContain('implemented to');
+  });
+});
+
+describe('cover letter shape', () => {
+  const bullet = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs';
+  it('three body paragraphs, no Also, no copied bullet, header kept', () => {
+    const letter = 'Dear Hiring Team,\n\nAcme needs faster reporting.\n\nAlso, I know SQL well.\n\n' + bullet + '. Your team grows fast.\n\nI can start in a month.\n\nKind regards,\nJane Doe';
+    const { text } = shapeCoverLetter(letter, [bullet], { name: 'Jane Doe', contact: 'Dublin | +353 1 | jane@x.com' });
+    const paras = text.split('\n\n');
+    expect(paras[0]).toBe('Jane Doe\nDublin | +353 1 | jane@x.com');
+    expect(paras[1]).toBe('Dear Hiring Team,');
+    expect(paras.length).toBe(6);
+    expect(paras[3]).toBe('I know SQL well.');
+    expect(text).not.toContain(bullet);
+    expect(copiesBullet(bullet + '.', [bullet])).toBe(true);
+    expect(text.split('\n\n').some((p) => /^Also,/.test(p))).toBe(false);
   });
 });
 
