@@ -920,7 +920,7 @@ export function stripLetterBanned(letter: string, protectText = ""): string {
     .replace(/\butili[sz](?:e|ed|es|ing)\b/gi, (m) => ({ e: "use", ed: "used", es: "uses", ing: "using" } as Record<string, string>)[m.toLowerCase().replace(/^utili[sz]/, "")] || "use")
     .replace(/\bactionable insights\b/gi, "insights")
     .replace(/\s*\b(impactful|seamless(?:ly)?|robust|significantly|effectively)\b/gi, "")
-    .replace(/(^|[.!?]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
+    .replace(/(^|[.!?\u0002]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
     .replace(/\bpassionate about\b/gi, "focused on")
     .replace(/\bpassionate\b/gi, "committed")
     .replace(/[ \t]{2,}/g, " ")

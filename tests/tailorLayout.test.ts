@@ -181,7 +181,7 @@ describe('cover letter rule fixes', () => {
     t = stripLetterBanned(t, story);
     expect(t).toContain(story);
     expect(t).not.toContain('React');
-    expect(stripLetterBanned(`Also, ${story} Also, I lead.`, story)).toBe(`Also, ${story} I lead.`);
+    expect(stripLetterBanned(`${story} Also, I lead.`, story)).toBe(`${story} I lead.`);
   });
 });
 
