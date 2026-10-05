@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -2366,7 +2366,7 @@ serve(async (req) => {
       protectionBlock(jdKeywords.allKeywords, protectedList),
       cvContentBlock(topRequirements),
       coverLetterBlock(company, topRequirements),
-      coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork),
+      coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork, userProfile.openingStory || "", location || ""),
       humanWordingBlock(jdKeywords.allKeywords),
     ].join("\n\n");
     console.log(`[PROTECTED] ${protectedList.length} protected keywords; top requirements: ${topRequirements.join(" | ")}`);
@@ -4946,7 +4946,7 @@ ${
         }
       }
     }
-    // COVER LETTER LENGTH: over 280 words gets one request to shorten below 250.
+    // COVER LETTER LENGTH: over 280 words gets one request to shorten to 200 to 280.
     if (result.tailoredCoverLetter && wordCount(result.tailoredCoverLetter) > 280) {
       const before = wordCount(result.tailoredCoverLetter);
       const currentFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements).length;
@@ -4962,7 +4962,7 @@ ${
               { role: "system", content: systemPrompt },
               {
                 role: "user",
-                content: `${coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork)}\n\n${humanWordingBlock(jdKeywords.allKeywords)}\n\nThis cover letter is ${before} words. Shorten it to under 250 words. Keep the employer's name "${company}" and the requirements it names (${topRequirements.join("; ")}). Add nothing new.\n\nCOVER LETTER:\n${result.tailoredCoverLetter}\n\nReturn only the shortened cover letter as plain text.`,
+                content: `${coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork, userProfile.openingStory || "", location || "")}\n\n${humanWordingBlock(jdKeywords.allKeywords)}\n\nThis cover letter is ${before} words. Shorten it to 200 to 280 words. Keep the employer's name "${company}" and the requirements it names (${topRequirements.join("; ")}). Add nothing new.\n\nCOVER LETTER:\n${result.tailoredCoverLetter}\n\nReturn only the shortened cover letter as plain text.`,
               },
             ],
           }),
@@ -4975,8 +4975,8 @@ ${
           ).text;
           const after = wordCount(shorter);
           const failed = checkCoverLetter(shorter, company, topRequirements).length;
-          const keep = after >= 100 && after < before && failed === 0 && currentFailed === 0
-            || (currentFailed > 0 && after >= 100 && after < before && failed <= currentFailed);
+          const keep = after >= 200 && after < before && failed === 0 && currentFailed === 0
+            || (currentFailed > 0 && after >= 200 && after < before && failed <= currentFailed);
           if (keep) result.tailoredCoverLetter = shorter;
           console.log(`[COVER LETTER LENGTH] ${before} -> ${after} words, failed checks ${failed}; kept ${keep ? "shorter" : "original"}`);
         } else {
@@ -4987,10 +4987,13 @@ ${
       }
     }
     if (result.tailoredCoverLetter) {
-      const letterBullets = String(result.tailoredResume || "").split("\n").map((l: string) => l.match(/^\s*[•*\-▪·]\s+(.*)$/)?.[1] || "").filter(Boolean);
+      // Every CV line counts: no run of 8 or more words may match the tailored CV.
+      const letterBullets = String(result.tailoredResume || "").split("\n").map((l: string) => l.match(/^\s*[•*\-▪·]\s+(.*)$/)?.[1] || l.trim()).filter(Boolean);
       // Sentences copying a CV bullet are reworded in one extra request, never deleted.
       const rewordings: Record<string, string> = {};
-      const copied = findCopiedSentences(result.tailoredCoverLetter, letterBullets);
+      const story = String(userProfile.openingStory || "").trim();
+      const copied = [...findCopiedSentences(result.tailoredCoverLetter, letterBullets), ...findFragments(result.tailoredCoverLetter)]
+        .filter((c, i, a) => a.indexOf(c) === i && !(story && story.includes(c)));
       if (copied.length) {
         try {
           const rwRes = await fetch(apiConfig.endpoint, {
@@ -5026,12 +5029,19 @@ ${
       const shaped = shapeCoverLetter(result.tailoredCoverLetter, letterBullets, {
         name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
         contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
-      }, rewordings);
+      }, rewordings, { openingStory: story, company, role: jobTitle });
       result.tailoredCoverLetter = shaped.text;
+      const rtw = enforceLetterRightToWork(result.tailoredCoverLetter, rightToWork);
+      if (rtw.removed.length) console.log(`[COVER LETTER RIGHT TO WORK] removed: ${rtw.removed.join(" | ")}`);
+      result.tailoredCoverLetter = rtw.text;
+      const toolNames = [...jdKeywords.allKeywords, ...(userProfile.skills || []).map((x: any) => typeof x === "string" ? x : x?.name || "")];
+      const badTools = employerToolSentences(result.tailoredCoverLetter, userProfile.professionalExperience || [], toolNames);
+      if (badTools.length) console.log(`[COVER LETTER TOOLS] removed: ${badTools.join(" | ")}`);
+      result.tailoredCoverLetter = dropSentences(result.tailoredCoverLetter, badTools);
       if (shaped.notes.length) console.log(`[COVER LETTER SHAPE] ${shaped.notes.join("; ")}`);
     }
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
-    if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(stripLetterBanned(result.tailoredCoverLetter), location || "");
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(applySignOff(stripLetterBanned(result.tailoredCoverLetter), location || ""), location || "");
     if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripDashes(result.tailoredCoverLetter);
 
