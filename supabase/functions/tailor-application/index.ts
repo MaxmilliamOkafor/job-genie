@@ -105,6 +105,7 @@ interface TailorRequest {
     citizenship?: string;
     workAuthorizedCountries?: string[];
     noticePeriod?: string;
+    openingStory?: string;
     city?: string;
     country?: string;
     address?: string;
