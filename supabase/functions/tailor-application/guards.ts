@@ -439,10 +439,17 @@ export function applySignOff(letter: string, location: string): string {
   return letter;
 }
 
-const RTW_SENTENCE = /\b(right to work|authori[sz]ed to work|eligible to work|work authori[sz]ation|visa sponsorship|work permit|citizen\b|citizenship)/i;
+// Only the candidate's own status counts; "I protected citizen data" is not a right-to-work sentence.
+const RTW_SENTENCE = /\b(right to work|authori[sz]ed to work|eligible to work|work authori[sz]ation|visa sponsorship|work permit|my citizenship|(?:i am|i'm|as) an? (?:[\p{L}-]+ ){0,3}(?:citizen|national|passport holder))\b/iu;
+
+/** Sentences of the protected text (the opening story); these are never changed. */
+export function protectedSentences(text: string): string[] {
+  return splitSentences(String(text || "").trim());
+}
+const isProtected = (s: string, protect: string[]) => protect.some((p) => p && (p === s || p.includes(s)));
 
 /** Without a supported statement, every right-to-work sentence is removed. */
-export function enforceLetterRightToWork(letter: string, statement: string): { text: string; removed: string[] } {
+export function enforceLetterRightToWork(letter: string, statement: string, protect: string[] = []): { text: string; removed: string[] } {
   const removed: string[] = [];
   if (!letter) return { text: letter, removed };
   const ok = String(statement || "").trim();
@@ -450,27 +457,63 @@ export function enforceLetterRightToWork(letter: string, statement: string): { t
   const lines = String(letter).split("\n").map((line) => {
     const t = line.trim();
     if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) return line;
-    return splitSentences(t).filter((s) => {
+    const all = splitSentences(t);
+    const kept = all.filter((s) => {
+      if (isProtected(s, protect)) return true;
       const bad = ok ? (/authori[sz]ed to work in the (united states|us|usa)\b/i.test(s) && !usOk) : RTW_SENTENCE.test(s);
       if (bad) removed.push(s);
       return !bad;
-    }).join(" ");
+    });
+    return kept.length === all.length ? line : kept.join(" ");
   });
   return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
 }
 
+// Never tools, even when a job keyword or a skill.
+const NOT_A_TOOL = /^(audit(s|ing)?|security|compliance|fraud|identity verification|healthcare|leadership|risk|governance|privacy|data protection|communication|stakeholder management|management|strategy|operations|finance|accounting|testing|analytics|reporting|design|research|sales|marketing|customer service|support|training|mentoring|teamwork|problem solving|ownership|onboarding|regulation|regulatory|kyc|aml|fintech|saas|banking|payments|insurance|cybersecurity|information security|incident management|root cause analysis|project management|agile|scrum|data|engineering|software|cloud|devops|machine learning|ai)$/i;
+const KNOWN_TOOL = /^(go|golang|python|java|javascript|typescript|c|c\+\+|c#|\.net|ruby|rust|scala|kotlin|swift|php|r|sql|bash|perl|matlab|react|react native|angular|vue|next\.js|node\.js|node|express|django|flask|fastapi|spring|spring boot|rails|laravel|svelte|tailwind|pandas|numpy|pytorch|tensorflow|scikit-learn|spark|kafka|airflow|dbt|hadoop|snowflake|databricks|bigquery|redshift|postgresql|postgres|mysql|mongodb|redis|elasticsearch|dynamodb|cassandra|sqlite|oracle|aws|azure|gcp|google cloud|docker|kubernetes|terraform|ansible|jenkins|github actions|gitlab|git|linux|helm|prometheus|grafana|datadog|splunk|tableau|power bi|looker|excel|salesforce|hubspot|sap|servicenow|jira|confluence|figma|okta|workday|zendesk|stripe|shopify|graphql|rest|grpc)$/i;
+
+/** True for software, languages, frameworks, platforms and products; never audit, security, fraud and the like. */
+export function isToolName(term: string): boolean {
+  const t = String(term || "").trim();
+  if (!t || NOT_A_TOOL.test(t)) return false;
+  if (KNOWN_TOOL.test(t)) return true;
+  // Product-shaped names: digits, dots, # or +, or inner capitals (PostgreSQL, GitHub, ServiceNow).
+  return /[0-9.#+]/.test(t) && /[A-Za-z]/.test(t) && !/\s/.test(t) || /^[A-Z]?[a-z]+[A-Z][A-Za-z]*$/.test(t);
+}
+
+/** Tools to check in the letter: the profile's skills plus job keywords that are tools. */
+export function letterToolList(skills: any[], jobKeywords: string[]): string[] {
+  const fromSkills = (skills || []).map((x: any) => typeof x === "string" ? x : x?.name || "").filter((x: string) => x && !NOT_A_TOOL.test(x.trim()));
+  return [...new Set([...fromSkills, ...(jobKeywords || []).filter(isToolName)].map((x) => String(x).trim()).filter(Boolean))];
+}
+
+/** Every text value of an experience entry: title, description, bullets, achievements. */
+function entryText(e: any): string {
+  const out: string[] = [];
+  const walk = (v: any) => {
+    if (v == null) return;
+    if (typeof v === "string") out.push(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (typeof v === "object") Object.values(v).forEach(walk);
+  };
+  walk(e);
+  return out.join("\n");
+}
+
 /** Sentences that name an employer together with a tool that employer's experience does not name. */
-export function employerToolSentences(letter: string, experience: any[], tools: string[]): string[] {
+export function employerToolSentences(letter: string, experience: any[], tools: string[], protect: string[] = []): string[] {
   const out: string[] = [];
   const roles = (experience || []).map((e) => ({
     company: String(e?.company || e?.employer || "").trim(),
-    text: JSON.stringify(e || {}),
+    text: entryText(e),
   })).filter((r) => r.company);
-  const list = [...new Set(tools.map((t) => String(t || "").trim()).filter((t) => t.length > 1))];
+  const list = [...new Set(tools.map((t) => String(t || "").trim()).filter((t) => t && !NOT_A_TOOL.test(t)))];
   for (const p of String(letter || "").split(/\n{2,}/)) {
     const t = p.trim();
     if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) continue;
     for (const s of splitSentences(t)) {
+      if (isProtected(s, protect)) continue;
       const at = roles.filter((r) => containsTerm(s, r.company));
       if (!at.length) continue;
       const bad = list.some((tool) => containsTerm(s, tool) && !at.some((r) => containsTerm(r.text, tool)));
@@ -480,16 +523,25 @@ export function employerToolSentences(letter: string, experience: any[], tools: 
   return out;
 }
 
-/** Removes the given sentences, but never empties a body paragraph. */
-export function dropSentences(letter: string, sentences: string[]): string {
+/** Removes the given sentences, but never empties a body paragraph or touches protected ones. */
+export function dropSentences(letter: string, sentences: string[], protect: string[] = []): string {
   if (!letter || !sentences.length) return letter;
+  const drop = sentences.filter((s) => !isProtected(s, protect));
   return String(letter).split(/\n{2,}/).map((p) => {
     const t = p.trim();
     if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) return p;
     const all = splitSentences(t);
-    const kept = all.filter((s) => !sentences.includes(s));
-    return kept.length ? kept.join(" ") : p;
+    const kept = all.filter((s) => !drop.includes(s));
+    return kept.length === all.length ? p : kept.length ? kept.join(" ") : p;
   }).join("\n\n");
+}
+
+/** Runs fn with the protected text masked, so it comes back word for word. */
+export function withProtected(letter: string, protectText: string, fn: (s: string) => string): string {
+  const story = String(protectText || "").trim();
+  if (!letter || !story || !letter.includes(story)) return fn(letter);
+  const token = "\u0002STORY\u0002";
+  return fn(letter.split(story).join(token)).split(token).join(story);
 }
 
 /** A sentence that opens with a fragment ("Js, having authored ...") or a lower-case word. */
@@ -855,7 +907,8 @@ export const LETTER_BANNED = [
 ];
 
 /** Removes the banned cover-letter phrases that a model may still write. */
-export function stripLetterBanned(letter: string): string {
+export function stripLetterBanned(letter: string, protectText = ""): string {
+  if (protectText) return withProtected(letter, protectText, (x) => stripLetterBanned(x));
   const cap = (_m: string, pre: string, c: string) => pre + c.toUpperCase();
   return String(letter || "")
     // Whole sentences built on a banned stock phrase go.
@@ -867,7 +920,7 @@ export function stripLetterBanned(letter: string): string {
     .replace(/\butili[sz](?:e|ed|es|ing)\b/gi, (m) => ({ e: "use", ed: "used", es: "uses", ing: "using" } as Record<string, string>)[m.toLowerCase().replace(/^utili[sz]/, "")] || "use")
     .replace(/\bactionable insights\b/gi, "insights")
     .replace(/\s*\b(impactful|seamless(?:ly)?|robust|significantly|effectively)\b/gi, "")
-    .replace(/(^|[.!?]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
+    .replace(/(^|[.!?\u0002]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
     .replace(/\bpassionate about\b/gi, "focused on")
     .replace(/\bpassionate\b/gi, "committed")
     .replace(/[ \t]{2,}/g, " ")
