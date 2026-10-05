@@ -489,7 +489,7 @@ export function bulletLengthOk(len: number): boolean {
 
 /** The nearer of the two allowed shapes for a bullet of this length. */
 export function bulletTarget(len: number): string {
-  return len <= 140 ? "one line, 85 to 105 characters" : "two lines, 175 to 210 characters";
+  return len <= 174 ? "one line, 85 to 105 characters" : "two lines, 175 to 210 characters";
 }
 
 export interface BadBullet { line: number; text: string; length: number; target: string }
@@ -515,10 +515,21 @@ function numbersIn(s: string): string[] {
   return String(s || "").match(/\d+(?:[.,]\d+)*/g) || [];
 }
 
+const STOP_WORDS = new Set("about above after again against also among and been before being below between both but by could does doing down during each from further have having here into itself more most much once only other over same should some such than that their them then there these they this those through under until very were what when where which while whom with within without would your".split(" "));
+
+/** Lower-case words of 4+ letters that carry meaning. */
+export function contentWords(s: string): string[] {
+  return (String(s || "").toLowerCase().match(/[a-z]{4,}/g) || []).filter((w) => !STOP_WORDS.has(w));
+}
+
 /** A rewrite is kept only when the length is right and no number, tool or keyword is lost. */
 export function acceptRewrite(original: string, rewritten: string, keywords: string[]): boolean {
   const r = String(rewritten || "").replace(/^[\s•*\-▪·]+/, "").trim();
   if (!r || !bulletLengthOk(r.length)) return false;
+  // A rewrite only ever shortens, and never brings in a word the bullet did not have.
+  if (r.length > String(original || "").trim().length) return false;
+  const have = new Set(contentWords(original));
+  if (contentWords(r).some((w) => !have.has(w))) return false;
   if (!numbersIn(original).every((n) => r.includes(n))) return false;
   return keywords.filter((k) => containsTerm(original, k)).every((k) => containsTerm(r, k));
 }
@@ -767,4 +778,88 @@ export function applyLetterDate(letter: string, location: string, date = new Dat
   const at = re >= 0 ? re : g >= 0 && g < 10 ? g : 0;
   lines.splice(at, 0, line, "");
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+/, "");
+}
+
+// ---------------------------------------------------------------------------
+// Removing a claim removes its whole sentence, never only the words.
+
+const LETTER_STRUCTURE = /^\s*(dear|hello|hi|to whom|re\s*:|date\s*:|sincerely|kind regards|best regards|regards|yours)\b/i;
+const isHeaderLike = (t: string) => t.includes("@") || t.includes("|") || /https?:\/\/|www\./i.test(t);
+
+function splitSentences(text: string): string[] {
+  const M = "\u0001";
+  const masked = text.replace(/(\d)\.(?=\d)/g, `$1${M}`).replace(/\b([A-Z])\.(?=[A-Z]\.)/g, `$1${M}`);
+  return (masked.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || []).map((x) => x.replaceAll(M, ".").trim()).filter(Boolean);
+}
+
+/** Drops every prose sentence that names one of the terms; structure lines are left alone. */
+export function dropClaimSentences(text: string, terms: string[]): { text: string; removed: string[] } {
+  const removed: string[] = [];
+  const list = terms.map((t) => String(t || "").trim()).filter(Boolean);
+  if (!text || !list.length) return { text, removed };
+  const out = String(text).split("\n").map((line) => {
+    const t = line.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) return line;
+    const kept = splitSentences(t).filter((s) => {
+      if (list.some((term) => containsTerm(s, term))) { removed.push(s); return false; }
+      return true;
+    });
+    return kept.join(" ");
+  });
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
+}
+
+// ---------------------------------------------------------------------------
+// Cover letter shape: header kept, exactly three body paragraphs.
+
+const OPENING_CONNECTIVE = /^(also|additionally|furthermore|moreover|in addition|secondly|similarly|likewise)\s*,?\s+/i;
+const squash = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9%£$€]+/g, " ").trim();
+
+/** True when the sentence repeats a CV bullet word for word (or a long run of one). */
+export function copiesBullet(sentence: string, bullets: string[]): boolean {
+  const s = squash(sentence);
+  if (!s) return false;
+  return bullets.some((b) => {
+    const q = squash(b);
+    if (q.split(" ").length < 6) return false;
+    if (s.includes(q)) return true;
+    return s.split(" ").length >= 8 && q.includes(s);
+  });
+}
+
+export function shapeCoverLetter(letter: string, bullets: string[], header: { name: string; contact: string }): { text: string; notes: string[] } {
+  const notes: string[] = [];
+  if (!letter) return { text: letter, notes };
+  const paras = String(letter).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const g = paras.findIndex((p) => /^(dear|hello|hi|to whom)\b/i.test(p));
+  let close = paras.findIndex((p, i) => i > g && /^(sincerely|kind regards|best regards|regards|yours|best wishes|thank you,?$)/i.test(p));
+  if (close < 0) close = paras.length;
+  const head = g >= 0 ? paras.slice(0, g + 1) : [];
+  const tail = paras.slice(close);
+  let body = paras.slice(g + 1, close);
+  body = body.map((p) => {
+    const kept = splitSentences(p).filter((s) => {
+      if (copiesBullet(s, bullets)) { notes.push(`removed copied CV bullet: ${s}`); return false; }
+      return true;
+    });
+    let out = kept.join(" ");
+    if (OPENING_CONNECTIVE.test(out)) {
+      notes.push("removed opening connective");
+      out = out.replace(OPENING_CONNECTIVE, "");
+      out = out.charAt(0).toUpperCase() + out.slice(1);
+    }
+    return out.trim();
+  }).filter(Boolean);
+  if (body.length > 3) {
+    notes.push(`merged ${body.length - 3} extra paragraph(s) into paragraph 3`);
+    body = [body[0], body[1], body.slice(2).join(" ")];
+  }
+  const out = [...head, ...body, ...tail];
+  const name = String(header.name || "").trim();
+  const top = out.slice(0, 3).join("\n").toLowerCase();
+  if (name && !top.includes(name.toLowerCase())) {
+    out.unshift([name, String(header.contact || "").trim()].filter(Boolean).join("\n"));
+    notes.push("restored name and contact header");
+  }
+  return { text: out.join("\n\n"), notes };
 }
