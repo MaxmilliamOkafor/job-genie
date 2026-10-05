@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, chooseHeldHeadline, findBadBullets, formatLetterDate, formatSkillsSection,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, chooseHeldHeadline, findBadBullets, formatLetterDate, formatSkillsSection,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -8,7 +8,7 @@ const long = 'Cut month-end close from nine days to three by moving reconciliati
 
 describe('bullet length', () => {
   it('accepts 85-105 and 175-210 only', () => {
-    expect(bulletLengthOk(85)).toBe(true); expect(bulletLengthOk(105)).toBe(true);
+    expect(bulletLengthOk(59)).toBe(false); expect(bulletLengthOk(60)).toBe(true); expect(bulletLengthOk(85)).toBe(true); expect(bulletLengthOk(105)).toBe(true);
     expect(bulletLengthOk(106)).toBe(false); expect(bulletLengthOk(174)).toBe(false);
     expect(bulletLengthOk(175)).toBe(true); expect(bulletLengthOk(210)).toBe(true); expect(bulletLengthOk(211)).toBe(false);
   });
@@ -22,6 +22,9 @@ describe('bullet length', () => {
   it('rejects a rewrite that loses a number or keyword', () => {
     expect(acceptRewrite(long, one, ['Python', 'SQL'])).toBe(true);
     expect(acceptRewrite(long, one.replace('Python and ', ''), ['Python'])).toBe(false);
+    expect(acceptRewrite(long, 'Cut month-end close from nine days to three with Python and SQL.', ['Python', 'SQL'])).toBe(true);
+    expect(bulletTarget(140)).toBe('one line, 85 to 105 characters');
+    expect(bulletTarget(141)).toBe('two lines, 175 to 210 characters');
     expect(acceptRewrite('Cut costs 30% using Python across teams', one, [])).toBe(false);
   });
 });
@@ -45,6 +48,11 @@ describe('skills format', () => {
     expect(dropped).toEqual(['Irish citizen', 'Industrial Designers']);
     expect(text).toContain('\nEDUCATION');
   });
+  it('keeps team and stakeholder keywords; governance and protection are Risk & Compliance', () => {
+    const { text, dropped } = formatSkillsSection('TECHNICAL SKILLS\nCross-functional Teams, Stakeholders, Data Governance, Data Protection, Pandas, Software Engineers');
+    expect(dropped).toEqual(['Software Engineers']);
+    expect(text).toContain('Data & ML: Pandas\nRisk & Compliance: Data Governance, Data Protection\nProfessional: Cross-functional Teams, Stakeholders');
+  });
 });
 
 describe('letter date', () => {
@@ -52,5 +60,6 @@ describe('letter date', () => {
   it('formats by country', () => {
     expect(formatLetterDate(d, false)).toBe('5 October 2026');
     expect(applyLetterDate('Date: 01/02/2026\nDear Hiring Team,\nBody', 'Austin, TX', d)).toBe('October 5, 2026\n\nDear Hiring Team,\nBody');
+    expect(applyLetterDate('Re: Data Engineer\nDear Hiring Team,\nBody', 'Berlin, Germany', d)).toBe('5 October 2026\n\nRe: Data Engineer\nDear Hiring Team,\nBody');
   });
 });

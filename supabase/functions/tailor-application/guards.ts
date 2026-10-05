@@ -654,8 +654,8 @@ function labelGroup(label: string): typeof SKILL_GROUPS[number] | null {
   if (/program|coding|languages/.test(l)) return "Programming";
   if (/framework|librar/.test(l)) return "Frameworks";
   if (/cloud|devops|infra|platform/.test(l)) return "Cloud & DevOps";
-  if (/risk|compliance|regulat|governance|security/.test(l)) return "Risk & Compliance";
   if (/data|ml|machine|analytic|ai\b|database/.test(l)) return "Data & ML";
+  if (/risk|compliance|regulat|governance|security/.test(l)) return "Risk & Compliance";
   if (/professional|soft|method|business|management|core/.test(l)) return "Professional";
   return null;
 }
@@ -688,7 +688,7 @@ export function formatSkillsSection(resume: string): { text: string; dropped: st
       const bare = item.replace(/\s*\(.*\)$/, "");
       let g: string | null = SPOKEN.test(bare) && (fromLabel === "Languages" || /\((?:fluent|native|professional|basic|conversational|intermediate|b\d|c\d|a\d)/i.test(item) || !GROUP_TESTS[0][1].test(bare)) ? "Languages" : null;
       if (!g) g = GROUP_TESTS.find(([, re]) => re.test(bare))?.[0] || null;
-      if (!g || (g === "Data & ML" && fromLabel !== "Risk & Compliance" && fromLabel && fromLabel !== "Languages" && fromLabel !== "Professional")) g = fromLabel && fromLabel !== "Languages" ? fromLabel : g;
+      if (!g || (g === "Data & ML" && fromLabel && fromLabel !== "Languages" && fromLabel !== "Professional")) g = fromLabel && fromLabel !== "Languages" ? fromLabel : g;
       groups.get(g || "Professional")!.push(item);
     }
   }
