@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, chooseHeldHeadline, enforceBulletCounts, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -4220,13 +4220,14 @@ ${
           const maskedLine = t.replace(/(\d)\.(?=\d)/g, `$1${DEC}`);
           const sentences = maskedLine.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s: string) => s.replaceAll(DEC, "."));
           if (!sentences) return stripTools(line);
+          // Removing a claim removes its whole sentence, never only the words.
           const kept = sentences
-            .filter((s: string) => !carriesWordTerm(s))
+            .filter((s: string) => !carriesWordTerm(s) && !dropClaimSentences(s, toolTerms).removed.length)
             .map((s: string) => ({ original: s, scrubbed: fixArticles(stripTools(s)) }))
             .filter(({ original, scrubbed }: { original: string; scrubbed: string }) => !isStub(original, scrubbed))
             .map(({ scrubbed }: { scrubbed: string }) => scrubbed)
             .filter((s: string) => !danglingTail.test(s.replace(/[.!?\s]+$/, "")));
-          return (kept.length ? kept.join(" ") : fixArticles(stripTools(t))).replace(/[ \t]{2,}/g, " ").trim();
+          return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
         })
         .join("\n")
         .trim();
@@ -4272,15 +4273,6 @@ ${
     });
     if (headlineDecision.usedFallback) {
       console.warn(`[HEADLINE] ${headlineDecision.reason}: "${headlineDecision.headline}"`);
-    }
-    // HEADLINE RULE: target title only when held at that level or one below.
-    {
-      const field = protectedList.slice(0, 2).join(" and ");
-      const held = chooseHeldHeadline(headlineDecision.headline, headlineHeldTitles, headlineCurrentTitle, field);
-      if (held !== headlineDecision.headline) {
-        console.log(`[HEADLINE] Target "${headlineDecision.headline}" not held; using "${held}"`);
-        headlineDecision.headline = held;
-      }
     }
     result.headline = headlineDecision.headline;
     result.headlineSource = headlineDecision.reason;
@@ -4342,7 +4334,7 @@ ${
 
       return lines.filter((l, i) => !(l === "" && lines[i - 1] === "")).join("\n");
     };
-    if (result.tailoredResume) result.tailoredResume = enforceTargetRoleLine(result.tailoredResume);
+    // The extension owns the line under the name; the CV text is never given a headline line here.
 
     // ============================================================
     // A PRACTICE THE BULLET PERFORMS IS NAMED IN THAT BULLET.
@@ -4992,6 +4984,15 @@ ${
       } catch (e) {
         console.log(`[COVER LETTER LENGTH] Shorten error: ${e instanceof Error ? e.message : String(e)}`);
       }
+    }
+    if (result.tailoredCoverLetter) {
+      const letterBullets = String(result.tailoredResume || "").split("\n").map((l: string) => l.match(/^\s*[•*\-▪·]\s+(.*)$/)?.[1] || "").filter(Boolean);
+      const shaped = shapeCoverLetter(result.tailoredCoverLetter, letterBullets, {
+        name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
+        contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
+      });
+      result.tailoredCoverLetter = shaped.text;
+      if (shaped.notes.length) console.log(`[COVER LETTER SHAPE] ${shaped.notes.join("; ")}`);
     }
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(stripLetterBanned(result.tailoredCoverLetter), location || "");
