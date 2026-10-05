@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection, coverLetterShapeBlock, rightToWorkStatement, enforceLetterRightToWork, employerToolSentences, dropSentences, stripLetterBanned, isFragment, findFragments, letterSignOff, applySignOff,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection, coverLetterShapeBlock, rightToWorkStatement, enforceLetterRightToWork, employerToolSentences, dropSentences, stripLetterBanned, isFragment, findFragments, letterSignOff, applySignOff, letterToolList, isToolName, protectedSentences,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -147,6 +147,41 @@ describe('cover letter rules', () => {
   });
   it('no em dashes in the rules', () => {
     expect(coverLetterShapeBlock('Whitney Ross', 'one month', 'x', 'story', 'London')).not.toContain('\u2014');
+  });
+});
+
+describe('cover letter rule fixes', () => {
+  it('tools: only real tool names count, matched against the whole experience entry', () => {
+    const acc = 'At Accenture, I led the security architecture for a regulated financial services client and closed all but three gaps in their ISO 27001 pre-audit.';
+    const exp = [{ company: 'Accenture', title: 'Security Architect', bullets: ['Automated evidence collection in Terraform for 12 accounts'] }];
+    const tools = letterToolList([], ['audit', 'security', 'compliance', 'fraud', 'identity verification', 'healthcare', 'leadership', 'Terraform', 'Go', 'React', 'PostgreSQL', 'AWS', 'Salesforce']);
+    expect(tools).toEqual(['Terraform', 'Go', 'React', 'PostgreSQL', 'AWS', 'Salesforce']);
+    expect(employerToolSentences(`Dear Hiring Team,\n\n${acc}`, exp, tools)).toEqual([]);
+    expect(employerToolSentences('Dear Hiring Team,\n\nAt Accenture I automated evidence in Terraform.', exp, tools)).toEqual([]);
+    expect(employerToolSentences('Dear Hiring Team,\n\nAt Accenture I built React dashboards.', exp, tools)).toEqual(['At Accenture I built React dashboards.']);
+    expect(isToolName('audit')).toBe(false);
+    expect(isToolName('ServiceNow')).toBe(true);
+  });
+  it('right to work: "citizen" alone is not a right-to-work sentence', () => {
+    const letter = 'Dear Hiring Team,\n\nI protected citizen data for 3 million users. I am an EU citizen. As an Irish citizen I need no visa.\n\nSincerely,';
+    const out = enforceLetterRightToWork(letter, '');
+    expect(out.text).toContain('I protected citizen data for 3 million users.');
+    expect(out.text).not.toContain('I am an EU citizen');
+    expect(out.text).not.toContain('As an Irish citizen');
+    expect(rightToWorkStatement('Irish', ['IE'], 'Austin, TX')).toBe('');
+  });
+  it('the opening story comes out word for word', () => {
+    const story = 'At Revolut I traced a fraud ring that had significantly drained 400 accounts. I am an Irish citizen who never forgot it.';
+    const letter = `Dear Hiring Team,\n\n${story} I am applying for the Fraud Analyst role at Acme.\n\nAt Revolut I wrote React tools.\n\nAcme fact.\n\nClose.\n\nKind regards,`;
+    const protect = protectedSentences(story);
+    const exp = [{ company: 'Revolut', description: 'Python' }];
+    let t = enforceLetterRightToWork(letter, '', protect).text;
+    const bad = employerToolSentences(t, exp, ['React', 'fraud'], protect);
+    t = dropSentences(t, [...bad, ...protect], protect);
+    t = stripLetterBanned(t, story);
+    expect(t).toContain(story);
+    expect(t).not.toContain('React');
+    expect(stripLetterBanned(`Also, ${story} Also, I lead.`, story)).toBe(`Also, ${story} I lead.`);
   });
 });
 
