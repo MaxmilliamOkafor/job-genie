@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection, coverLetterShapeBlock, rightToWorkStatement, enforceLetterRightToWork, employerToolSentences, dropSentences, stripLetterBanned, isFragment, findFragments, letterSignOff, applySignOff,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -58,29 +58,95 @@ describe('claim removal', () => {
 
 describe('cover letter shape', () => {
   const bullet = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs';
-  it('three body paragraphs, no Also, copied bullet kept when not reworded, header kept', () => {
+  it('four body paragraphs kept, no Also, copied bullet kept when not reworded, header kept', () => {
     const letter = 'Dear Hiring Team,\n\nAcme needs faster reporting.\n\nAlso, I know SQL well.\n\n' + bullet + '. Your team grows fast.\n\nI can start in a month.\n\nKind regards,\nJane Doe';
     const { text } = shapeCoverLetter(letter, [bullet], { name: 'Jane Doe', contact: 'Dublin | +353 1 | jane@x.com' });
     const paras = text.split('\n\n');
     expect(paras[0]).toBe('Jane Doe\nDublin | +353 1 | jane@x.com');
     expect(paras[1]).toBe('Dear Hiring Team,');
-    expect(paras.length).toBe(6);
-    expect(paras[3]).toBe('I know SQL well. ' + bullet + '. Your team grows fast.');
-    expect(paras[4]).toBe('I can start in a month.');
+    expect(paras.length).toBe(7);
+    expect(paras[3]).toBe('I know SQL well.');
+    expect(paras[5]).toBe('I can start in a month.');
     expect(text).toContain(bullet);
     expect(copiesBullet(bullet + '.', [bullet])).toBe(true);
     expect(text.split('\n\n').some((p) => /^Also,/.test(p))).toBe(false);
   });
-  it('four body paragraphs: extra middle paragraph joins paragraph 2, closing paragraph stays on its own', () => {
-    const letter = 'Dear Hiring Team,\n\nAcme needs an engineer who can secure its platform.\n\nLed ISO 27001 certification at Accenture across 4 delivery centres, closing 120 audit findings in 6 months.\n\nDelivered a £3.2m cost reduction at Accenture by consolidating 14 legacy reporting tools into Power BI.\n\nI am an Irish citizen with full right to work in the UK. My notice period is one month. I would welcome the chance to talk.\n\nKind regards,\nJane Doe';
+  it('five body paragraphs: extra middle paragraph joins paragraph 2; company and closing paragraphs stay on their own', () => {
+    const letter = 'Dear Hiring Team,\n\nAcme needs an engineer who can secure its platform.\n\nLed ISO 27001 certification at Accenture across 4 delivery centres, closing 120 audit findings in 6 months.\n\nDelivered a £3.2m cost reduction at Accenture by consolidating 14 legacy reporting tools into Power BI.\n\nAcme is opening a Dublin office this year, which matters to me as a Dublin resident.\n\nI am an Irish citizen with full right to work in the UK. My notice period is one month. I am available for a call whenever suits you.\n\nKind regards,\nJane Doe';
     const { text, notes } = shapeCoverLetter(letter, [], { name: 'Jane Doe', contact: '' });
     const paras = text.split('\n\n');
-    expect(paras.length).toBe(6);
+    expect(paras.length).toBe(7);
     expect(notes.some((n) => n.includes('into paragraph 2'))).toBe(true);
     expect(paras[2]).toBe('Acme needs an engineer who can secure its platform.');
     expect(paras[3]).toContain('ISO 27001');
     expect(paras[3]).toContain('£3.2m');
-    expect(paras[4]).toBe('I am an Irish citizen with full right to work in the UK. My notice period is one month. I would welcome the chance to talk.');
+    expect(paras[4]).toContain('Dublin office');
+    expect(paras[5]).toContain('notice period is one month');
+  });
+});
+
+describe('cover letter rules', () => {
+  it('1. opening story kept word for word, then the sentence naming role and company', () => {
+    const story = 'At nineteen I rebuilt the payroll system for my family bakery over one summer.';
+    const letter = 'Dear Hiring Team,\n\nWhen I was nineteen I rebuilt a bakery payroll. I am applying for the Data Engineer role at Acme.\n\nResults.\n\nAcme fact.\n\nI am available for a call whenever suits you.\n\nKind regards,\nJane Doe';
+    const { text } = shapeCoverLetter(letter, [], { name: 'Jane Doe', contact: '' }, {}, { openingStory: story, company: 'Acme', role: 'Data Engineer' });
+    expect(text.split('\n\n')[2]).toBe(story + ' I am applying for the Data Engineer role at Acme.');
+    expect(coverLetterShapeBlock('', '', '', story, 'London')).toContain(`word for word, never reworded: "${story}"`);
+    expect(coverLetterShapeBlock('', '', '', '', 'London')).toContain('single strongest result');
+  });
+  it('2. shape: 200 to 280 words, four paragraphs, company fact never invented, call line', () => {
+    const b = coverLetterShapeBlock('', 'one month', 'Irish citizen, full right to work in the UK and Ireland', '', 'London');
+    expect(b).toContain('200 to 280 words, 4 paragraphs');
+    expect(b).toContain('Never invent a company fact.');
+    expect(b).toContain('"I am available for a call whenever suits you."');
+  });
+  it('3. a run of 8 or more words matching the CV counts as copied', () => {
+    const cv = 'Built a fraud scoring service in Go that handled two million card payments every day';
+    expect(copiesBullet('At Revolut I built a fraud scoring service in Go that handled payments.', [cv])).toBe(true);
+    expect(copiesBullet('I designed fraud scoring in Go for two million daily payments.', [cv])).toBe(false);
+  });
+  it('4. right to work stated only when supported', () => {
+    const letter = 'Dear Hiring Team,\n\nI am authorized to work in the United States. My notice period is one month.\n\nKind regards,';
+    expect(rightToWorkStatement('Irish', ['IE'], 'Austin, TX')).toBe('');
+    const none = enforceLetterRightToWork(letter, '');
+    expect(none.text).not.toContain('authorized');
+    expect(none.text).toContain('notice period');
+    expect(enforceLetterRightToWork(letter, 'EU citizen, no visa sponsorship needed').text).not.toContain('United States');
+    expect(enforceLetterRightToWork('I am an Irish citizen with full right to work in the UK.', 'Irish citizen, full right to work in the UK and Ireland').text).toContain('Irish citizen');
+  });
+  it('5. a tool is named at an employer only when that employer names it', () => {
+    const exp = [{ company: 'Accenture', description: 'Built dashboards in Power BI' }, { company: 'Stripe', description: 'Wrote Python services' }];
+    const letter = 'Dear Hiring Team,\n\nAt Accenture I built Power BI dashboards. At Accenture I wrote Python services. At Stripe I wrote Python services.';
+    expect(employerToolSentences(letter, exp, ['Python', 'Power BI'])).toEqual(['At Accenture I wrote Python services.']);
+    expect(dropSentences(letter, ['At Accenture I wrote Python services.'])).not.toContain('At Accenture I wrote Python');
+  });
+  it('6. banned phrases removed', () => {
+    const out = stripLetterBanned('This role aligns with your mission. I utilize robust tools. Also, I significantly cut costs effectively. Additionally, I leverage SQL. Furthermore, I lead. Alongside that, I mentor. I welcome the opportunity to talk. I built impactful, seamless actionable insights, showing my ability to lead.');
+    for (const b of ['aligns with your mission', 'I welcome the opportunity', 'impactful', 'leverage', 'utilize', 'seamless', 'robust', 'significantly', 'effectively', 'showing my ability', 'Also,', 'Additionally,', 'Furthermore,', 'Alongside that,', 'actionable insights']) expect(out).not.toContain(b);
+    expect(out).toContain('I use tools.');
+    expect(out).toContain('I cut costs.');
+    expect(stripLetterBanned('I am excited about the opportunity at Acme. I cut costs.')).toBe('I cut costs.');
+  });
+  it('7. fragments are found and reworded, keeping facts', () => {
+    expect(isFragment('Js, having authored three internal libraries, I led the move.')).toBe(true);
+    expect(isFragment('having authored three libraries.')).toBe(true);
+    expect(isFragment('I authored three internal libraries.')).toBe(false);
+    const frag = 'Js, having authored three internal libraries used by 40 engineers.';
+    const letter = `Dear Hiring Team,\n\nOpening.\n\n${frag}\n\nFact.\n\nClose.\n\nKind regards,`;
+    expect(findFragments(letter)).toEqual([frag]);
+    const good = 'I authored three internal libraries used by 40 engineers.';
+    expect(acceptLetterRewording(frag, good, 'authored three internal libraries used by 40 engineers')).toBe(true);
+    expect(shapeCoverLetter(letter, [], { name: '', contact: '' }, { [frag]: good }).text).toContain(good);
+  });
+  it('8. sign-off by country', () => {
+    expect(letterSignOff('London')).toBe('Kind regards,');
+    expect(letterSignOff('Dublin, Ireland')).toBe('Kind regards,');
+    expect(letterSignOff('Austin, TX')).toBe('Sincerely,');
+    expect(applySignOff('Body.\n\nBest regards,\nJane', 'Austin, TX')).toBe('Body.\n\nSincerely,\nJane');
+    expect(applySignOff('Body.\n\nSincerely,\nJane', 'Cambridge, UK')).toBe('Body.\n\nKind regards,\nJane');
+  });
+  it('no em dashes in the rules', () => {
+    expect(coverLetterShapeBlock('Whitney Ross', 'one month', 'x', 'story', 'London')).not.toContain('\u2014');
   });
 });
 
