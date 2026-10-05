@@ -396,21 +396,120 @@ export function greetingName(contactName: string): string {
   return /^[\p{L}][\p{L}'-]*$/u.test(first) ? first : "";
 }
 
-export function coverLetterShapeBlock(contactName: string, noticePeriod: string, rightToWork: string): string {
+export function coverLetterShapeBlock(contactName: string, noticePeriod: string, rightToWork: string, openingStory = "", location = ""): string {
   const first = greetingName(contactName);
+  const story = String(openingStory || "").trim();
+  const signOff = letterSignOff(location);
   const facts = [
-    noticePeriod ? `notice period: ${noticePeriod}` : "",
     rightToWork ? `right to work: ${rightToWork}` : "",
+    noticePeriod ? `notice period: ${noticePeriod}` : "",
   ].filter(Boolean);
   return `=== COVER LETTER SHAPE (replaces any earlier length or paragraph guidance) ===
-- 150 to 250 words, 3 short paragraphs plus greeting and sign-off.
+- 200 to 280 words, 4 paragraphs plus greeting and sign-off.
 - Greeting: "${first ? `Dear ${first},` : "Dear Hiring Team,"}"
-- Paragraph 1: the role and the company by name, and the one strongest reason the candidate fits, with a result.
-- Paragraph 2: two more results that answer the job's top requirements. Name each employer once only.
-- Paragraph 3: the right to work statement and the notice period when given, from the practical facts the profile gives${facts.length ? ` (${facts.join("; ")})` : " (none recorded, so skip them)"}. Then one plain line inviting a conversation.
-- Claim only skills the CV shows. Never write ${LETTER_BANNED.map((b) => `"${b}"`).join(", ")}.
-- No date line and no "Date:" label; the date is added afterwards.
-- Never state a notice period or right to work the profile does not give. No em dashes.`;
+- Paragraph 1: ${story ? `this opening story word for word, never reworded: "${story}". Then one sentence naming the role and the company.` : "the role name and the candidate's single strongest result that matches the job's top requirement, in one or two sentences."}
+- Paragraph 2: two results that match the job's top two requirements, with their numbers, told in different words from the CV bullets.
+- Paragraph 3: one specific fact about the company taken from the job description, and why it matters to the candidate. Never invent a company fact.
+- Paragraph 4: ${facts.length ? `${facts.join("; ")}, stated only as given, ` : "no right to work or notice period (none recorded, so leave them out completely), "}then "I am available for a call whenever suits you."
+- Never copy a CV bullet into the letter. No run of 8 or more words may match the tailored CV.
+- Only state a right to work when given above. Never write "authorized to work in the United States" unless it is given above.
+- Only name a tool at an employer when the profile's experience for that employer names it.
+- Never write ${LETTER_BANNED.map((b) => `"${b}"`).join(", ")}.
+- Every sentence has a subject and a verb. Never start a sentence with a fragment such as "Js, having authored...".
+${signOff ? `- Sign off "${signOff}"\n` : ""}- No date line and no "Date:" label; the date is added afterwards. No em dashes.`;
+}
+
+/** "Kind regards," for the UK and Ireland, "Sincerely," for the US, otherwise none forced. */
+export function letterSignOff(location: string): string {
+  const c = jobCountry(location);
+  if (c === "united kingdom" || c === "ireland") return "Kind regards,";
+  if (c === "united states") return "Sincerely,";
+  return "";
+}
+
+const SIGN_OFF_LINE = /^\s*(sincerely|kind regards|best regards|warm regards|regards|yours sincerely|yours faithfully|yours truly|best wishes|best|thank you|many thanks)\s*,?\s*$/i;
+
+export function applySignOff(letter: string, location: string): string {
+  const s = letterSignOff(location);
+  if (!letter || !s) return letter;
+  const lines = letter.split("\n");
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 6); i--) {
+    if (SIGN_OFF_LINE.test(lines[i])) { lines[i] = s; return lines.join("\n"); }
+  }
+  return letter;
+}
+
+const RTW_SENTENCE = /\b(right to work|authori[sz]ed to work|eligible to work|work authori[sz]ation|visa sponsorship|work permit|citizen\b|citizenship)/i;
+
+/** Without a supported statement, every right-to-work sentence is removed. */
+export function enforceLetterRightToWork(letter: string, statement: string): { text: string; removed: string[] } {
+  const removed: string[] = [];
+  if (!letter) return { text: letter, removed };
+  const ok = String(statement || "").trim();
+  const usOk = /united states|\bus\b|\busa\b/i.test(ok);
+  const lines = String(letter).split("\n").map((line) => {
+    const t = line.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) return line;
+    return splitSentences(t).filter((s) => {
+      const bad = ok ? (/authori[sz]ed to work in the (united states|us|usa)\b/i.test(s) && !usOk) : RTW_SENTENCE.test(s);
+      if (bad) removed.push(s);
+      return !bad;
+    }).join(" ");
+  });
+  return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
+}
+
+/** Sentences that name an employer together with a tool that employer's experience does not name. */
+export function employerToolSentences(letter: string, experience: any[], tools: string[]): string[] {
+  const out: string[] = [];
+  const roles = (experience || []).map((e) => ({
+    company: String(e?.company || e?.employer || "").trim(),
+    text: JSON.stringify(e || {}),
+  })).filter((r) => r.company);
+  const list = [...new Set(tools.map((t) => String(t || "").trim()).filter((t) => t.length > 1))];
+  for (const p of String(letter || "").split(/\n{2,}/)) {
+    const t = p.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) continue;
+    for (const s of splitSentences(t)) {
+      const at = roles.filter((r) => containsTerm(s, r.company));
+      if (!at.length) continue;
+      const bad = list.some((tool) => containsTerm(s, tool) && !at.some((r) => containsTerm(r.text, tool)));
+      if (bad && !out.includes(s)) out.push(s);
+    }
+  }
+  return out;
+}
+
+/** Removes the given sentences, but never empties a body paragraph. */
+export function dropSentences(letter: string, sentences: string[]): string {
+  if (!letter || !sentences.length) return letter;
+  return String(letter).split(/\n{2,}/).map((p) => {
+    const t = p.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) return p;
+    const all = splitSentences(t);
+    const kept = all.filter((s) => !sentences.includes(s));
+    return kept.length ? kept.join(" ") : p;
+  }).join("\n\n");
+}
+
+/** A sentence that opens with a fragment ("Js, having authored ...") or a lower-case word. */
+export function isFragment(sentence: string): boolean {
+  const s = String(sentence || "").trim();
+  if (!s) return false;
+  if (/^[a-z]/.test(s)) return true;
+  if (/^[A-Za-z.]{1,4},\s+(having|being|with|and)\b/i.test(s)) return true;
+  if (/^(having|being)\s+\w+/i.test(s)) return true;
+  return false;
+}
+
+export function findFragments(letter: string): string[] {
+  const out: string[] = [];
+  for (const p of String(letter || "").split(/\n{2,}/)) {
+    const t = p.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) continue;
+    for (const s of splitSentences(t)) if (isFragment(s) && !out.includes(s)) out.push(s);
+  }
+  return out;
 }
 
 /** Forces the greeting line to the contact's first name, or "Dear Hiring Team,". */
