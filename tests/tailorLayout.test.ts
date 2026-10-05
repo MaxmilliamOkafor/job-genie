@@ -22,7 +22,7 @@ describe('bullet length', () => {
   it('rejects a rewrite that loses a number or keyword', () => {
     expect(acceptRewrite(long, one, ['Python', 'SQL'])).toBe(true);
     expect(acceptRewrite(long, one.replace('Python and ', ''), ['Python'])).toBe(false);
-    expect(acceptRewrite(long, 'Cut month-end close from nine days to three with Python and SQL.', ['Python', 'SQL'])).toBe(true);
+    expect(acceptRewrite(long, 'Cut month-end close from nine working days to three with Python and SQL jobs.', ['Python', 'SQL'])).toBe(true);
     expect(bulletTarget(140)).toBe('one line, 85 to 105 characters');
     expect(bulletTarget(141)).toBe('two lines, 175 to 210 characters');
     expect(acceptRewrite('Cut costs 30% using Python across teams', one, [])).toBe(false);
