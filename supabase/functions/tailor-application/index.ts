@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -4987,10 +4987,45 @@ ${
     }
     if (result.tailoredCoverLetter) {
       const letterBullets = String(result.tailoredResume || "").split("\n").map((l: string) => l.match(/^\s*[•*\-▪·]\s+(.*)$/)?.[1] || "").filter(Boolean);
+      // Sentences copying a CV bullet are reworded in one extra request, never deleted.
+      const rewordings: Record<string, string> = {};
+      const copied = findCopiedSentences(result.tailoredCoverLetter, letterBullets);
+      if (copied.length) {
+        try {
+          const rwRes = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              max_tokens: apiConfig.maxTokens,
+              temperature: apiConfig.temperature,
+              messages: [
+                { role: "system", content: "You reword cover-letter sentences. Never add a fact, number or tool. No em dashes." },
+                { role: "user", content: letterRewordPrompt(copied) },
+              ],
+            }),
+          });
+          if (rwRes.ok) {
+            const rwData = await rwRes.json();
+            const raw = String(rwData.choices?.[0]?.message?.content || "").replace(/```[a-z]*\s*/gi, "").trim();
+            const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
+            const cvText = String(result.tailoredResume || "");
+            copied.forEach((c, i) => {
+              const r = Array.isArray(arr) ? stripDashes(String(arr[i] || "")) : "";
+              if (acceptLetterRewording(c, r, cvText)) rewordings[c] = r.trim();
+            });
+            console.log(`[COVER LETTER REWORD] Accepted ${Object.keys(rewordings).length} of ${copied.length}`);
+          } else {
+            console.log(`[COVER LETTER REWORD] Request failed: ${rwRes.status}`);
+          }
+        } catch (e) {
+          console.log(`[COVER LETTER REWORD] Error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
       const shaped = shapeCoverLetter(result.tailoredCoverLetter, letterBullets, {
         name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
         contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
-      });
+      }, rewordings);
       result.tailoredCoverLetter = shaped.text;
       if (shaped.notes.length) console.log(`[COVER LETTER SHAPE] ${shaped.notes.join("; ")}`);
     }

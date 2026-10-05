@@ -827,7 +827,34 @@ export function copiesBullet(sentence: string, bullets: string[]): boolean {
   });
 }
 
-export function shapeCoverLetter(letter: string, bullets: string[], header: { name: string; contact: string }): { text: string; notes: string[] } {
+/** Body sentences of the letter that copy a CV bullet word for word. */
+export function findCopiedSentences(letter: string, bullets: string[]): string[] {
+  const out: string[] = [];
+  for (const p of String(letter || "").split(/\n{2,}/)) {
+    const t = p.trim();
+    if (!t || isHeaderLike(t) || LETTER_STRUCTURE.test(t)) continue;
+    for (const s of splitSentences(t)) if (copiesBullet(s, bullets) && !out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
+export function letterRewordPrompt(sentences: string[]): string {
+  return `Reword each sentence for a cover letter in first person, same facts, keep every number, tool name and employer, no new claims, at most 35 words.
+Return only a JSON array of strings, one per input, in the same order.
+
+${sentences.map((x, i) => `${i + 1}. ${x}`).join("\n")}`;
+}
+
+/** A rewording keeps every number and adds no 4+ letter word the CV does not contain. */
+export function acceptLetterRewording(original: string, reworded: string, cvText: string): boolean {
+  const r = String(reworded || "").trim();
+  if (!r || r.split(/\s+/).length > 35) return false;
+  if (!numbersIn(original).every((n) => r.includes(n))) return false;
+  const known = new Set([...contentWords(cvText), ...contentWords(original)]);
+  return contentWords(r).every((w) => known.has(w));
+}
+
+export function shapeCoverLetter(letter: string, bullets: string[], header: { name: string; contact: string }, rewordings: Record<string, string> = {}): { text: string; notes: string[] } {
   const notes: string[] = [];
   if (!letter) return { text: letter, notes };
   const paras = String(letter).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
@@ -838,9 +865,12 @@ export function shapeCoverLetter(letter: string, bullets: string[], header: { na
   const tail = paras.slice(close);
   let body = paras.slice(g + 1, close);
   body = body.map((p) => {
-    const kept = splitSentences(p).filter((s) => {
-      if (copiesBullet(s, bullets)) { notes.push(`removed copied CV bullet: ${s}`); return false; }
-      return true;
+    // A copied sentence is reworded when an accepted rewording exists, never deleted.
+    const kept = splitSentences(p).map((s) => {
+      if (!copiesBullet(s, bullets)) return s;
+      if (rewordings[s]) { notes.push(`reworded copied CV bullet: ${s}`); return rewordings[s]; }
+      notes.push(`kept copied CV bullet (no accepted rewording): ${s}`);
+      return s;
     });
     let out = kept.join(" ");
     if (OPENING_CONNECTIVE.test(out)) {
