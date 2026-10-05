@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, copiesBullet, dropClaimSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -58,7 +58,7 @@ describe('claim removal', () => {
 
 describe('cover letter shape', () => {
   const bullet = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs';
-  it('three body paragraphs, no Also, no copied bullet, header kept', () => {
+  it('three body paragraphs, no Also, copied bullet kept when not reworded, header kept', () => {
     const letter = 'Dear Hiring Team,\n\nAcme needs faster reporting.\n\nAlso, I know SQL well.\n\n' + bullet + '. Your team grows fast.\n\nI can start in a month.\n\nKind regards,\nJane Doe';
     const { text } = shapeCoverLetter(letter, [bullet], { name: 'Jane Doe', contact: 'Dublin | +353 1 | jane@x.com' });
     const paras = text.split('\n\n');
@@ -66,7 +66,7 @@ describe('cover letter shape', () => {
     expect(paras[1]).toBe('Dear Hiring Team,');
     expect(paras.length).toBe(6);
     expect(paras[3]).toBe('I know SQL well.');
-    expect(text).not.toContain(bullet);
+    expect(text).toContain(bullet);
     expect(copiesBullet(bullet + '.', [bullet])).toBe(true);
     expect(text.split('\n\n').some((p) => /^Also,/.test(p))).toBe(false);
   });
@@ -84,6 +84,31 @@ describe('skills format', () => {
     const { text, dropped } = formatSkillsSection('TECHNICAL SKILLS\nCross-functional Teams, Stakeholders, Data Governance, Data Protection, Pandas, Software Engineers');
     expect(dropped).toEqual(['Software Engineers']);
     expect(text).toContain('Data & ML: Pandas\nRisk & Compliance: Data Governance, Data Protection\nProfessional: Cross-functional Teams, Stakeholders');
+  });
+});
+
+describe('copied bullets are reworded, never deleted', () => {
+  const b1 = 'Led ISO 27001 certification at Accenture across 4 delivery centres, closing 120 audit findings in 6 months';
+  const b2 = 'Delivered a £3.2m cost reduction at Accenture by consolidating 14 legacy reporting tools into Power BI';
+  const cv = `PROFESSIONAL EXPERIENCE\n• ${b1}\n• ${b2}`;
+  const letter = `Dear Hiring Team,\n\nAcme needs an engineer who can secure its platform.\n\n${b1}. ${b2}.\n\nI am available to talk at your convenience.\n\nKind regards,\nJane Doe`;
+  it('keeps the ISO 27001 and £3.2m sentences, reworded or as they were', () => {
+    const copied = findCopiedSentences(letter, [b1, b2]);
+    expect(copied.length).toBe(2);
+    const good = 'At Accenture I led ISO 27001 certification across 4 delivery centres, closing 120 audit findings in 6 months.';
+    const bad = 'At Accenture I led ISO 27001 certification, transforming security culture.';
+    expect(acceptLetterRewording(copied[0], good, cv)).toBe(true);
+    expect(acceptLetterRewording(copied[0], bad, cv)).toBe(false);
+    const rew = { [copied[0]]: good };
+    const { text } = shapeCoverLetter(letter, [b1, b2], { name: 'Jane Doe', contact: '' }, rew);
+    expect(text).toContain('ISO 27001');
+    expect(text).toContain('£3.2m');
+    expect(text).toContain(good);
+    expect(text).toContain(b2);
+    const plain = shapeCoverLetter(letter, [b1, b2], { name: 'Jane Doe', contact: '' }).text;
+    expect(plain).toContain(b1);
+    expect(plain).toContain(b2);
+    expect(plain.split('\n\n').every((p) => p.trim())).toBe(true);
   });
 });
 
