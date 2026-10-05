@@ -65,7 +65,8 @@ describe('cover letter shape', () => {
     expect(paras[0]).toBe('Jane Doe\nDublin | +353 1 | jane@x.com');
     expect(paras[1]).toBe('Dear Hiring Team,');
     expect(paras.length).toBe(6);
-    expect(paras[3]).toBe('I know SQL well.');
+    expect(paras[3]).toBe('I know SQL well. ' + bullet + '. Your team grows fast.');
+    expect(paras[4]).toBe('I can start in a month.');
     expect(text).toContain(bullet);
     expect(copiesBullet(bullet + '.', [bullet])).toBe(true);
     expect(text.split('\n\n').some((p) => /^Also,/.test(p))).toBe(false);
