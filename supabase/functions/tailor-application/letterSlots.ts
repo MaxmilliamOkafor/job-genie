@@ -325,17 +325,21 @@ export function bestByEmployer(ranked: ProfileBullet[], skip: Set<string>, exclu
  * under half the best candidate's is skipped while another line from an already
  * used employer fits far better (at most two results per employer).
  */
-export function pickResultLines(ranked: ProfileBullet[], exclude: Set<number>, used: Map<string, number>, n: number, score: (b: ProfileBullet) => number): ProfileBullet[] {
+export function pickResultLines(ranked: ProfileBullet[], exclude: Set<number>, used: Map<string, number>, n: number, score: (b: ProfileBullet) => number, allowWeak = true): ProfileBullet[] {
   const pool = ranked.filter((b) => !exclude.has(b.n));
   if (!pool.length || n <= 0) return [];
-  const top = score(pool[0]);
+  const top = Math.max(...ranked.map(score), 1);
   const out: ProfileBullet[] = [];
   const count = new Map(used);
   while (out.length < n) {
     const left = pool.filter((b) => !out.includes(b) && (count.get(b.company) || 0) < 2);
     if (!left.length) break;
-    const fresh = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top * 0.6);
-    const pick = fresh || left.find((b) => score(b) >= top * 0.6) || left.find((b) => !(count.get(b.company) || 0)) || left[0];
+    // A new employer while its line still fits (30% of the best fit); a second line
+    // from a used employer only when it fits strongly (60%) and no new employer does.
+    const pick = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top * 0.3)
+      || left.find((b) => score(b) >= top * 0.6)
+      || (allowWeak ? left.find((b) => !(count.get(b.company) || 0)) || left[0] : undefined);
+    if (!pick) break;
     out.push(pick);
     count.set(pick.company, (count.get(pick.company) || 0) + 1);
   }
@@ -548,7 +552,7 @@ export async function buildSlotLetter(
   // First request: the opening line (no story) and the three best lines from other employers.
   const resultEmployers = new Map<string, number>();
   const fit = (b: ProfileBullet) => lineScore(b, ctx.requirements, ctx.description, base.role);
-  let resultLines = pickResultLines(ranked, new Set(openingLine ? [openingLine.n] : []), resultEmployers, 3, fit);
+  let resultLines = pickResultLines(ranked, new Set(openingLine ? [openingLine.n] : []), resultEmployers, 3, fit, false);
   const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, openingLine, resultLines, description: ctx.description, story: ctx.story }));
   if (raw == null) return null;
   let rawObj: any = {};
@@ -574,7 +578,9 @@ export async function buildSlotLetter(
     const needOpening = !ctx.story && !opening && !!openingLine;
     const exclude = new Set<number>([...failedLines, ...(openingLine ? [openingLine.n] : []), ...(opening ? [opening.n] : [])]);
     for (const c of chosen) exclude.add(c.n);
-    resultLines = chosen.length < 3 ? pickResultLines(ranked, exclude, resultEmployers, 3 - chosen.length + 1, fit) : [];
+    // Weak lines are offered only while the body is under the floor.
+    const short = chosen.length < 2 || bodyWords({ ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined }) < LETTER_WORD_FLOOR;
+    resultLines = chosen.length < 3 ? pickResultLines(ranked, exclude, resultEmployers, 3 - chosen.length + 1, fit, short) : [];
     if (!needOpening && !resultLines.length && companyFact && why) break;
     if (!needOpening && chosen.length >= 3 && companyFact && why) break;
     const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
