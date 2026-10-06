@@ -257,7 +257,7 @@ describe('cover letter slots', () => {
 
   it('copy limit is 12 words in a row, so a close retelling of the line passes', () => {
     expect(COPY_RUN).toBe(12);
-    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls', 'Meta');
+    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services', 'Meta');
     expect(copiesRun(t, ctx.cvText.split('\n'))).toBe(false);
     expect(checkResult(t, bullets[0], ctx)).toEqual([]);
     expect(copiesRun('At Meta, I cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services.', ctx.cvText.split('\n'))).toBe(true);
@@ -325,7 +325,7 @@ describe('cover letter slots', () => {
     const calls: string[] = [];
     const replies = [
       JSON.stringify({ results: [
-        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls' },
+        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services' },
         { line: 2, clause: 'transformed everything with Terraform at a bank' },
       ], companyFact: 'Nametag is building identity verification for account recovery.', why: 'This connects to my experience.' }),
       JSON.stringify({ results: [
