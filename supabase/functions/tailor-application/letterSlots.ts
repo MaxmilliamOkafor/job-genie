@@ -366,7 +366,7 @@ export function slotPrompt(o: { role: string; company: string; requirements: str
   return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
 {${o.openingLine ? `"opening": {"line": ${o.openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}], "companyFact": "...", "why": "..."}
 
-${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one sentence stating the problem that line ${o.openingLine.n} solved, using only its facts; "clause" is what the candidate did and the result.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
+${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one short sentence stating the problem that line ${o.openingLine.n} solved, using only the line's own words; "clause" is what the candidate did and the result, keeping every number the line has.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
 - ${FACT_RULE(o.company)}
 - "why": one sentence linking companyFact to ${o.story ? "the opening story" : "a result"} by naming the same problem. Name only facts that are in the story or result itself. Never a generic link such as "connects to my experience" or "similar to".
 
@@ -488,7 +488,7 @@ export async function buildSlotLetter(
     if (!b || resultEmployers.has(b.company) || b.n === opening?.n || b.n === openingLine?.n) return;
     record(p.line);
     const text = composeResult(shortForms(p.clause), b.company);
-    const f = checkResult(text, b, ctx);
+    const f = checkResult(text, { ...b, text: shortForms(b.text) }, ctx);
     if (hasTripleList(text) && lists() >= 1) f.push("uses a list of three; the letter already has one");
     if (f.length) { log(`result line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return; }
     failedLines.add(p.line);
@@ -501,9 +501,9 @@ export async function buildSlotLetter(
     record(o.line);
     const b = openingLine;
     const text = composeOpening(o, b.company);
-    const f = [...checkResult(text, b, ctx)];
+    const f = [...checkResult(text, { ...b, text: shortForms(b.text) }, ctx)];
     // The problem sentence states only what the line says.
-    if (overlap(o.problem, b.text) < 0.6) f.push(`states a problem that line ${b.n} does not describe`);
+    if (overlap(shortForms(o.problem), shortForms(b.text)) < 0.5) f.push(`states a problem that line ${b.n} does not describe`);
     if (/\bI am applying\b/i.test(text)) f.push('opens with "I am applying"');
     if (f.length) { log(`opening line ${o.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`)); return; }
     opening = { n: o.line, text };
@@ -541,7 +541,7 @@ export async function buildSlotLetter(
   if (reply.why && companyFact) { const f = whyFails(reply.why); if (!f.length) why = reply.why; else log(`why failed: ${f.join("; ")}`); }
 
   // Replacement rounds: the same line once more, then the next best line from an unused employer.
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 5; round++) {
     if (!opening && openingLine && failedLines.has(openingLine.n)) {
       openingLine = ranked.find((b) => !failedLines.has(b.n) && !chosen.some((c) => c.n === b.n));
     }
