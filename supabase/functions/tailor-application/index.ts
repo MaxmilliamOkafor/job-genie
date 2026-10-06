@@ -2367,8 +2367,6 @@ serve(async (req) => {
     const guardBlock = [
       protectionBlock(jdKeywords.allKeywords, protectedList),
       cvContentBlock(topRequirements),
-      coverLetterBlock(company, topRequirements),
-      coverLetterShapeBlock(contactName || "", userProfile.noticePeriod || "", rightToWork, userProfile.openingStory || "", location || ""),
       humanWordingBlock(jdKeywords.allKeywords),
     ].join("\n\n");
     console.log(`[PROTECTED] ${protectedList.length} protected keywords; top requirements: ${topRequirements.join(" | ")}`);
@@ -3401,59 +3399,8 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
 
-   COVER LETTER FIGURES ARE QUOTED, NOT PARAPHRASED: any number that appears in the cover letter MUST be copied from the CV with the SAME noun attached. A real pair went out with the CV saying "cut the manual review QUEUE by 40%" and the letter saying "reducing manual review TIME by 40%" -- a queue and a time are different claims, and a reviewer holding both documents sees an applicant whose own numbers do not agree. If the exact phrasing does not fit the sentence, drop the figure from the letter rather than restate it loosely; the CV already carries it.
-   THE COVER LETTER MUST SAY WHY THIS EMPLOYER: name something specific to THIS company from the posting -- the team, the product, the stated problem, the market -- and connect it to the candidate's own work. "the projects at [Company]" and "your innovative culture" are filler and count for nothing: they read identically for every employer, which is exactly what a reviewer is scanning for. If the posting genuinely says nothing specific, write about the WORK described in it rather than inventing a reason to admire the company.
+2) COVER LETTER: do not write one. Return "tailoredCoverLetter" as an empty string; the letter is built separately.
 
-2) CREATE COVER LETTER:
-   ${candidateName}
-   ${smartLocation} | ${userProfile.email} | ${userProfile.phone}
-   ${userProfile.portfolio || ""}
-
-   Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-
-   Re: Application for ${jobTitle}
-
-   Dear Hiring Manager,
-
-   [FOUR PARAGRAPHS, ALWAYS, IN THIS ORDER. A letter missing one of them is not deliverable.
-   1) OPENING: what the candidate's background is and which part of THIS posting's work it bears on. Never open by announcing the application ("I am applying for the X position at Y", "I am writing to apply for..."): the "Re: Application for ${jobTitle}" line sits directly above the salutation, so that sentence repeats what is immediately above it.
-   2) PROOF: one specific thing the candidate did and what came of it, compressed to its point. Never a retelling of a CV bullet - a measured pair went out at 61% and 41% word overlap with the CV's own bullets, and a reviewer holding both documents reads the same claim twice.
-   3) THIS EMPLOYER: the specific thing about this company or its work, connected to the candidate's own.
-   4) CLOSE: one sentence. Never a paragraph of thanks.
-   NEVER begin any paragraph with a connective ("Additionally", "Furthermore", "Moreover", "In addition", "Also", "Secondly", "Similarly", "Likewise").
-   LENGTH: the body between the salutation and the sign-off is at least 150 words and at most 350. Below 150 words there is no room for an opening, a proof and a close, so one of the three is missing.
-
-   COVER LETTER: NO ENTHUSIASM, NO PRAISE, NO PREDICTIONS. These are all forbidden and must not appear in any form: expressions of excitement or eagerness ("excited", "thrilled", "delighted", "eager", "keen to", "passionate"); praise of the employer ("industry leader", "impressive", "admire", "innovative culture", "world-class team", "cutting-edge work"); and predictions about the candidate's future behaviour ("would adapt quickly", "quick learner", "hit the ground running", "confident I would thrive", "ramp up fast", "eager to learn"). A prediction is not evidence and a reviewer discounts it entirely. Every sentence must either state something the candidate has actually done, or state something the posting actually says. If a sentence does neither, delete it.
-
-   Sincerely,
-   ${candidateName}
-
-   ${toneInstructions}
-
-   COVER LETTER KEYWORD RULES:
-   - Use 8-10 keywords naturally woven into the text (lighter than the CV)
-   - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
-   - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
-   - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
-   - COMPANY-FIRST BALANCE: Address the company directly - use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
-
-   THE LETTER MUST NOT RESTATE THE CV (measured: two paragraphs of a real letter shared 61% and 41% of their content words with CV bullets). The reviewer reads both documents, so a restated bullet wastes the one page that can say something new.
-   - Lead EVERY paragraph with the employer's problem, not the candidate's history. The first sentence of a paragraph must be about ${company}, the role, or the work the posting describes.
-   - AT MOST ONE past example per paragraph, ONE sentence long, and only as proof of a forward-looking claim. Never two achievements in one paragraph.
-   - NEVER reuse the wording of a CV bullet. If a bullet reads "Architected a UK retail client's migration to AWS microservices, delivering all 47 services in 11 months", the letter may not restate that achievement at all - pick a different angle or a different point. Any sentence sharing 45% or more of its content words with a bullet is deleted automatically before the letter is exported, so writing one wastes the paragraph.
-   - AT LEAST ONE paragraph must say something specific to ${company} drawn from the posting: their scale, their market, or the problem this role exists to solve.
-   - The CLOSING is exactly TWO sentences and restates nothing.
-
-   GAP MITIGATION (CRITICAL - from Rule 13):
-   - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
-   - For each gap, demonstrate transferable experience or adjacent skills
-   - Example: If JD requires "Unity" but candidate lacks it → "My deep experience with CI/CD pipelines for mobile application builds, combined with my understanding of game development workflows, positions me to quickly contribute to Unity-based build processes."
-   - Frame gaps as "transferable strength + learning velocity", never as weaknesses
-   - Maximum 1-2 gap mitigations - do not over-apologise
-
-${
-  includeReferral
-    ? `
 3) CREATE REFERRAL EMAIL:
    Subject: Referral Request - ${jobTitle} at ${company}
    Body: Professional request mentioning specific role
@@ -3464,7 +3411,7 @@ ${
 === REQUIRED JSON OUTPUT (NO MARKDOWN) ===
 {
   "tailoredResume": "[COMPLETE RESUME TEXT - clean formatted text, no markdown]",
-  "tailoredCoverLetter": "[COMPLETE COVER LETTER TEXT]",
+  "tailoredCoverLetter": "",
   "matchScore": ${matchResult.score},
   "keywordsMatched": ${JSON.stringify(matchResult.matched)},
   "keywordsMissing": ${JSON.stringify(matchResult.missing)},
@@ -3739,7 +3686,7 @@ ${
       result = {
         tailoredResume: recoveredResume || "Unable to generate tailored resume. Please try again.",
         tailoredCoverLetter:
-          recoveredCoverLetter || userProfile.coverLetter || "Unable to generate cover letter. Please try again.",
+          "",
         matchScore: matchResult.score,
         keywordsMatched: matchResult.matched,
         keywordsMissing: matchResult.missing,
@@ -3909,13 +3856,10 @@ ${
           "",
           "If a term cannot be worked in truthfully, LEAVE IT OUT and leave that bullet exactly as it is. An honest gap is the correct outcome.",
           "",
-          'Return one JSON object and nothing else: {"tailoredResume": "...", "tailoredCoverLetter": "..."} with newlines escaped as \\n. No markdown, no code fences.',
+          'Return one JSON object and nothing else: {"tailoredResume": "..."} with newlines escaped as \\n. No markdown, no code fences.',
           "",
           "CURRENT CV:",
           draftResume,
-          "",
-          "CURRENT COVER LETTER:",
-          result.tailoredCoverLetter || "(none)",
         ].join("\n");
 
         let revisionText = "";
