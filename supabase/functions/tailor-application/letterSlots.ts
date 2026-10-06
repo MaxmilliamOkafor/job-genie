@@ -288,10 +288,10 @@ export function factFromPosting(description: string, company: string): string {
 /** Lines ranked by how many requirement and posting words they share; the story line is never offered. */
 // Words that describe the work of a role family, matched on the role title.
 const ROLE_TERMS: [RegExp, string][] = [
-  [/customer success|account manag|client|customer|relationship/i, "client clients account accounts stakeholder stakeholders presented presenting presentation executive executives cto ctos board adoption renewal renewals escalation escalations onboarding trust relationship regulated customer customers"],
+  [/customer success|account manag|client|customer|relationship/i, "client clients account accounts stakeholder stakeholders presented presenting presentation executive executives cto ctos adoption renewal renewals escalation escalations onboarding trust regulated"],
   [/engineer|developer|programmer|architect/i, "built building build scaled scaling scale reliability reliable performance latency deployed services"],
   [/data|analyst|analytics|scientist/i, "reporting report reports model models pipeline pipelines accuracy analysis"],
-  [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping release releases acceptance criteria design designed"],
+  [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping ship product"],
   [/security|risk|compliance|audit/i, "audit audits controls control regulated client incident incidents security compliance"],
 ];
 export function roleTerms(role: string): string[] {
@@ -314,6 +314,28 @@ export function rankLines(bullets: ProfileBullet[], requirements: string[], desc
 export function bestByEmployer(ranked: ProfileBullet[], skip: Set<string>, exclude: Set<number> = new Set()): ProfileBullet[] {
   const out: ProfileBullet[] = [];
   for (const b of ranked) if (!skip.has(b.company) && !exclude.has(b.n) && !out.some((o) => o.company === b.company)) out.push(b);
+  return out;
+}
+
+/**
+ * Result candidates by fit. A new employer is preferred, but a line whose fit is
+ * under half the best candidate's is skipped while another line from an already
+ * used employer fits far better (at most two results per employer).
+ */
+export function pickResultLines(ranked: ProfileBullet[], exclude: Set<number>, used: Map<string, number>, n: number, score: (b: ProfileBullet) => number): ProfileBullet[] {
+  const pool = ranked.filter((b) => !exclude.has(b.n));
+  if (!pool.length || n <= 0) return [];
+  const top = score(pool[0]);
+  const out: ProfileBullet[] = [];
+  const count = new Map(used);
+  while (out.length < n) {
+    const left = pool.filter((b) => !out.includes(b) && (count.get(b.company) || 0) < 2);
+    if (!left.length) break;
+    const fresh = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top / 2);
+    const pick = fresh || left.find((b) => score(b) >= top / 2) || left.find((b) => !(count.get(b.company) || 0)) || left[0];
+    out.push(pick);
+    count.set(pick.company, (count.get(pick.company) || 0) + 1);
+  }
   return out;
 }
 
@@ -485,7 +507,7 @@ export async function buildSlotLetter(
   const tryResult = (p: Pick, allowed: Set<number>) => {
     if (!allowed.has(p.line) || chosen.length >= 3) return;
     const b = byN.get(p.line);
-    if (!b || resultEmployers.has(b.company) || b.n === opening?.n || b.n === openingLine?.n) return;
+    if (!b || (resultEmployers.get(b.company) || 0) >= 2 || chosen.some((c) => c.n === b.n) || b.n === opening?.n || b.n === openingLine?.n) return;
     record(p.line);
     const text = composeResult(shortForms(p.clause), b.company);
     const f = checkResult(text, { ...b, text: shortForms(b.text) }, ctx);
@@ -493,7 +515,7 @@ export async function buildSlotLetter(
     if (f.length) { log(`result line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return; }
     failedLines.add(p.line);
     chosen.push({ n: p.line, text });
-    resultEmployers.add(b.company);
+    resultEmployers.set(b.company, (resultEmployers.get(b.company) || 0) + 1);
   };
 
   const tryOpening = (o: OpeningPick | null) => {
@@ -509,7 +531,7 @@ export async function buildSlotLetter(
     opening = { n: o.line, text };
     // The opening wins a list of three; a result that also uses one is replaced.
     if (hasTripleList(text) || ctx.story && hasTripleList(ctx.story)) {
-      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); resultEmployers.delete(byN.get(chosen[i].n)!.company); chosen.splice(i, 1); }
+      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); { const c = byN.get(chosen[i].n)!.company; resultEmployers.set(c, (resultEmployers.get(c) || 1) - 1); } chosen.splice(i, 1); }
     }
   };
 
@@ -521,8 +543,9 @@ export async function buildSlotLetter(
   };
 
   // First request: the opening line (no story) and the three best lines from other employers.
-  const resultEmployers = new Set<string>();
-  let resultLines = bestByEmployer(ranked, new Set(), new Set(openingLine ? [openingLine.n] : [])).slice(0, 3);
+  const resultEmployers = new Map<string, number>();
+  const fit = (b: ProfileBullet) => lineScore(b, ctx.requirements, ctx.description, base.role);
+  let resultLines = pickResultLines(ranked, new Set(openingLine ? [openingLine.n] : []), resultEmployers, 3, fit);
   const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, openingLine, resultLines, description: ctx.description, story: ctx.story }));
   if (raw == null) return null;
   let rawObj: any = {};
@@ -547,7 +570,8 @@ export async function buildSlotLetter(
     }
     const needOpening = !ctx.story && !opening && !!openingLine;
     const exclude = new Set<number>([...failedLines, ...(openingLine ? [openingLine.n] : []), ...(opening ? [opening.n] : [])]);
-    resultLines = chosen.length < 3 ? bestByEmployer(ranked, resultEmployers, exclude).slice(0, 3 - chosen.length + 1) : [];
+    for (const c of chosen) exclude.add(c.n);
+    resultLines = chosen.length < 3 ? pickResultLines(ranked, exclude, resultEmployers, 3 - chosen.length + 1, fit) : [];
     if (!needOpening && !resultLines.length && companyFact && why) break;
     if (!needOpening && chosen.length >= 3 && companyFact && why) break;
     const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
