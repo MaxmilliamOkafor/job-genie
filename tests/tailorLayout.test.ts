@@ -302,12 +302,19 @@ describe('cover letter slots', () => {
     const t = assembleLetter({ ...base, story: '', slots: { opening: 'I am applying for the Full Stack Engineer role.', result1: 'At Meta, I cut p99 latency by 38% with Go.' }, rightToWork: rightToWorkSentence('Irish', ['IE'], 'Seattle, WA') });
     const body = t.split('Dear Hiring Team,')[1].split('Sincerely,')[0].trim().split(/\n\n/);
     expect(body.length).toBe(3);
-    expect(t).not.toContain('posting describes');
+    expect(t).not.toContain("Your posting says");
     expect(t).not.toMatch(/citizen/);
   });
 
   it('adds result3 only under 200 words', () => {
     const t = assembleLetter({ ...base, story: '', slots: { opening: 'Hi.', result1: 'At Meta, a.', result2: 'At Meta, b.', result3: 'At Accenture, c.' }, rightToWork: '' });
     expect(t).toContain('At Accenture, c.');
+  });
+});
+
+describe('right to work with a saved GB code', () => {
+  it('EU citizen with GB in the saved list gets the statement for a London job', () => {
+    expect(rightToWorkStatement('EU Citizen', ['IE', 'GB'], 'London, UK')).toBe('EU citizen, no visa sponsorship needed');
+    expect(rightToWorkStatement('EU Citizen', ['IE'], 'London, UK')).toBe('');
   });
 });

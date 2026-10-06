@@ -3,13 +3,13 @@
 // description, then assembles the letter. A failed slot gets one retry, then
 // it is dropped. Nothing is padded.
 
-import { LETTER_BANNED, containsTerm, copiesBullet, rightToWorkStatement, wordCount } from "./guards.ts";
+import { BANNED_PHRASES, LETTER_BANNED, containsTerm, copiesBullet, rightToWorkStatement, wordCount } from "./guards.ts";
 
 export type SlotName = "opening" | "result1" | "result2" | "result3" | "companyFact" | "why";
 export type Slots = Partial<Record<SlotName, string>>;
 
 export const SLOT_BANNED = [
-  ...LETTER_BANNED,
+  ...LETTER_BANNED, ...BANNED_PHRASES, "I am writing to", "excelled",
   "aligns well with", "aligns with", "resonates with", "particularly motivating", "professional values", "innovative",
   "successfully", "solutions that directly impact", "through effective communication", "showcasing my ability",
 ];
@@ -176,7 +176,7 @@ export function assembleLetter(o: {
   const s = o.slots;
   const p1 = o.story ? `${o.story.trim()} That is what drew me to the ${o.role} role at ${o.company}.` : sentence(s.opening || "");
   const results = [s.result1, s.result2].filter(Boolean).map((x) => sentence(x!));
-  const p3 = s.companyFact ? [`The posting describes ${o.company} as "${s.companyFact.replace(/[.]$/, "")}".`, s.why ? sentence(s.why) : ""].filter(Boolean).join(" ") : "";
+  const p3 = s.companyFact ? [`Your posting says: "${s.companyFact.replace(/[.]$/, "")}".`, s.why ? sentence(s.why) : ""].filter(Boolean).join(" ") : "";
   const notice = o.notice ? `My notice period is ${o.notice.trim().replace(/[.]$/, "")}.` : "";
   const p4 = [o.rightToWork, notice, "I am available for a call whenever suits you."].filter(Boolean).join(" ");
   const build = (res: string[]) => [p1, res.join(" "), p3, p4].filter(Boolean);

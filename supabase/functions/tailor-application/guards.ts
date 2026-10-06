@@ -328,8 +328,11 @@ export function jobCountry(location: string): string | null {
   return matchCountry(location, EU_EEA) || matchCountry(location, OTHER_COUNTRIES);
 }
 
+// Saved country codes that jobCountry does not read on their own.
+const COUNTRY_CODE: Record<string, string> = { gb: "united kingdom", uk: "united kingdom" };
+
 function sameCountry(a: string, b: string): boolean {
-  const ca = jobCountry(a) || a.toLowerCase().trim();
+  const ca = COUNTRY_CODE[a.toLowerCase().trim()] || jobCountry(a) || a.toLowerCase().trim();
   const cb = jobCountry(b) || b.toLowerCase().trim();
   return ca === cb;
 }
