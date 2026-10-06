@@ -500,7 +500,7 @@ const FACT_RULE = (company: string) => `"companyFact": one plain sentence starti
 export function slotPrompt(o: { role: string; company: string; requirements: string[]; openingLine?: ProfileBullet; resultLines: ProfileBullet[]; description: string; story: string }): string {
   const lines = [o.openingLine, ...o.resultLines].filter(Boolean) as ProfileBullet[];
   return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
-{${o.openingLine ? `"opening": {"line": ${o.openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}], "companyFact": "...", "why": "..."}
+{${o.openingLine ? `"opening": {"line": ${o.openingLine.n}, "problem": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}], "companyFact": "...", "why": "..."}
 
 ${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one short sentence restating the problem line ${o.openingLine.n} itself states, using ONLY words that appear in that line (for example, a line saying "after three late submissions in a single year" gives "Three submissions had been late in a single year."); "clause" is what the candidate did and the result, keeping every number the line has.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
 - ${FACT_RULE(o.company)}
@@ -517,7 +517,7 @@ ${String(o.description || "").slice(0, 6000)}`;
 
 export function replacementPrompt(lines: ProfileBullet[], notes: string[], wantFact: boolean, wantWhy: string, company: string, openingLine?: ProfileBullet): string {
   return `Retell each numbered line below for a cover letter. Return one JSON object and nothing else:
-{${openingLine ? `"opening": {"line": ${openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}]${wantFact ? `, "companyFact": "..."` : ""}${wantWhy ? `, "why": "..."` : ""}}
+{${openingLine ? `"opening": {"line": ${openingLine.n}, "problem": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}]${wantFact ? `, "companyFact": "..."` : ""}${wantWhy ? `, "why": "..."` : ""}}
 
 ${openingLine ? `"opening": "problem" restates the problem line ${openingLine.n} itself states, using ONLY words that appear in that line.\n` : ""}${CLAUSE_RULES}
 ${wantFact ? `\n${FACT_RULE(company)}` : ""}${wantWhy ? `\n"why": ${wantWhy}` : ""}
