@@ -462,7 +462,8 @@ function findList(sentence: string): { parts: string[]; first: number; k: number
     if (k >= 2 && /^(?:and|or)\s+\S/.test(parts[k].trim())) {
       const verbish = (x: string) => /^(?:[a-z]+ed|[a-z]+ing|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(x.trim());
       const item = parts[k].trim().replace(/^(?:and|or)\s+/, "");
-      if ((words(parts[k - 1]) <= 4 && words(item) <= 6) || (verbish(parts[k - 1]) && verbish(item))) return { parts, first: k - 1, k, conj: parts[k].trim().split(/\s+/)[0], last: item };
+      if (/^I\s/.test(parts[k - 1].trim()) || /^(?:it|this|that|they|which|so|then)\b/i.test(item)) continue;
+      if ((words(parts[k - 1]) <= 4 && words(item) <= 8) || (verbish(parts[k - 1]) && verbish(item))) return { parts, first: k - 1, k, conj: parts[k].trim().split(/\s+/)[0], last: item };
     }
     const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+?)[.!?]?$/);
     if (!m || words(m[1]) > 4) continue;

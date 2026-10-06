@@ -496,3 +496,11 @@ describe('last round', () => {
     expect(htl4('Nametag builds verification for the moments that matter most: account recovery, help desk resets and high-risk transactions.')).toBe(true);
   });
 });
+
+describe('lists written with a comma before "and"', () => {
+  it('counts "A, B, and C" as a list of three, but not "X, and it held"', () => {
+    expect(htl4('At SolimHealth, I defined HIPAA requirements, which included audit logging, role-based access control, and de-identification of any data for model training.')).toBe(true);
+    expect(htl4('At Citigroup, I collected requirements from nine groups, authored the specification, and led acceptance testing across three releases.')).toBe(true);
+    expect(htl4('At Meta, I cut latency, and it held.')).toBe(false);
+  });
+});
