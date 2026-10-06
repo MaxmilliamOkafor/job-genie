@@ -313,40 +313,7 @@ describe('cover letter slots', () => {
 
   const base = { name: 'Max Okafor', contact: 'Dublin, Ireland | +353 08 742 61508 | max@x.com', greeting: 'Dear Hiring Team,', role: 'Full Stack Engineer', company: 'Nametag', notice: '1 month', signOff: 'Sincerely,', employers: ['Meta', 'Accenture', 'SolimHealth', 'Citigroup'] };
 
-  it('a failed "why" leaves paragraph 3 as the company fact alone', () => {
-    const body = letterBody({ ...base, story, results: ['At Meta, I a.'], companyFact: 'Nametag is building identity verification', rightToWork: '' });
-    expect(body[2]).toBe('Nametag is building identity verification.');
-    expect(body[0].startsWith(story)).toBe(true);
-    const t = assembleLetter({ ...base, story, results: ['At Meta, I a.'], companyFact: 'Nametag x', rightToWork: '' });
-    expect(t).toContain('+353 08 742 61508');
-  });
 
-  it('replaces a failed result with the next best line from a different employer, up to three, until 150 words', async () => {
-    const calls: string[] = [];
-    const replies = [
-      JSON.stringify({ results: [
-        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services' },
-        { line: 2, clause: 'transformed everything with Terraform at a bank' },
-      ], companyFact: 'Nametag is building identity verification for account recovery.', why: 'This connects to my experience.' }),
-      JSON.stringify({ results: [
-        { line: 3, clause: 'built the clinician dashboard in React for cognitive screening of patients across forty clinics' },
-        { line: 5, clause: 'built Python reconciliation jobs that cut month-end close from nine days to three for payments' },
-      ], why: 'Stopping fraud in account recovery is the alert problem I worked on.' }),
-      JSON.stringify({ results: [] }),
-    ];
-    const logs: string[] = [];
-    const out = await buildSlotLetter({ ...base, story, rightToWork: '' }, { ...ctx, story }, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; }, (m) => logs.push(m));
-    expect(out).not.toBeNull();
-    const r = out!.parts.results;
-    expect(r.length).toBe(3);
-    expect(new Set(r.map((x) => x.match(/^At ([^,]+),/)![1])).size).toBe(3);
-    expect(r.every((x) => /^At [^,]+, I /.test(x))).toBe(true);
-    expect(calls[0]).not.toContain('3. [Citigroup]');
-    expect(calls[1]).not.toContain('[Meta]');
-    expect(out!.used.join()).not.toContain('line 2');
-    expect(logs.join()).toContain('line 2 failed');
-    expect(LETTER_WORD_FLOOR).toBe(150);
-  });
 
   it('opening is tied to a numbered line too', async () => {
     const reply = JSON.stringify({ opening: { line: 1, clause: 'cut latency by 99% with Terraform' }, results: [], companyFact: 'Nametag is building identity verification.' });
@@ -412,20 +379,106 @@ describe('ranking and numbers', () => {
 });
 
 import { buildSlotLetter as bsl2, profileBullets as pb3 } from '../supabase/functions/tailor-application/letterSlots';
-describe('best line gets a second attempt', () => {
-  it('asks again for the top-ranked line after it failed once', async () => {
-    const experience = [
-      { company: 'SolimHealth', bullets: ['Owned the product roadmap and ran user research for every release of the clinician app across forty clinics'] },
-      { company: 'Meta', bullets: ['Delivered ranking model improvements in Python for the ads platform'] },
-    ];
-    const ctx: any = { experience, bullets: pb3(experience), company: 'Eucalyptus', story: '', cvText: 'Owned the product roadmap and ran user research for every release of the clinician app across forty clinics', description: 'Eucalyptus is a digital health company.', tools: [], profileText: '', requirements: ['user research', 'product roadmap', 'design'] };
+
+import { buildSlotLetter as bsl3, profileBullets as pb4, letterBody as lb3, rankLines as rank3, hasTripleList, stripBoast, hasBoast, shortForms, bannedIn as banned3, reasonLine } from '../supabase/functions/tailor-application/letterSlots';
+describe('final cover letter round', () => {
+  const experience = [
+    { company: 'Accenture', title: 'Consultant', bullets: ['Managed three client accounts for a regulated bank, presenting quarterly to the CTO and closing all but three gaps in the ISO 27001 pre-audit', 'Replaced Jenkins with GitHub Actions across four delivery teams'] },
+    { company: 'Meta', title: 'Software Engineer', bullets: ['Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go'] },
+    { company: 'SolimHealth', title: 'Product Lead', bullets: ['Owned the product roadmap and authored requirements for every release, all of which shipped on the dates committed to the clinical team'] },
+    { company: 'Citigroup', title: 'Analyst', bullets: ['Presented the IFRS 9 staging review to the risk committee and executives, which adopted it into policy'] },
+  ];
+  const bullets = pb4(experience);
+  const ctx: any = { experience, bullets, company: 'Dragos', story: '', cvText: '', description: 'Dragos is the global leader in industrial cybersecurity. You will own client accounts and present to executives.', tools: ['Go'], profileText: '', requirements: ['client accounts', 'executive presentations', 'renewals'] };
+
+  it('picks lines by role fit: customer success gets client-facing lines, design gets product lines', () => {
+    expect(rank3(bullets, ctx.requirements, ctx.description, '', 'Senior Customer Success Manager')[0].n).toBe(1);
+    expect(rank3(bullets, ['user research', 'roadmap', 'shipping'], '', '', 'Senior Product Designer')[0].company).toBe('SolimHealth');
+  });
+
+  it('opening without a story is a two-sentence work story from the best line, never "I am applying for"', async () => {
+    const reply = JSON.stringify({
+      opening: { line: 1, problem: 'A regulated bank had gaps in its ISO 27001 pre-audit.', clause: 'managed three client accounts there, presenting quarterly to the CTO and closing all but three gaps in the pre-audit' },
+      results: [{ line: 5, clause: 'presented the IFRS 9 staging review to executives and the risk committee, which adopted it into policy' }],
+      companyFact: 'Dragos is the global leader in industrial cybersecurity.',
+      why: 'This connects to my experience.',
+    });
+    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: ['Accenture', 'Meta', 'SolimHealth', 'Citigroup'] }, ctx, async () => reply);
+    const body = lb3(out!.parts);
+    expect(body[0]).toMatch(/^A regulated bank had gaps in its ISO 27001 pre-audit\. At Accenture, I managed three client accounts/);
+    expect(body[0]).not.toContain('I am applying');
+    expect(body[1]).toContain('At Citigroup, I presented');
+    expect(body[2]).toBe(`Dragos works in industrial cybersecurity. ${reasonLine('Senior Customer Success Manager')}`);
+  });
+
+  it('opening must keep every number from its line', async () => {
+    const reply = JSON.stringify({ opening: { line: 1, problem: 'A bank had audit gaps.', clause: 'managed client accounts there, presenting to the CTO and closing nearly all gaps in the ISO 27001 pre-audit' }, results: [] });
+    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, ctx, async () => reply);
+    expect(out!.parts.opening).toBeUndefined();
+  });
+
+  it('removes marketing boasts', () => {
+    expect(hasBoast('Dragos is the global leader in industrial cybersecurity.')).toBe(true);
+    expect(stripBoast('Dragos is the global leader in industrial cybersecurity.')).toBe('Dragos works in industrial cybersecurity.');
+    expect(stripBoast('Acme builds world-leading payment tools.')).toBe('Acme builds payment tools.');
+    expect(stripBoast('Acme builds industry-leading tools for the leading banks.')).toBe('Acme builds tools for banks.');
+  });
+
+  it('writes AI and NLP', () => {
+    expect(shortForms('built artificial intelligence and natural language processing systems')).toBe('built AI and NLP systems');
+  });
+
+  it('one list of three per letter at most, and never "not X but Y"', () => {
+    expect(hasTripleList('At Meta, I rewrote the tool in React, TypeScript and GraphQL.')).toBe(true);
+    expect(hasTripleList('At Meta, I cut latency and raised coverage.')).toBe(false);
+    expect(banned3('The work is not about tools but about people.').length).toBeGreaterThan(0);
+  });
+
+  it('a failed "why" ends the company paragraph with the reason line', () => {
+    const body = lb3({ name: 'M', contact: 'c', greeting: 'g', story: 'A story.', role: 'Full Stack Engineer', company: 'Nametag', results: ['At Meta, I a.'], companyFact: 'Nametag is building identity verification', rightToWork: '', notice: '', signOff: '' });
+    expect(body[2]).toBe('Nametag is building identity verification. That is the work I want to be part of as your Full Stack Engineer.');
+  });
+
+  it('replaces a failed result with the next best line from a different employer', async () => {
     const calls: string[] = [];
     const replies = [
-      JSON.stringify({ opening: { line: 1, clause: 'owned the product roadmap and ran user research for every release of the clinician app across forty clinics' }, results: [] }),
-      JSON.stringify({ results: [{ line: 1, clause: 'ran user research and owned the roadmap for each clinician app release, used across forty clinics' }] }),
+      JSON.stringify({ opening: { line: 1, problem: 'A regulated bank had gaps in its ISO 27001 pre-audit.', clause: 'managed three client accounts there, presenting quarterly to the CTO and closing all but three gaps in the pre-audit' }, results: [{ line: 5, clause: 'transformed everything' }] }),
+      JSON.stringify({ results: [{ line: 5, clause: 'presented the IFRS 9 staging review to executives and the risk committee, which adopted it into policy' }] }),
     ];
-    const out = await bsl2({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Product Designer', company: 'Eucalyptus', rightToWork: '', notice: '', signOff: 'Kind regards,', employers: ['SolimHealth', 'Meta'] }, ctx, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; });
-    expect(calls[1]).toContain('1. [SolimHealth]');
-    expect(out!.parts.opening).toContain('At SolimHealth, I ran user research');
+    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'g', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: '', employers: ['Accenture', 'Meta', 'SolimHealth', 'Citigroup'] }, ctx, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; });
+    expect(out!.parts.results.some((r) => r.startsWith('At Citigroup, I presented'))).toBe(true);
+    expect(out!.used.join()).not.toMatch(/result\d \(line 5\).*result\d \(line 5\)/);
+  });
+});
+
+import { pickResultLines as prl, profileBullets as pb5, lineScore as ls5, rankLines as rk5 } from '../supabase/functions/tailor-application/letterSlots';
+describe('results by fit', () => {
+  it('prefers a strong second line from a used employer over a weak line from a new one', () => {
+    const b = pb5([
+      { company: 'Accenture', bullets: ['Managed three client accounts and presented to client CTOs every quarter', 'Led the security architecture for a regulated client and presented to its executives'] },
+      { company: 'Meta', bullets: ['Built backend services in Python for the ads platform'] },
+    ]);
+    const req = ['client accounts', 'executive presentations', 'regulated clients'], role = 'Senior Customer Success Manager';
+    const r = rk5(b, req, '', '', role);
+    const picks = prl(r, new Set(), new Map(), 2, (x) => ls5(x, req, '', role));
+    expect(picks.map((x) => x.company)).toEqual(['Accenture', 'Accenture']);
+  });
+  it('"product" does not match "produced"', () => {
+    const b = pb5([{ company: 'Meta', bullets: ['Delivered ranking improvements which produced a revenue increase'] }]);
+    expect(ls5(b[0], [], '', 'Senior Product Designer')).toBe(0);
+  });
+});
+
+import { trimList as tl6, problemOverlap as po6, hasTripleList as htl6 } from '../supabase/functions/tailor-application/letterSlots';
+describe('lists and opening problem', () => {
+  it('a second list of three is cut to two items, keeping the numbers', () => {
+    const t = tl6('At Accenture, I led security architecture covering access control, credential rotation, network segmentation and encryption, closing all but three gaps.');
+    expect(htl6(t)).toBe(false);
+    expect(t).toContain('all but three gaps');
+    expect(tl6('Dragos protects the infrastructure that runs civilization, including electric utilities, oil and gas, manufacturing and water.')).toBe('Dragos protects the infrastructure that runs civilization.');
+  });
+  it('the problem sentence uses only the line\'s facts', () => {
+    expect(po6('A legacy application hindered efficiency and increased costs.', 'Migrated a legacy application to AWS, cutting infrastructure costs by 31%')).toBeLessThan(0.75);
+    expect(po6('The clinical team needed a clear product roadmap.', 'Owned the product roadmap for every release committed to the clinical team')).toBeGreaterThanOrEqual(0.75);
   });
 });

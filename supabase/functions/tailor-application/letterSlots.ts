@@ -3,7 +3,7 @@
 // description, then assembles the letter. A failed slot gets one retry, then
 // it is dropped. Nothing is padded.
 
-import { BANNED_PHRASES, LETTER_BANNED, containsTerm, letterRightToWorkSentence, wordCount } from "./guards.ts";
+import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
 
 
 /** Below this many words the optional third result is added. Never padded beyond the slots. */
@@ -21,6 +21,7 @@ export const SLOT_BANNED_PATTERNS: RegExp[] = [
   /\bI(?: am|'m)\s+(?:so\s+|very\s+|truly\s+)?(?:eager|excited|thrilled|keen|delighted)\s+to\s+apply\b/i,
   /\bconnects?\s+(?:directly\s+|well\s+|closely\s+)?(?:to|with)\s+my\s+(?:own\s+)?(?:experience|background|work)\b/i,
   /\bemphasis\s+on\b/i,
+  /\bnot\s+(?:just\s+|only\s+|merely\s+)?[^,.;]{1,40}?,?\s+but\s+(?:also\s+)?\w/i,
 ];
 
 /** Words a result may only use when its bullet already has them. */
@@ -269,6 +270,7 @@ export function checkWhy(s: string, fact: string, evidence: string[], ctx: SlotC
   const fails = problem.some((w) => f.has(w) && ev.has(w)) ? [] : ["does not name the same problem as the company fact and the story or a result"];
   if (/\bsimilar(?:ly)? to\b/i.test(s)) fails.push('uses a generic "similar to" link');
   if (copiesRun(s, [fact], 8)) fails.push("repeats the company fact");
+  if (copiesRun(s, [ctx.story, ...evidence].filter(Boolean), 8)) fails.push("repeats the story or a result");
   // Every claim in the link comes from the fact, the story or a used result.
   const known = stemSet([fact, ctx.story, ...evidence].filter(Boolean).join(" "));
   const cw = contentWords(s, [ctx.company]);
@@ -287,67 +289,186 @@ export function factFromPosting(description: string, company: string): string {
 /** Lines ranked by how many requirement and posting words they share; the story line is never offered. */
 // Words that describe the work of a role family, matched on the role title.
 const ROLE_TERMS: [RegExp, string][] = [
-  [/design|ux|ui\b/i, "design designed designing user users research usability prototype prototyping product roadmap interface interaction journey"],
-  [/product manager|product owner|product lead/i, "product roadmap users requirements research discovery prioritisation launch customers"],
-  [/engineer|developer|programmer/i, "built engineering code software services platform deployed tooling performance"],
-  [/data|analyst|scientist/i, "data analysis model models analytics sql reporting insight"],
-  [/security|risk|compliance/i, "security risk compliance audit controls governance"],
+  [/customer success|account manag|client|customer|relationship/i, "client clients account accounts stakeholder stakeholders presented presenting presentation executive executives cto ctos adoption renewal renewals escalation escalations onboarding trust regulated"],
+  [/engineer|developer|programmer|architect/i, "built building build scaled scaling scale reliability reliable performance latency deployed services"],
+  [/data|analyst|analytics|scientist/i, "reporting report reports model models pipeline pipelines accuracy analysis"],
+  [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping ship live launch launched product"],
+  [/security|risk|compliance|audit/i, "audit audits controls control regulated client incident incidents security compliance"],
 ];
 export function roleTerms(role: string): string[] {
   return ROLE_TERMS.filter(([re]) => re.test(role)).flatMap(([, w]) => w.split(" ")).concat(contentWords(role));
 }
 
-/**
- * Lines ranked by match with the job's top three requirements and the role title
- * (for a designer: design, users, research, product, roadmap). Shared posting
- * words only break ties. The story line is never offered.
- */
-export function rankLines(bullets: ProfileBullet[], requirements: string[], description: string, story: string, role = ""): ProfileBullet[] {
-  const req = stemSet(requirements.slice(0, 3).join(" ")), roleSet = new Set(roleTerms(role).map(stem)), desc = stemSet(description);
-  const score = (b: ProfileBullet) => {
-    const w = [...stemSet(b.text)];
-    return w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.25 + (/\d/.test(b.text) ? 0.5 : 0);
-  };
-  return bullets.filter((b) => !isStoryLine(b, story)).map((b) => ({ b, s: score(b) })).sort((a, z) => z.s - a.s).map((x) => x.b);
+/** Fit of one line for the role: top three requirements and the role family. Shared posting words only break ties. */
+export function lineScore(b: ProfileBullet, requirements: string[], description: string, role: string): number {
+  // Whole words with simple endings only, so "product" never matches "produced".
+  const whole = (x: string) => x.toLowerCase().replace(/(?:'s|ies|es|s|ed|ing)$/, "");
+  const set = (x: string) => new Set(contentWords(x).map(whole));
+  const req = set(requirements.slice(0, 3).join(" ")), roleSet = new Set(roleTerms(role).map(whole)), desc = set(description);
+  const w = [...set(b.text)];
+  return w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
 }
 
-const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => `${b.n}. [${b.company}] ${b.text}`).join("\n");
+/** Lines ranked by fit for the role. The story line is never offered. */
+export function rankLines(bullets: ProfileBullet[], requirements: string[], description: string, story: string, role = ""): ProfileBullet[] {
+  return bullets.filter((b) => !isStoryLine(b, story)).map((b) => ({ b, s: lineScore(b, requirements, description, role) })).sort((a, z) => z.s - a.s).map((x) => x.b);
+}
+
+/** Best line per employer, in rank order, skipping the given employers. */
+export function bestByEmployer(ranked: ProfileBullet[], skip: Set<string>, exclude: Set<number> = new Set()): ProfileBullet[] {
+  const out: ProfileBullet[] = [];
+  for (const b of ranked) if (!skip.has(b.company) && !exclude.has(b.n) && !out.some((o) => o.company === b.company)) out.push(b);
+  return out;
+}
+
+/**
+ * Result candidates by fit. A new employer is preferred, but a line whose fit is
+ * under half the best candidate's is skipped while another line from an already
+ * used employer fits far better (at most two results per employer).
+ */
+export function pickResultLines(ranked: ProfileBullet[], exclude: Set<number>, used: Map<string, number>, n: number, score: (b: ProfileBullet) => number, allowWeak = true): ProfileBullet[] {
+  const pool = ranked.filter((b) => !exclude.has(b.n));
+  if (!pool.length || n <= 0) return [];
+  const top = Math.max(...ranked.map(score), 1);
+  const out: ProfileBullet[] = [];
+  const count = new Map(used);
+  while (out.length < n) {
+    const left = pool.filter((b) => !out.includes(b) && (count.get(b.company) || 0) < 2);
+    if (!left.length) break;
+    // A new employer while its line still fits (30% of the best fit); a second line
+    // from a used employer only when it fits strongly (60%) and no new employer does.
+    const pick = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top * 0.3)
+      || left.find((b) => score(b) >= top * 0.6)
+      || (allowWeak ? left.find((b) => !(count.get(b.company) || 0)) || left[0] : undefined);
+    if (!pick) break;
+    out.push(pick);
+    count.set(pick.company, (count.get(pick.company) || 0) + 1);
+  }
+  return out;
+}
+
+const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => {
+  const nums = [...new Set(numberEntries(b.text).map(([, shown]) => shown))];
+  return `${b.n}. [${b.company}] ${b.text}${nums.length ? ` (keep these numbers exactly: ${nums.join(", ")})` : ""}`;
+}).join("\n");
+
+/** "AI" and "NLP", never the long forms. */
+export const shortForms = (s: string) => String(s || "")
+  .replace(/\bartificial intelligence\b/gi, "AI")
+  .replace(/\bnatural language processing\b/gi, "NLP")
+  .replace(/\bAI and NLP\b/g, "AI and NLP");
+
+// Framing words a problem sentence may add around the line's own facts.
+const FRAMING = new Set("needed need needs lacked lacking problem problems faced facing required requiring wanted struggled struggling issue issues challenge challenges".split(" "));
+/** Share of the problem sentence's words (framing words aside) that come from the line. */
+export function problemOverlap(problem: string, line: string): number {
+  const words = contentWords(shortForms(problem)).filter((w) => !FRAMING.has(w));
+  if (!words.length) return 0;
+  const src = stemSet(shortForms(line));
+  return words.filter((w) => src.has(stem(w))).length / words.length;
+}
+
+/** Cuts a list of three ("A, B and C") to its first two items ("A and B"). */
+export function trimList(sentence: string): string {
+  const cut = String(sentence).search(/,\s+(?:including|such as)\b|:\s/);
+  if (cut > 0) {
+    const head = String(sentence).slice(0, cut).trim();
+    if (head.split(/\s+/).length >= 6 && !hasTripleList(head)) return `${head}.`;
+  }
+  const f = findList(sentence);
+  if (!f) return sentence;
+  const m = f.parts[f.k].match(/^(.{1,40}?)\s+(and|or)\s+(.+)$/)!;
+  // Keep the first item and the last one; drop the middle items.
+  const merged = `${f.parts[f.first]} ${m[2]} ${m[3]}`;
+  return [...f.parts.slice(0, f.first), merged, ...f.parts.slice(f.k + 1)].join(", ");
+}
+
+/** True when the sentence uses a list of three or more ("A, B and C"). The "At X, I" lead is ignored. */
+export function hasTripleList(sentence: string): boolean {
+  return !!findList(sentence);
+}
+
+/**
+ * Finds a list of three or more in comma segments: short middle items, then
+ * "X and Y". With no middle item it only counts when the items are names
+ * ("React, TypeScript and GraphQL").
+ */
+function findList(sentence: string): { parts: string[]; first: number; k: number; conj: string; last: string } | null {
+  const parts = String(sentence || "").split(/,\s+/);
+  const words = (x: string) => x.trim().split(/\s+/).length;
+  for (let k = parts.length - 1; k >= 1; k--) {
+    const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+?)[.!?]?$/);
+    if (!m || words(m[1]) > 4) continue;
+    let i = k;
+    while (i - 1 >= 1 && words(parts[i - 1]) <= 4) i--;
+    const middle = k - i;
+    if (middle >= 1) return { parts, first: middle >= 2 ? i : i - 1, k, conj: m[2], last: m[3].split(/\s+/).slice(0, 4).join(" ") === m[3] ? m[3] : m[3] };
+    const prevLast = (parts[k - 1].trim().split(/\s+/).pop() || "");
+    const cap = (x: string) => /^[A-Z0-9]/.test(x.trim());
+    if (k - 1 >= 1 && cap(prevLast) && cap(m[1]) && cap(m[3])) return { parts, first: k - 1, k, conj: m[2], last: m[3] };
+    // Three verb phrases: "led X, authored Y and presented Z".
+    const verb = (x: string) => /^(?:[a-z]+ed|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(x.trim());
+    const prevVerb = /\b(?:[a-z]+ed|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(parts[k - 1]);
+    if (k - 1 >= 1 && verb(m[1]) && verb(m[3]) && prevVerb) return { parts, first: k - 1, k, conj: m[2], last: m[3] };
+  }
+  return null;
+}
+
+const BOAST = [
+  /\bis\s+(?:the|a)\s+(?:global|world|worldwide|industry|market)?\s*(?:leader|leading\s+\w+(?:\s+\w+)?)\s+(?:in|for|of)\b/gi,
+  /\b(?:the\s+)?(?:global|world|worldwide|industry|market)\s+leader\s+(?:in|for|of)\s+/gi,
+  /\bworld[- ]leading\s+/gi, /\bindustry[- ]leading\s+/gi, /\bmarket[- ]leading\s+/gi, /\bthe\s+leading\s+/gi, /\bbest[- ]in[- ]class\s+/gi,
+];
+export function hasBoast(s: string): boolean {
+  return BOAST.some((re) => { re.lastIndex = 0; return re.test(s); });
+}
+/** Removes marketing boasts, keeping a plain statement of what the company does. */
+export function stripBoast(s: string): string {
+  let t = String(s || "");
+  t = t.replace(BOAST[0], "works in");
+  for (const re of BOAST.slice(1)) t = t.replace(re, "");
+  return t.replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").trim();
+}
 
 const CLAUSE_RULES = `Each "clause" retells ONE numbered line in your own word order as what the candidate did, starting with a past-tense verb, without "I" and without the employer's name (code adds "At {Employer}, I"). 18 to 30 words.
 - Keep every number from the line exactly as written ("all but three gaps", never "nearly all gaps").
 - Keep the line's own words and facts: at least 60% of the clause's words must come from that line. Add no number, tool or claim the line does not have. Never add: ${NO_ADD_WORDS.join(", ")}, unless the line has the word.
 - Never copy ${COPY_RUN} or more words in a row from the line: reorder it or split it after a comma.
+- Write "AI" and "NLP", never "artificial intelligence" or "natural language processing".
+- Avoid lists of three ("A, B and C"); at most one in the whole letter. Never write "not X but Y".
 - Never use: ${SLOT_BANNED.map((b) => `"${b}"`).join(", ")}, and never "I am eager/excited/thrilled/keen/delighted to apply".
 - No dashes as pauses.`;
 
-export function slotPrompt(o: { role: string; company: string; requirements: string[]; lines: ProfileBullet[]; description: string; story: string }): string {
-  return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
-{${o.story ? "" : `"opening": {"line": N, "clause": "..."}, `}"results": [{"line": N, "clause": "..."}, ...], "companyFact": "...", "why": "..."}
+const FACT_RULE = (company: string) => `"companyFact": one plain sentence starting with "${company}" saying what the company does, using only words from the job description, as a full grammatical sentence. No quotation marks, no list of three, and no marketing boast ("the global leader in", "world-leading", "industry-leading", "the leading").`;
 
-${o.story ? "" : `- "opening": the candidate's strongest line for the job's top requirement (${o.requirements[0] || "the main requirement"}).\n`}- Lines are listed best match first for this role and its top requirements; prefer the earliest.
-- "results": four lines ranked best first, each from a DIFFERENT employer${o.story ? "" : " and different from the opening's employer"}, matching: ${o.requirements.join("; ")}.
-- "companyFact": one plain sentence starting with "${o.company}" saying what the company does, using only words from the job description, as a full grammatical sentence with its punctuation. No quotation marks.
-- "why": one sentence linking companyFact to ${o.story ? "the opening story" : "a result"} by naming the same problem (for example identity, fraud, patients). Name only facts that are in the story or result itself. Never a generic link such as "connects to my experience" or "similar to".
+export function slotPrompt(o: { role: string; company: string; requirements: string[]; openingLine?: ProfileBullet; resultLines: ProfileBullet[]; description: string; story: string }): string {
+  const lines = [o.openingLine, ...o.resultLines].filter(Boolean) as ProfileBullet[];
+  return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
+{${o.openingLine ? `"opening": {"line": ${o.openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}], "companyFact": "...", "why": "..."}
+
+${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one short sentence stating the problem that line ${o.openingLine.n} solved, built from the line's own nouns (for example "The clinical team needed every release shipped on its committed date."); "clause" is what the candidate did and the result, keeping every number the line has.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
+- ${FACT_RULE(o.company)}
+- "why": one sentence linking companyFact to ${o.story ? "the opening story" : "a result"} by naming the same problem. Name only facts that are in the story or result itself. Never a generic link such as "connects to my experience" or "similar to".
 
 ${CLAUSE_RULES}
 ${o.story ? `\nOPENING STORY (already written; never retell it):\n${o.story}\n` : ""}
 NUMBERED PROFILE LINES:
-${lineList(o.lines)}
+${lineList(lines)}
 
 JOB DESCRIPTION:
 ${String(o.description || "").slice(0, 6000)}`;
 }
 
-export function replacementPrompt(lines: ProfileBullet[], notes: string[], wantFact: boolean, wantWhy: string, company: string): string {
+export function replacementPrompt(lines: ProfileBullet[], notes: string[], wantFact: boolean, wantWhy: string, company: string, openingLine?: ProfileBullet): string {
   return `Retell each numbered line below for a cover letter. Return one JSON object and nothing else:
-{"results": [{"line": N, "clause": "..."}]${wantFact ? `, "companyFact": "..."` : ""}${wantWhy ? `, "why": "..."` : ""}}
+{${openingLine ? `"opening": {"line": ${openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}]${wantFact ? `, "companyFact": "..."` : ""}${wantWhy ? `, "why": "..."` : ""}}
 
-${CLAUSE_RULES}
-${wantFact ? `\n"companyFact": one plain sentence starting with "${company}" using only words from the job description, no quotation marks.` : ""}${wantWhy ? `\n"why": ${wantWhy}` : ""}
+${openingLine ? `"opening" uses line ${openingLine.n} as a two-sentence work story: "problem" states the problem it solved using only its facts; "clause" is what the candidate did and the result.\n` : ""}${CLAUSE_RULES}
+${wantFact ? `\n${FACT_RULE(company)}` : ""}${wantWhy ? `\n"why": ${wantWhy}` : ""}
 ${notes.length ? `\nEarlier attempts failed because they: ${notes.join("; ")}` : ""}
 
 LINES:
-${lineList(lines)}`;
+${lineList([openingLine, ...lines].filter(Boolean) as ProfileBullet[])}`;
 }
 
 /** Employer (from the profile) each sentence names, or "" when none. */
@@ -383,11 +504,15 @@ export interface LetterParts {
   rightToWork: string; notice: string; signOff: string; employers?: string[];
 }
 
+/** Closing line of the company paragraph when no checked "why" is available. */
+export const reasonLine = (role: string) => `That is the work I want to be part of as your ${role}.`;
+
 export function letterBody(o: LetterParts): string[] {
   const employers = (o.employers || []).filter(Boolean);
-  const p1 = o.story ? `${o.story.trim()} That is what drew me to the ${o.role} role at ${o.company}.` : [`I am applying for the ${o.role} role at ${o.company}.`, o.opening || ""].filter(Boolean).join(" ");
+  const lead = o.story ? o.story.trim() : (o.opening || "");
+  const p1 = lead ? `${lead} That is what drew me to the ${o.role} role at ${o.company}.` : `That is what drew me to the ${o.role} role at ${o.company}.`;
   const lastOfP1 = p1.split(/(?<=[.!?])\s+/).pop() || "";
-  const p3 = o.companyFact ? [sentence(o.companyFact), o.why ? sentence(o.why) : ""].filter(Boolean).join(" ") : "";
+  const p3 = o.companyFact ? [sentence(o.companyFact), o.why ? sentence(o.why) : reasonLine(o.role)].join(" ") : "";
   const notice = o.notice ? `My notice period is ${o.notice.trim().replace(/[.]$/, "")}.` : "";
   const p4 = [o.rightToWork, notice, "I am available for a call whenever suits you."].filter(Boolean).join(" ");
   return [p1, orderResults(o.results, lastOfP1, employers).join(" "), p3, p4].filter(Boolean);
@@ -400,10 +525,25 @@ export function assembleLetter(o: LetterParts): string {
 
 export const bodyWords = (o: LetterParts) => wordCount(letterBody(o).join(" "));
 
+interface OpeningPick { line: number; problem: string; clause: string }
+
+const toOpening = (x: any): OpeningPick | null => {
+  const line = Number(x?.line);
+  const problem = String(x?.problem || "").replace(/\s+/g, " ").trim();
+  const clause = String(x?.clause || "").replace(/\s+/g, " ").trim();
+  return Number.isInteger(line) && line > 0 && problem && clause ? { line, problem, clause } : null;
+};
+
+/** The two-sentence opening story: the problem, then "At X, I ..." with the result. */
+export function composeOpening(o: OpeningPick, employer: string): string {
+  const pr = sentence(shortForms(o.problem));
+  return `${pr.charAt(0).toUpperCase()}${pr.slice(1)} ${composeResult(shortForms(o.clause), employer)}`;
+}
+
 /**
- * Asks for the slots, checks them, replaces failed results with the next best
- * line from an unused employer, and assembles the letter. Up to three results,
- * added until the body reaches LETTER_WORD_FLOOR words.
+ * Picks lines by fit for the role, asks for them to be retold, checks every
+ * part, replaces failed results with the next best line from an unused
+ * employer, and assembles the letter. Up to three results.
  */
 export async function buildSlotLetter(
   base: Omit<LetterParts, "results" | "opening" | "companyFact" | "why">,
@@ -411,93 +551,121 @@ export async function buildSlotLetter(
   ask: (prompt: string) => Promise<string | null>,
   log: (m: string) => void = () => {},
 ): Promise<{ letter: string; parts: LetterParts; used: string[] } | null> {
-  const lines = rankLines(ctx.bullets, ctx.requirements, ctx.description, ctx.story, base.role);
+  ctx = { ...ctx, tools: (ctx.tools || []).filter(isToolName) };
+  const ranked = rankLines(ctx.bullets, ctx.requirements, ctx.description, ctx.story, base.role);
   const byN = new Map(ctx.bullets.map((b) => [b.n, b]));
-  const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, lines, description: ctx.description, story: ctx.story }));
-  if (raw == null) return null;
-  const reply = parseReply(raw);
-  const tried = new Set<number>();
+  const failedLines = new Set<number>();
+  const attempts = new Map<number, number>();
   const notes: string[] = [];
-  const usedEmployers = new Set<string>();
   const chosen: { n: number; text: string }[] = [];
   let opening: { n: number; text: string } | undefined;
+  let openingLine: ProfileBullet | undefined = ctx.story ? undefined : ranked[0];
+  const lists = () => [ctx.story, opening?.text, ...chosen.map((c) => c.text)].filter((x) => x && hasTripleList(x)).length;
 
-  // A line gets two attempts, so a strong line that failed once (for example by copying) is asked for again.
-  const attempts = new Map<number, number>();
-  const accept = (p: Pick, label: string): { n: number; text: string } | null => {
-    attempts.set(p.line, (attempts.get(p.line) || 0) + 1);
-    if ((attempts.get(p.line) || 0) >= 2) tried.add(p.line);
+  const record = (n: number) => { attempts.set(n, (attempts.get(n) || 0) + 1); if ((attempts.get(n) || 0) >= 2) failedLines.add(n); };
+
+  const tryResult = (p: Pick, allowed: Set<number>) => {
+    if (!allowed.has(p.line) || chosen.length >= 3) return;
     const b = byN.get(p.line);
-    if (!b) { log(`${label} line ${p.line} failed: not a profile line`); return null; }
-    if (usedEmployers.has(b.company)) { tried.add(p.line); log(`${label} line ${p.line} failed: ${b.company} already used`); return null; }
-    const text = composeResult(p.clause, b.company);
-    const f = checkResult(text, b, ctx);
-    if (f.length) { log(`${label} line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return null; }
-    tried.add(p.line);
-    return { n: p.line, text };
+    if (!b || (resultEmployers.get(b.company) || 0) >= 2 || chosen.some((c) => c.n === b.n) || b.n === opening?.n || b.n === openingLine?.n) return;
+    record(p.line);
+    let text = composeResult(shortForms(p.clause), b.company);
+    // One list of three per letter: a second one is cut to its first two items, then checked like any result.
+    if (hasTripleList(text) && lists() >= 1) text = trimList(text);
+    const f = checkResult(text, { ...b, text: shortForms(b.text) }, ctx);
+    if (hasTripleList(text) && lists() >= 1) f.push("uses a list of three; the letter already has one");
+    if (f.length) { log(`result line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return; }
+    failedLines.add(p.line);
+    chosen.push({ n: p.line, text });
+    resultEmployers.set(b.company, (resultEmployers.get(b.company) || 0) + 1);
   };
 
-  if (!ctx.story && reply.opening) {
-    const o = accept(reply.opening, "opening");
-    if (o) { opening = o; usedEmployers.add(byN.get(o.n)!.company); }
-  }
-  for (const p of reply.results) {
-    if (chosen.length >= 3) break;
-    const r = accept(p, "result");
-    if (r) { chosen.push(r); usedEmployers.add(byN.get(r.n)!.company); }
-  }
+  const tryOpening = (o: OpeningPick | null) => {
+    if (!o || !openingLine || o.line !== openingLine.n || opening) return;
+    record(o.line);
+    const b = openingLine;
+    const text = composeOpening(o, b.company);
+    const f = [...checkResult(text, { ...b, text: shortForms(b.text) }, ctx)];
+    // The problem sentence states only what the line says.
+    if (problemOverlap(o.problem, b.text) < 0.6) f.push(`states a problem that line ${b.n} does not describe`);
+    if (/\bI am applying\b/i.test(text)) f.push('opens with "I am applying"');
+    if (f.length) { log(`opening line ${o.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`)); return; }
+    opening = { n: o.line, text };
+    // The opening wins a list of three; a result that also uses one is replaced.
+    if (hasTripleList(text) || ctx.story && hasTripleList(ctx.story)) {
+      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); { const c = byN.get(chosen[i].n)!.company; resultEmployers.set(c, (resultEmployers.get(c) || 1) - 1); } chosen.splice(i, 1); }
+    }
+  };
 
-  if (reply.companyFact) reply.companyFact = restorePunctuation(reply.companyFact, ctx.description);
-  let companyFact = reply.companyFact && !checkCompanyFact(reply.companyFact, ctx).length ? reply.companyFact : "";
-  if (reply.companyFact && !companyFact) log(`companyFact failed: ${checkCompanyFact(reply.companyFact, ctx).join("; ")}`);
+  const factFails = (x: string) => {
+    const f = checkCompanyFact(x, ctx);
+    if (hasBoast(x)) f.push("uses a marketing boast");
+    return f;
+  };
+
+  // First request: the opening line (no story) and the three best lines from other employers.
+  const resultEmployers = new Map<string, number>();
+  const fit = (b: ProfileBullet) => lineScore(b, ctx.requirements, ctx.description, base.role);
+  let resultLines = pickResultLines(ranked, new Set(openingLine ? [openingLine.n] : []), resultEmployers, 3, fit, false);
+  const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, openingLine, resultLines, description: ctx.description, story: ctx.story }));
+  if (raw == null) return null;
+  let rawObj: any = {};
+  try { const t = raw.replace(/```[a-z]*\s*/gi, ""); rawObj = JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); } catch { /* parsed below */ }
+  const reply = parseReply(raw);
+  tryOpening(toOpening(rawObj?.opening));
+  for (const p of reply.results) tryResult(p, new Set(resultLines.map((b) => b.n)));
+
+  const clean = (x?: string) => x ? stripBoast(restorePunctuation(shortForms(x), ctx.description)) : "";
+  let companyFact = "";
+  const f0 = clean(reply.companyFact);
+  if (f0) { const f = factFails(f0); if (!f.length) companyFact = f0; else log(`companyFact failed: ${f.join("; ")}`); }
   const evidence = () => [opening?.text, ...chosen.map((c) => c.text)].filter(Boolean) as string[];
-  const whyOk = (w?: string) => !!w && !!companyFact && !checkWhy(w, companyFact, evidence(), ctx).length;
-  let why = whyOk(reply.why) ? reply.why : "";
-  if (reply.why && !why) log(`why failed: ${companyFact ? checkWhy(reply.why, companyFact, evidence(), ctx).join("; ") : "no company fact"}`);
+  const whyFails = (w: string) => [...checkWhy(w, companyFact, evidence(), ctx), ...(hasTripleList(w) && lists() >= 1 ? ["uses a list of three"] : [])];
+  let why = "";
+  if (reply.why && companyFact) { const f = whyFails(reply.why); if (!f.length) why = reply.why; else log(`why failed: ${f.join("; ")}`); }
 
-  const parts = (): LetterParts => ({ ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined, why: why || undefined });
-  const needMore = () => chosen.length < 2 || (chosen.length < 3 && bodyWords(parts()) < LETTER_WORD_FLOOR);
-
-  // Up to two replacement rounds: next best lines from employers not yet used.
-  for (let round = 0; round < 3 && (needMore() || (!ctx.story && !opening) || !companyFact || !why); round++) {
-    const fresh = lines.filter((b) => !tried.has(b.n) && !usedEmployers.has(b.company));
-    const want: ProfileBullet[] = [];
-    // Up to two untried lines per unused employer, best first.
-    for (const b of fresh) if (want.filter((w) => w.company === b.company).length < 2 && want.length < 6) want.push(b);
-    if (!want.length && !companyFact) break;
-    if (!want.length && companyFact && why) break;
-    if (!needMore() && (ctx.story || opening) && companyFact && round > 0) break;
+  // Replacement rounds: the same line once more, then the next best line from an unused employer.
+  for (let round = 0; round < 5; round++) {
+    if (!opening && openingLine && failedLines.has(openingLine.n)) {
+      openingLine = ranked.find((b) => !failedLines.has(b.n) && !chosen.some((c) => c.n === b.n));
+    }
+    const needOpening = !ctx.story && !opening && !!openingLine;
+    const exclude = new Set<number>([...failedLines, ...(openingLine ? [openingLine.n] : []), ...(opening ? [opening.n] : [])]);
+    for (const c of chosen) exclude.add(c.n);
+    // Weak lines are offered only while the body is under the floor.
+    const short = chosen.length < 2 || bodyWords({ ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined }) < LETTER_WORD_FLOOR;
+    resultLines = chosen.length < 3 ? pickResultLines(ranked, exclude, resultEmployers, 3 - chosen.length + 1, fit, short) : [];
+    if (!needOpening && !resultLines.length && companyFact && why) break;
+    if (!needOpening && chosen.length >= 3 && companyFact && why) break;
     const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
-    const r2 = await ask(replacementPrompt(want, [...new Set(notes)].slice(0, 6), !companyFact, wantWhy, ctx.company));
-    const rep = r2 ? parseReply(r2) : { results: [] as Pick[] };
-    for (const p of rep.results) {
-      const b = byN.get(p.line);
-      if (!b || !want.some((w) => w.n === p.line)) continue;
-      if (!ctx.story && !opening) {
-        const o = accept(p, "opening");
-        if (o) { opening = o; usedEmployers.add(b.company); continue; }
-      } else if (needMore()) {
-        const r = accept(p, "result");
-        if (r) { chosen.push(r); usedEmployers.add(b.company); }
-      }
-    }
-    if (!companyFact && rep.companyFact) {
-      rep.companyFact = restorePunctuation(rep.companyFact, ctx.description);
-      const f = checkCompanyFact(rep.companyFact, ctx);
-      if (!f.length) companyFact = rep.companyFact; else log(`companyFact retry failed: ${f.join("; ")}`);
-    }
-    if (companyFact && !why && rep.why) {
-      if (whyOk(rep.why)) why = rep.why; else log(`why retry failed: ${checkWhy(rep.why, companyFact, evidence(), ctx).join("; ")}`);
-    }
+    const r2 = await ask(replacementPrompt(resultLines, [...new Set(notes)].slice(0, 6), !companyFact, wantWhy, ctx.company, needOpening ? openingLine : undefined));
+    if (r2 == null) break;
+    let o2: any = {};
+    try { const t = r2.replace(/```[a-z]*\s*/gi, ""); o2 = JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); } catch { /* ignore */ }
+    const rep = parseReply(r2);
+    if (needOpening) tryOpening(toOpening(o2?.opening));
+    for (const p of rep.results) tryResult(p, new Set(resultLines.map((b) => b.n)));
+    if (!companyFact && rep.companyFact) { const c = clean(rep.companyFact); const f = factFails(c); if (!f.length) companyFact = c; else log(`companyFact retry failed: ${f.join("; ")}`); }
+    if (companyFact && !why && rep.why) { const f = whyFails(rep.why); if (!f.length) why = rep.why; else log(`why retry failed: ${f.join("; ")}`); }
   }
-  if (!companyFact) { companyFact = factFromPosting(ctx.description, ctx.company); if (companyFact) log("companyFact taken word for word from the posting"); }
-  if (why && !whyOk(why)) why = "";
-  const final = parts();
+  if (!companyFact) {
+    let fb = stripBoast(factFromPosting(ctx.description, ctx.company));
+    if (fb && hasTripleList(fb) && lists() >= 1) {
+      const m = fb.match(/[:,]\s/);
+      fb = m && m.index && fb.slice(0, m.index).split(/\s+/).length >= 6 ? `${fb.slice(0, m.index)}.` : "";
+    }
+    if (fb) { companyFact = shortForms(fb); log("companyFact taken word for word from the posting"); }
+  }
+  if (why && whyFails(why).length) why = "";
+  // No opening passed its checks: the best checked result opens the letter instead.
+  if (!ctx.story && !opening && chosen.length >= 2) { opening = chosen.shift(); log(`opening taken from result line ${opening!.n}`); }
+  if (companyFact && hasTripleList(companyFact) && lists() >= 1) companyFact = trimList(companyFact);
+  const final: LetterParts = { ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined, why: why || undefined };
   const used = [
     ...(opening ? [`opening (line ${opening.n})`] : []),
     ...chosen.map((c, i) => `result${i + 1} (line ${c.n})`),
     ...(final.companyFact ? ["companyFact"] : []),
-    ...(final.why ? ["why"] : []),
+    ...(final.why ? ["why"] : final.companyFact ? ["reason line"] : []),
   ];
   return { letter: assembleLetter(final), parts: final, used };
 }
