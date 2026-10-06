@@ -374,10 +374,21 @@ export function trimList(sentence: string): string {
     const head = String(sentence).slice(0, cut).trim();
     if (head.split(/\s+/).length >= 6 && !hasTripleList(head)) return `${head}.`;
   }
-  const lead = (String(sentence).match(/^At [^,]{1,40},\s*/) || [""])[0];
-  const rest = String(sentence).slice(lead.length);
-  const out = rest.replace(/([^,.;:]{1,40}),\s+([^,.;:]{1,40}?)(?:,\s+[^,.;:]{1,40}?)*,?\s+(?:and|or)\s+[^,.;:]{1,40}?(?=[,.;:]|$)/, "$1 and $2");
-  return lead + out;
+  // Items are short comma segments ending in "X and Y"; keep the first item and the last.
+  const parts = String(sentence).split(/,\s+/);
+  const words = (x: string) => x.trim().split(/\s+/).length;
+  for (let k = parts.length - 1; k > 0; k--) {
+    const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+)$/);
+    if (!m || words(m[1]) > 4) continue;
+    let i = k - 1;
+    while (i > 0 && words(parts[i - 1]) <= 4) i--;
+    if (words(parts[i]) > 5) i++;
+    if (k - i < 1 || i >= k) continue;
+    const tail = m[3];
+    const merged = `${parts[i]} ${m[2]} ${tail}`;
+    return [...parts.slice(0, i), merged, ...parts.slice(k + 1)].join(", ");
+  }
+  return sentence;
 }
 
 /** True when the sentence uses a list of three or more ("A, B and C"). The "At X, I" lead is ignored. */
