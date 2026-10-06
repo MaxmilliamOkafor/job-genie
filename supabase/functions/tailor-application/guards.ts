@@ -352,11 +352,37 @@ export function rightToWorkStatement(citizenship: string, authorizedCountries: s
   if (home === "ireland" && cta) return "Irish citizen, full right to work in the UK and Ireland";
   if (home === "united kingdom" && cta) return "British citizen, full right to work in the UK and Ireland";
   if (isEu && country in EU_EEA) return "EU citizen, no visa sponsorship needed";
+  // EU citizenship gives no UK work rights; for the UK only Irish or British citizenship counts.
+  if (country === "united kingdom") return "";
   const authorised = (authorizedCountries || []).some((c) => c && sameCountry(c, country));
   if (authorised) {
     const label = cit.replace(/\s*citizen(ship)?\s*$/i, "").trim();
     return `${label} citizen, no visa sponsorship needed`;
   }
+  return "";
+}
+
+const COUNTRY_NAME: Record<string, string> = { "united kingdom": "the UK", "united states": "the United States", "netherlands": "the Netherlands", "czech republic": "the Czech Republic" };
+const countryName = (c: string) => COUNTRY_NAME[c] || c.replace(/\b\p{L}/gu, (x) => x.toUpperCase());
+
+/**
+ * The cover letter's right-to-work sentence, always a full sentence, or "".
+ * UK jobs: only Irish or British citizenship gives the right ("As an Irish citizen, I have the right to work in the UK.").
+ */
+export function letterRightToWorkSentence(citizenship: string, authorizedCountries: string[], location: string): string {
+  const cit = String(citizenship || "").trim();
+  const country = jobCountry(location);
+  if (!cit || !country) return "";
+  const word = cit.toLowerCase().replace(/\bcitizen(ship)?\b/g, "").replace(/[^a-z\s]/g, " ").trim();
+  const home = NATIONALITY[word] || (EU_EEA[word] || OTHER_COUNTRIES[word] ? word : null);
+  const isEu = /^eu\b|\beu$|european union|^eea\b/.test(word) || (!!home && home in EU_EEA);
+  const where = countryName(country);
+  if ((home === "ireland" || home === "united kingdom") && (country === "united kingdom" || country === "ireland")) {
+    return `As ${home === "ireland" ? "an Irish" : "a British"} citizen, I have the right to work in ${where}.`;
+  }
+  if (country === "united kingdom") return "";
+  if (isEu && country in EU_EEA) return `As an EU citizen, I have the right to work in ${where} without visa sponsorship.`;
+  if ((authorizedCountries || []).some((c) => c && sameCountry(c, country))) return `I have the right to work in ${where} without visa sponsorship.`;
   return "";
 }
 
