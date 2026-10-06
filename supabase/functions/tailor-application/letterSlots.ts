@@ -3,7 +3,7 @@
 // description, then assembles the letter. A failed slot gets one retry, then
 // it is dropped. Nothing is padded.
 
-import { BANNED_PHRASES, LETTER_BANNED, containsTerm, letterRightToWorkSentence, wordCount } from "./guards.ts";
+import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
 
 
 /** Below this many words the optional third result is added. Never padded beyond the slots. */
@@ -357,6 +357,24 @@ export const shortForms = (s: string) => String(s || "")
   .replace(/\bnatural language processing\b/gi, "NLP")
   .replace(/\bAI and NLP\b/g, "AI and NLP");
 
+// Framing words a problem sentence may add around the line's own facts.
+const FRAMING = new Set("needed need needs lacked lacking problem problems faced facing required requiring wanted struggled struggling issue issues challenge challenges".split(" "));
+/** Share of the problem sentence's words (framing words aside) that come from the line. */
+export function problemOverlap(problem: string, line: string): number {
+  const words = contentWords(shortForms(problem)).filter((w) => !FRAMING.has(w));
+  if (!words.length) return 0;
+  const src = stemSet(shortForms(line));
+  return words.filter((w) => src.has(stem(w))).length / words.length;
+}
+
+/** Cuts a list of three ("A, B and C") to its first two items ("A and B"). */
+export function trimList(sentence: string): string {
+  const lead = (String(sentence).match(/^At [^,]{1,40},\s*/) || [""])[0];
+  const rest = String(sentence).slice(lead.length);
+  const out = rest.replace(/([^,.;:]{1,40}),\s+([^,.;:]{1,40}?)(?:,\s+[^,.;:]{1,40}?)*,?\s+(?:and|or)\s+[^,.;:]{1,40}?(?=[,.;:]|$)/, "$1 and $2");
+  return lead + out;
+}
+
 /** True when the sentence uses a list of three or more ("A, B and C"). The "At X, I" lead is ignored. */
 export function hasTripleList(sentence: string): boolean {
   const t = String(sentence || "").replace(/^At [^,]{1,40},\s*/, "");
@@ -485,7 +503,8 @@ const toOpening = (x: any): OpeningPick | null => {
 
 /** The two-sentence opening story: the problem, then "At X, I ..." with the result. */
 export function composeOpening(o: OpeningPick, employer: string): string {
-  return `${sentence(shortForms(o.problem))} ${composeResult(shortForms(o.clause), employer)}`;
+  const pr = sentence(shortForms(o.problem));
+  return `${pr.charAt(0).toUpperCase()}${pr.slice(1)} ${composeResult(shortForms(o.clause), employer)}`;
 }
 
 /**
@@ -499,6 +518,7 @@ export async function buildSlotLetter(
   ask: (prompt: string) => Promise<string | null>,
   log: (m: string) => void = () => {},
 ): Promise<{ letter: string; parts: LetterParts; used: string[] } | null> {
+  ctx = { ...ctx, tools: (ctx.tools || []).filter(isToolName) };
   const ranked = rankLines(ctx.bullets, ctx.requirements, ctx.description, ctx.story, base.role);
   const byN = new Map(ctx.bullets.map((b) => [b.n, b]));
   const failedLines = new Set<number>();
@@ -516,7 +536,9 @@ export async function buildSlotLetter(
     const b = byN.get(p.line);
     if (!b || (resultEmployers.get(b.company) || 0) >= 2 || chosen.some((c) => c.n === b.n) || b.n === opening?.n || b.n === openingLine?.n) return;
     record(p.line);
-    const text = composeResult(shortForms(p.clause), b.company);
+    let text = composeResult(shortForms(p.clause), b.company);
+    // One list of three per letter: a second one is cut to its first two items, then checked like any result.
+    if (hasTripleList(text) && lists() >= 1) text = trimList(text);
     const f = checkResult(text, { ...b, text: shortForms(b.text) }, ctx);
     if (hasTripleList(text) && lists() >= 1) f.push("uses a list of three; the letter already has one");
     if (f.length) { log(`result line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return; }
@@ -532,7 +554,7 @@ export async function buildSlotLetter(
     const text = composeOpening(o, b.company);
     const f = [...checkResult(text, { ...b, text: shortForms(b.text) }, ctx)];
     // The problem sentence states only what the line says.
-    if (overlap(shortForms(o.problem), shortForms(b.text)) < 0.5) f.push(`states a problem that line ${b.n} does not describe`);
+    if (problemOverlap(o.problem, b.text) < 0.75) f.push(`states a problem that line ${b.n} does not describe`);
     if (/\bI am applying\b/i.test(text)) f.push('opens with "I am applying"');
     if (f.length) { log(`opening line ${o.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`)); return; }
     opening = { n: o.line, text };
@@ -545,7 +567,6 @@ export async function buildSlotLetter(
   const factFails = (x: string) => {
     const f = checkCompanyFact(x, ctx);
     if (hasBoast(x)) f.push("uses a marketing boast");
-    if (hasTripleList(x) && lists() >= 1) f.push("uses a list of three; the letter already has one");
     return f;
   };
 
@@ -603,6 +624,7 @@ export async function buildSlotLetter(
     if (fb) { companyFact = shortForms(fb); log("companyFact taken word for word from the posting"); }
   }
   if (why && whyFails(why).length) why = "";
+  if (companyFact && hasTripleList(companyFact) && lists() >= 1) companyFact = trimList(companyFact);
   const final: LetterParts = { ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined, why: why || undefined };
   const used = [
     ...(opening ? [`opening (line ${opening.n})`] : []),
