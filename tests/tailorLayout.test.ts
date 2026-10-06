@@ -485,7 +485,7 @@ import { stripGrand, endsOnGrandClaim, ukSpelling, trimList as trim4, hasTripleL
 describe('last round', () => {
   it('company list keeps what the company does and for whom, never the grand claim', () => {
     const t = trim4(stripGrand('Dragos protects the infrastructure that runs civilization, including electric utilities, oil and gas, manufacturing and water.'));
-    expect(t).toBe('Dragos protects the infrastructure for electric utilities and water.');
+    expect(t).toBe('Dragos protects the infrastructure of electric utilities and water.');
     expect(endsOnGrandClaim('Dragos protects the infrastructure that runs civilization.')).toBe(true);
     expect(endsOnGrandClaim(t)).toBe(false);
   });
