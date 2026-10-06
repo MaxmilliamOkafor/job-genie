@@ -42,6 +42,9 @@ const roleList = (experience: any[]) => (experience || []).map((e) => ({
   text: allText(e).join("\n"),
 })).filter((r) => r.company);
 
+/** containsTerm, with sentence-ending full stops ignored ("Terraform." still counts). */
+const has = (text: string, term: string) => containsTerm(String(text || "").replace(/\.(?=\s|$)/g, " "), term);
+
 const numbersIn = (s: string) => (String(s || "").match(/\d+(?:[.,]\d+)*/g) || []);
 const flat = (s: string) => String(s || "").toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim();
 
@@ -85,12 +88,12 @@ export function checkSlot(name: SlotName, text: string, ctx: SlotContext): strin
   if (name === "companyFact") {
     if (!flat(ctx.description).includes(flat(s).replace(/[.]$/, ""))) fails.push("is not copied word for word from the job description");
   } else {
-    const named = roles.filter((r) => containsTerm(s, r.company));
+    const named = roles.filter((r) => has(s, r.company));
     if (/^result/.test(name) && !named.length) fails.push("names no employer from the profile");
     const source = named.length ? named.map((r) => r.text).join("\n") : roles.map((r) => r.text).join("\n");
     const srcFlat = flat(source);
     for (const n of numbersIn(s)) if (!srcFlat.includes(n.toLowerCase())) fails.push(`uses the number ${n}, which is not in ${named.length ? "that employer's" : "the"} profile entry`);
-    for (const tool of ctx.tools) if (containsTerm(s, tool) && !containsTerm(source, tool)) fails.push(`names ${tool}, which is not in ${named.length ? "that employer's" : "the"} profile entry`);
+    for (const tool of ctx.tools) if (has(s, tool) && !has(source, tool)) fails.push(`names ${tool}, which is not in ${named.length ? "that employer's" : "the"} profile entry`);
     if (copiesBullet(s, cvLines)) fails.push("repeats 8 or more words in a row from the CV");
     fails.push(...unsupportedClaims(s, ctx.experience, ctx.profileText));
   }
