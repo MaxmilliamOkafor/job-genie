@@ -431,6 +431,12 @@ export function trimList(sentence: string): string {
   }
   const f = findList(sentence);
   if (!f) return sentence;
+  if (/^(?:and|or)\s/.test(f.parts[f.k].trim())) {
+    // "A, B, and C" becomes "A and C".
+    const head = f.parts.slice(0, f.first);
+    const lastHead = head.pop() || "";
+    return [...head, `${lastHead} ${f.parts[f.k].trim()}`, ...f.parts.slice(f.k + 1)].join(", ");
+  }
   const m = f.parts[f.k].match(/^(.{1,40}?)\s+(and|or)\s+(.+)$/)!;
   // Keep the first item and the last one; drop the middle items.
   const merged = `${f.parts[f.first]} ${m[2]} ${m[3]}`;
@@ -452,6 +458,12 @@ function findList(sentence: string): { parts: string[]; first: number; k: number
   const words = (x: string) => x.trim().split(/\s+/).length;
   for (let k = parts.length - 1; k >= 1; k--) {
     if (k === 0) break;
+    // Oxford comma: "A, B, and C" with C its own comma part.
+    if (k >= 2 && /^(?:and|or)\s+\S/.test(parts[k].trim())) {
+      const verbish = (x: string) => /^(?:[a-z]+ed|[a-z]+ing|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(x.trim());
+      const item = parts[k].trim().replace(/^(?:and|or)\s+/, "");
+      if ((words(parts[k - 1]) <= 4 && words(item) <= 6) || (verbish(parts[k - 1]) && verbish(item))) return { parts, first: k - 1, k, conj: parts[k].trim().split(/\s+/)[0], last: item };
+    }
     const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+?)[.!?]?$/);
     if (!m || words(m[1]) > 4) continue;
     let i = k;
