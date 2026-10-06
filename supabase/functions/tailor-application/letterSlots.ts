@@ -270,7 +270,7 @@ export function orderResults(results: string[], before: string, employers: strin
     return !a || a !== b;
   });
   const subsets: string[][] = [];
-  for (let m = (1 << results.length) - 1; m > 0; m--) subsets.push(results.filter((_, i) => m & (1 << i)));
+  for (let m = 1; m < (1 << results.length); m++) subsets.push(results.filter((_, i) => m & (1 << i)));
   subsets.sort((a, b) => b.length - a.length);
   for (const sub of subsets) for (const p of perms(sub)) if (ok(p)) return p;
   return [];
