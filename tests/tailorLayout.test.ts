@@ -315,10 +315,10 @@ describe('cover letter slots', () => {
 
 
 
-  it('opening is tied to a numbered line too', async () => {
-    const reply = JSON.stringify({ opening: { line: 1, clause: 'cut latency by 99% with Terraform' }, results: [], companyFact: 'Nametag is building identity verification.' });
+  it('opening is the numbered line itself when the line states no problem', async () => {
+    const reply = JSON.stringify({ results: [], companyFact: 'Nametag is building identity verification.' });
     const out = await buildSlotLetter({ ...base, story: '', rightToWork: '' }, ctx, async () => reply);
-    expect(out!.parts.opening).toBeUndefined();
+    expect(out!.parts.opening).toMatch(/^At \w+, I /);
   });
 });
 
@@ -396,25 +396,23 @@ describe('final cover letter round', () => {
     expect(rank3(bullets, ['user research', 'roadmap', 'shipping'], '', '', 'Senior Product Designer')[0].company).toBe('SolimHealth');
   });
 
-  it('opening without a story is a two-sentence work story from the best line, never "I am applying for"', async () => {
-    const reply = JSON.stringify({
-      opening: { line: 1, problem: 'A regulated bank had gaps in its ISO 27001 pre-audit.', clause: 'managed three client accounts there, presenting quarterly to the CTO and closing all but three gaps in the pre-audit' },
-      results: [{ line: 5, clause: 'presented the IFRS 9 staging review to executives and the risk committee, which adopted it into policy' }],
-      companyFact: 'Dragos is the global leader in industrial cybersecurity.',
-      why: 'This connects to my experience.',
-    });
-    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: ['Accenture', 'Meta', 'SolimHealth', 'Citigroup'] }, ctx, async () => reply);
-    const body = lb3(out!.parts);
-    expect(body[0]).toMatch(/^A regulated bank had gaps in its ISO 27001 pre-audit\. At Accenture, I managed three client accounts/);
-    expect(body[0]).not.toContain('I am applying');
-    expect(body[1]).toContain('At Citigroup, I presented');
-    expect(body[2]).toBe(`Dragos works in industrial cybersecurity. ${reasonLine('Senior Customer Success Manager')}`);
+  it('opening problem sentence uses only words from its line, and only when the line states a problem', async () => {
+    const exp = [...experience, { company: 'Northwind', title: 'Analyst', bullets: ['Automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter'] }];
+    const c2 = { ...ctx, experience: exp, bullets: pb4(exp), requirements: ['client accounts', 'deadline', 'submissions'] };
+    const good = JSON.stringify({ opening: { line: 7, problem: 'Three submissions had been late in a single year.' }, results: [] });
+    const o1 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => good);
+    expect(o1!.parts.opening).toBe('Three submissions had been late in a single year. At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
+    const bad = JSON.stringify({ opening: { line: 7, problem: 'The client struggled with chaotic reporting.' }, results: [] });
+    const o2 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => bad);
+    expect(o2!.parts.opening).toBe('At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
+    expect(o2!.parts.opening).not.toContain('I am applying');
   });
 
-  it('opening must keep every number from its line', async () => {
-    const reply = JSON.stringify({ opening: { line: 1, problem: 'A bank had audit gaps.', clause: 'managed client accounts there, presenting to the CTO and closing nearly all gaps in the ISO 27001 pre-audit' }, results: [] });
-    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, ctx, async () => reply);
-    expect(out!.parts.opening).toBeUndefined();
+  it('a result that fails twice falls back to its own line with every number kept', async () => {
+    const reply = JSON.stringify({ results: [{ line: 4, clause: 'owned the roadmap for releases that mostly shipped on time' }] });
+    const out = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Product Designer', company: 'Eucalyptus', rightToWork: '', notice: '', signOff: 'Kind regards,', employers: [] }, { ...ctx, company: 'Eucalyptus', requirements: ['roadmap', 'requirements', 'shipping'] }, async () => reply);
+    const all = [out!.parts.opening, ...out!.parts.results].join(' ');
+    expect(all).toContain('At SolimHealth, I owned the product roadmap and authored requirements for every release, all of which shipped on the dates committed to the clinical team.');
   });
 
   it('removes marketing boasts', () => {
@@ -480,5 +478,21 @@ describe('lists and opening problem', () => {
   it('the problem sentence uses only the line\'s facts', () => {
     expect(po6('A legacy application hindered efficiency and increased costs.', 'Migrated a legacy application to AWS, cutting infrastructure costs by 31%')).toBeLessThan(0.75);
     expect(po6('The clinical team needed a clear product roadmap.', 'Owned the product roadmap for every release committed to the clinical team')).toBeGreaterThanOrEqual(0.75);
+  });
+});
+
+import { stripGrand, endsOnGrandClaim, ukSpelling, trimList as trim4, hasTripleList as htl4 } from '../supabase/functions/tailor-application/letterSlots';
+describe('last round', () => {
+  it('company list keeps what the company does and for whom, never the grand claim', () => {
+    const t = trim4(stripGrand('Dragos protects the infrastructure that runs civilization, including electric utilities, oil and gas, manufacturing and water.'));
+    expect(t).toBe('Dragos protects the infrastructure for electric utilities and water.');
+    expect(endsOnGrandClaim('Dragos protects the infrastructure that runs civilization.')).toBe(true);
+    expect(endsOnGrandClaim(t)).toBe(false);
+  });
+  it('UK spelling for "Kind regards" letters', () => {
+    expect(ukSpelling('organizations optimize civilization; size and citizen stay')).toBe('organisations optimise civilisation; size and citizen stay');
+  });
+  it('catches a list of three after a colon', () => {
+    expect(htl4('Nametag builds verification for the moments that matter most: account recovery, help desk resets and high-risk transactions.')).toBe(true);
   });
 });
