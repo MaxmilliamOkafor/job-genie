@@ -55,7 +55,7 @@ function heldTitle(x: string, experience: any[]): boolean {
 export function unsupportedClaims(text: string, experience: any[], profileText: string): string[] {
   const out: string[] = [];
   const s = String(text || "");
-  for (const m of s.matchAll(/\bas an? ([A-Z][^,.;]*?)(?=\s+(?:at|with|for|in|on|who|I)\b|[,.;]|$)/g)) {
+  for (const m of s.matchAll(/\b[Aa]s an? ([A-Z][^,.;]*?)(?=\s+(?:at|with|for|in|on|who|I)\b|[,.;]|$)/g)) {
     const title = m[1].trim();
     if (!/\b(citizen|national)\b/i.test(title) && !heldTitle(title, experience)) out.push(`claims the title "${title}", which the profile does not show`);
   }
