@@ -257,7 +257,7 @@ describe('cover letter slots', () => {
 
   it('copy limit is 12 words in a row, so a close retelling of the line passes', () => {
     expect(COPY_RUN).toBe(12);
-    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls', 'Meta');
+    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services', 'Meta');
     expect(copiesRun(t, ctx.cvText.split('\n'))).toBe(false);
     expect(checkResult(t, bullets[0], ctx)).toEqual([]);
     expect(copiesRun('At Meta, I cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services.', ctx.cvText.split('\n'))).toBe(true);
@@ -325,7 +325,7 @@ describe('cover letter slots', () => {
     const calls: string[] = [];
     const replies = [
       JSON.stringify({ results: [
-        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls' },
+        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services' },
         { line: 2, clause: 'transformed everything with Terraform at a bank' },
       ], companyFact: 'Nametag is building identity verification for account recovery.', why: 'This connects to my experience.' }),
       JSON.stringify({ results: [
@@ -389,5 +389,43 @@ describe('why adds nothing new', () => {
     expect(checkWhy2('Eucalyptus builds direct-to-patient brands helping thousands of patients access healthcare treatment, which requires security architecture.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx).join()).toContain('repeats the company fact');
     expect(checkWhy2('Patients need strong governance, budgets and leadership, as patient data does.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx).join()).toContain('adds claims');
     expect(checkWhy2('Patient access to treatment depends on patient data, which I defined requirements for.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx)).toEqual([]);
+  });
+});
+
+import { rankLines as rank2, checkAgainstBullet as cab2, profileBullets as pb2 } from '../supabase/functions/tailor-application/letterSlots';
+describe('ranking and numbers', () => {
+  const lines = pb2([
+    { company: 'Citigroup', bullets: ['Led the analysis behind the IFRS 9 staging criteria review across four years of loan data'] },
+    { company: 'SolimHealth', bullets: ['Owned the product roadmap and ran user research for every release of the clinician app'] },
+    { company: 'Meta', bullets: ['Delivered ranking model improvements in Python and PyTorch for the ads platform'] },
+  ]);
+  it('ranks by the top three requirements and the role title, not shared posting words', () => {
+    const desc = 'loan data analysis review staging criteria years models ranking platform python';
+    const r = rank2(lines, ['Figma', 'user research', 'prototyping'], desc, '', 'Senior Product Designer');
+    expect(r[0].company).toBe('SolimHealth');
+  });
+  it('keeps every number from the source line exactly', () => {
+    const b = pb2([{ company: 'Accenture', bullets: ['Led the security architecture for a regulated client and closed all but three gaps found in their ISO 27001 pre-audit'] }])[0];
+    expect(cab2('At Accenture, I led the security architecture for a regulated client, closing nearly all gaps found in their ISO 27001 pre-audit.', b, []).join()).toContain('drops the number "three"');
+    expect(cab2('At Accenture, I led the security architecture for a regulated client, closing all but three gaps found in their ISO 27001 pre-audit.', b, [])).toEqual([]);
+  });
+});
+
+import { buildSlotLetter as bsl2, profileBullets as pb3 } from '../supabase/functions/tailor-application/letterSlots';
+describe('best line gets a second attempt', () => {
+  it('asks again for the top-ranked line after it failed once', async () => {
+    const experience = [
+      { company: 'SolimHealth', bullets: ['Owned the product roadmap and ran user research for every release of the clinician app across forty clinics'] },
+      { company: 'Meta', bullets: ['Delivered ranking model improvements in Python for the ads platform'] },
+    ];
+    const ctx: any = { experience, bullets: pb3(experience), company: 'Eucalyptus', story: '', cvText: 'Owned the product roadmap and ran user research for every release of the clinician app across forty clinics', description: 'Eucalyptus is a digital health company.', tools: [], profileText: '', requirements: ['user research', 'product roadmap', 'design'] };
+    const calls: string[] = [];
+    const replies = [
+      JSON.stringify({ opening: { line: 1, clause: 'owned the product roadmap and ran user research for every release of the clinician app across forty clinics' }, results: [] }),
+      JSON.stringify({ results: [{ line: 1, clause: 'ran user research and owned the roadmap for each clinician app release, used across forty clinics' }] }),
+    ];
+    const out = await bsl2({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Product Designer', company: 'Eucalyptus', rightToWork: '', notice: '', signOff: 'Kind regards,', employers: ['SolimHealth', 'Meta'] }, ctx, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; });
+    expect(calls[1]).toContain('1. [SolimHealth]');
+    expect(out!.parts.opening).toContain('At SolimHealth, I ran user research');
   });
 });
