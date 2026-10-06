@@ -317,7 +317,10 @@ export function bestByEmployer(ranked: ProfileBullet[], skip: Set<string>, exclu
   return out;
 }
 
-const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => `${b.n}. [${b.company}] ${b.text}`).join("\n");
+const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => {
+  const nums = [...new Set(numberEntries(b.text).map(([, shown]) => shown))];
+  return `${b.n}. [${b.company}] ${b.text}${nums.length ? ` (keep these numbers exactly: ${nums.join(", ")})` : ""}`;
+}).join("\n");
 
 /** "AI" and "NLP", never the long forms. */
 export const shortForms = (s: string) => String(s || "")
@@ -472,7 +475,6 @@ export async function buildSlotLetter(
   const failedLines = new Set<number>();
   const attempts = new Map<number, number>();
   const notes: string[] = [];
-  const usedEmployers = new Set<string>();
   const chosen: { n: number; text: string }[] = [];
   let opening: { n: number; text: string } | undefined;
   let openingLine: ProfileBullet | undefined = ctx.story ? undefined : ranked[0];
@@ -483,7 +485,7 @@ export async function buildSlotLetter(
   const tryResult = (p: Pick, allowed: Set<number>) => {
     if (!allowed.has(p.line) || chosen.length >= 3) return;
     const b = byN.get(p.line);
-    if (!b || usedEmployers.has(b.company)) return;
+    if (!b || resultEmployers.has(b.company) || b.n === opening?.n || b.n === openingLine?.n) return;
     record(p.line);
     const text = composeResult(shortForms(p.clause), b.company);
     const f = checkResult(text, b, ctx);
@@ -491,7 +493,7 @@ export async function buildSlotLetter(
     if (f.length) { log(`result line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return; }
     failedLines.add(p.line);
     chosen.push({ n: p.line, text });
-    usedEmployers.add(b.company);
+    resultEmployers.add(b.company);
   };
 
   const tryOpening = (o: OpeningPick | null) => {
@@ -500,11 +502,15 @@ export async function buildSlotLetter(
     const b = openingLine;
     const text = composeOpening(o, b.company);
     const f = [...checkResult(text, b, ctx)];
-    for (const s of text.split(/(?<=[.!?])\s+/)) if (hasTripleList(s) && lists() >= 1) f.push("uses a list of three; the letter already has one");
+    // The problem sentence states only what the line says.
+    if (overlap(o.problem, b.text) < 0.6) f.push(`states a problem that line ${b.n} does not describe`);
     if (/\bI am applying\b/i.test(text)) f.push('opens with "I am applying"');
     if (f.length) { log(`opening line ${o.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`)); return; }
     opening = { n: o.line, text };
-    usedEmployers.add(b.company);
+    // The opening wins a list of three; a result that also uses one is replaced.
+    if (hasTripleList(text) || ctx.story && hasTripleList(ctx.story)) {
+      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); resultEmployers.delete(byN.get(chosen[i].n)!.company); chosen.splice(i, 1); }
+    }
   };
 
   const factFails = (x: string) => {
@@ -515,8 +521,8 @@ export async function buildSlotLetter(
   };
 
   // First request: the opening line (no story) and the three best lines from other employers.
-  const skip = new Set<string>(openingLine ? [openingLine.company] : []);
-  let resultLines = bestByEmployer(ranked, skip).slice(0, 3);
+  const resultEmployers = new Set<string>();
+  let resultLines = bestByEmployer(ranked, new Set(), new Set(openingLine ? [openingLine.n] : [])).slice(0, 3);
   const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, openingLine, resultLines, description: ctx.description, story: ctx.story }));
   if (raw == null) return null;
   let rawObj: any = {};
@@ -537,11 +543,11 @@ export async function buildSlotLetter(
   // Replacement rounds: the same line once more, then the next best line from an unused employer.
   for (let round = 0; round < 3; round++) {
     if (!opening && openingLine && failedLines.has(openingLine.n)) {
-      openingLine = bestByEmployer(ranked, new Set([...usedEmployers]), failedLines)[0];
+      openingLine = ranked.find((b) => !failedLines.has(b.n) && !chosen.some((c) => c.n === b.n));
     }
     const needOpening = !ctx.story && !opening && !!openingLine;
-    const reserve = new Set<string>([...usedEmployers, ...(needOpening && openingLine ? [openingLine.company] : [])]);
-    resultLines = chosen.length < 3 ? bestByEmployer(ranked, reserve, failedLines).slice(0, 3 - chosen.length + 1) : [];
+    const exclude = new Set<number>([...failedLines, ...(openingLine ? [openingLine.n] : []), ...(opening ? [opening.n] : [])]);
+    resultLines = chosen.length < 3 ? bestByEmployer(ranked, resultEmployers, exclude).slice(0, 3 - chosen.length + 1) : [];
     if (!needOpening && !resultLines.length && companyFact && why) break;
     if (!needOpening && chosen.length >= 3 && companyFact && why) break;
     const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
