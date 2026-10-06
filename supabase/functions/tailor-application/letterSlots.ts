@@ -291,7 +291,7 @@ const ROLE_TERMS: [RegExp, string][] = [
   [/customer success|account manag|client|customer|relationship/i, "client clients account accounts stakeholder stakeholders presented presenting presentation executive executives cto ctos adoption renewal renewals escalation escalations onboarding trust regulated"],
   [/engineer|developer|programmer|architect/i, "built building build scaled scaling scale reliability reliable performance latency deployed services"],
   [/data|analyst|analytics|scientist/i, "reporting report reports model models pipeline pipelines accuracy analysis"],
-  [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping ship product"],
+  [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping ship live launch launched product"],
   [/security|risk|compliance|audit/i, "audit audits controls control regulated client incident incidents security compliance"],
 ];
 export function roleTerms(role: string): string[] {

@@ -450,3 +450,21 @@ describe('final cover letter round', () => {
     expect(out!.used.join()).not.toMatch(/result\d \(line 5\).*result\d \(line 5\)/);
   });
 });
+
+import { pickResultLines as prl, profileBullets as pb5, lineScore as ls5, rankLines as rk5 } from '../supabase/functions/tailor-application/letterSlots';
+describe('results by fit', () => {
+  it('prefers a strong second line from a used employer over a weak line from a new one', () => {
+    const b = pb5([
+      { company: 'Accenture', bullets: ['Managed three client accounts and presented to client CTOs every quarter', 'Led the security architecture for a regulated client and presented to its executives'] },
+      { company: 'Meta', bullets: ['Built backend services in Python for the ads platform'] },
+    ]);
+    const req = ['client accounts', 'executive presentations', 'regulated clients'], role = 'Senior Customer Success Manager';
+    const r = rk5(b, req, '', '', role);
+    const picks = prl(r, new Set(), new Map(), 2, (x) => ls5(x, req, '', role));
+    expect(picks.map((x) => x.company)).toEqual(['Accenture', 'Accenture']);
+  });
+  it('"product" does not match "produced"', () => {
+    const b = pb5([{ company: 'Meta', bullets: ['Delivered ranking improvements which produced a revenue increase'] }]);
+    expect(ls5(b[0], [], '', 'Senior Product Designer')).toBe(0);
+  });
+});
