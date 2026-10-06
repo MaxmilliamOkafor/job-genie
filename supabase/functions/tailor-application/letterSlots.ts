@@ -270,6 +270,7 @@ export function checkWhy(s: string, fact: string, evidence: string[], ctx: SlotC
   const fails = problem.some((w) => f.has(w) && ev.has(w)) ? [] : ["does not name the same problem as the company fact and the story or a result"];
   if (/\bsimilar(?:ly)? to\b/i.test(s)) fails.push('uses a generic "similar to" link');
   if (copiesRun(s, [fact], 8)) fails.push("repeats the company fact");
+  if (copiesRun(s, [ctx.story, ...evidence].filter(Boolean), 8)) fails.push("repeats the story or a result");
   // Every claim in the link comes from the fact, the story or a used result.
   const known = stemSet([fact, ctx.story, ...evidence].filter(Boolean).join(" "));
   const cw = contentWords(s, [ctx.company]);
@@ -405,6 +406,10 @@ function findList(sentence: string): { parts: string[]; first: number; k: number
     const prevLast = (parts[k - 1].trim().split(/\s+/).pop() || "");
     const cap = (x: string) => /^[A-Z0-9]/.test(x.trim());
     if (k - 1 >= 1 && cap(prevLast) && cap(m[1]) && cap(m[3])) return { parts, first: k - 1, k, conj: m[2], last: m[3] };
+    // Three verb phrases: "led X, authored Y and presented Z".
+    const verb = (x: string) => /^(?:[a-z]+ed|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(x.trim());
+    const prevVerb = /\b(?:[a-z]+ed|built|led|ran|won|cut|made|wrote|drove|grew|set|took|held|owned)\b/i.test(parts[k - 1]);
+    if (k - 1 >= 1 && verb(m[1]) && verb(m[3]) && prevVerb) return { parts, first: k - 1, k, conj: m[2], last: m[3] };
   }
   return null;
 }
@@ -441,7 +446,7 @@ export function slotPrompt(o: { role: string; company: string; requirements: str
   return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
 {${o.openingLine ? `"opening": {"line": ${o.openingLine.n}, "problem": "...", "clause": "..."}, ` : ""}"results": [{"line": N, "clause": "..."}], "companyFact": "...", "why": "..."}
 
-${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one short sentence stating the problem that line ${o.openingLine.n} solved, using only the line's own words; "clause" is what the candidate did and the result, keeping every number the line has.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
+${o.openingLine ? `- "opening" uses line ${o.openingLine.n} as a short work story in two sentences: "problem" is one short sentence stating the problem that line ${o.openingLine.n} solved, built from the line's own nouns (for example "The clinical team needed every release shipped on its committed date."); "clause" is what the candidate did and the result, keeping every number the line has.\n` : ""}- "results": retell exactly these lines, one each: ${o.resultLines.map((b) => b.n).join(", ")}.
 - ${FACT_RULE(o.company)}
 - "why": one sentence linking companyFact to ${o.story ? "the opening story" : "a result"} by naming the same problem. Name only facts that are in the story or result itself. Never a generic link such as "connects to my experience" or "similar to".
 
@@ -582,7 +587,7 @@ export async function buildSlotLetter(
     const text = composeOpening(o, b.company);
     const f = [...checkResult(text, { ...b, text: shortForms(b.text) }, ctx)];
     // The problem sentence states only what the line says.
-    if (problemOverlap(o.problem, b.text) < 0.75) f.push(`states a problem that line ${b.n} does not describe`);
+    if (problemOverlap(o.problem, b.text) < 0.6) f.push(`states a problem that line ${b.n} does not describe`);
     if (/\bI am applying\b/i.test(text)) f.push('opens with "I am applying"');
     if (f.length) { log(`opening line ${o.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`)); return; }
     opening = { n: o.line, text };
@@ -652,6 +657,8 @@ export async function buildSlotLetter(
     if (fb) { companyFact = shortForms(fb); log("companyFact taken word for word from the posting"); }
   }
   if (why && whyFails(why).length) why = "";
+  // No opening passed its checks: the best checked result opens the letter instead.
+  if (!ctx.story && !opening && chosen.length >= 2) { opening = chosen.shift(); log(`opening taken from result line ${opening!.n}`); }
   if (companyFact && hasTripleList(companyFact) && lists() >= 1) companyFact = trimList(companyFact);
   const final: LetterParts = { ...base, opening: opening?.text, results: chosen.map((c) => c.text), companyFact: companyFact || undefined, why: why || undefined };
   const used = [
