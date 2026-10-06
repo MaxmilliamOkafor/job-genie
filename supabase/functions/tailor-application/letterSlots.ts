@@ -283,9 +283,9 @@ export function rankLines(bullets: ProfileBullet[], requirements: string[], desc
 
 const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => `${b.n}. [${b.company}] ${b.text}`).join("\n");
 
-const CLAUSE_RULES = `Each "clause" retells ONE numbered line as what the candidate did, starting with a past-tense verb, without "I" and without the employer's name (code adds "At {Employer}, I"). 18 to 30 words.
+const CLAUSE_RULES = `Each "clause" retells ONE numbered line in your own word order as what the candidate did, starting with a past-tense verb, without "I" and without the employer's name (code adds "At {Employer}, I"). 18 to 30 words.
 - Keep the line's own words and facts: at least 60% of the clause's words must come from that line. Add no number, tool or claim the line does not have. Never add: ${NO_ADD_WORDS.join(", ")}, unless the line has the word.
-- Never copy ${COPY_RUN} or more words in a row from the line.
+- Never copy ${COPY_RUN} or more words in a row from the line: reorder it or split it after a comma.
 - Never use: ${SLOT_BANNED.map((b) => `"${b}"`).join(", ")}, and never "I am eager/excited/thrilled/keen/delighted to apply".
 - No dashes as pauses.`;
 
@@ -423,11 +423,14 @@ export async function buildSlotLetter(
   const needMore = () => chosen.length < 2 || (chosen.length < 3 && bodyWords(parts()) < LETTER_WORD_FLOOR);
 
   // Up to two replacement rounds: next best lines from employers not yet used.
-  for (let round = 0; round < 2 && (needMore() || (!ctx.story && !opening) || !companyFact || !why); round++) {
+  for (let round = 0; round < 3 && (needMore() || (!ctx.story && !opening) || !companyFact || !why); round++) {
     const fresh = lines.filter((b) => !tried.has(b.n) && !usedEmployers.has(b.company));
     const want: ProfileBullet[] = [];
-    for (const b of fresh) if (!want.some((w) => w.company === b.company) && want.length < 4) want.push(b);
+    // Up to two untried lines per unused employer, best first.
+    for (const b of fresh) if (want.filter((w) => w.company === b.company).length < 2 && want.length < 6) want.push(b);
+    if (!want.length && !companyFact) break;
     if (!want.length && companyFact && why) break;
+    if (!needMore() && (ctx.story || opening) && companyFact && round > 0) break;
     const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
     const r2 = await ask(replacementPrompt(want, [...new Set(notes)].slice(0, 6), !companyFact, wantWhy, ctx.company));
     const rep = r2 ? parseReply(r2) : { results: [] as Pick[] };
