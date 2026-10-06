@@ -374,27 +374,39 @@ export function trimList(sentence: string): string {
     const head = String(sentence).slice(0, cut).trim();
     if (head.split(/\s+/).length >= 6 && !hasTripleList(head)) return `${head}.`;
   }
-  // Items are short comma segments ending in "X and Y"; keep the first item and the last.
-  const parts = String(sentence).split(/,\s+/);
-  const words = (x: string) => x.trim().split(/\s+/).length;
-  for (let k = parts.length - 1; k > 0; k--) {
-    const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+)$/);
-    if (!m || words(m[1]) > 4) continue;
-    let i = k - 1;
-    while (i > 0 && words(parts[i - 1]) <= 4) i--;
-    if (words(parts[i]) > 5) i++;
-    if (k - i < 1 || i >= k) continue;
-    const tail = m[3];
-    const merged = `${parts[i]} ${m[2]} ${tail}`;
-    return [...parts.slice(0, i), merged, ...parts.slice(k + 1)].join(", ");
-  }
-  return sentence;
+  const f = findList(sentence);
+  if (!f) return sentence;
+  const m = f.parts[f.k].match(/^(.{1,40}?)\s+(and|or)\s+(.+)$/)!;
+  // Keep the first item and the last one; drop the middle items.
+  const merged = `${f.parts[f.first]} ${m[2]} ${m[3]}`;
+  return [...f.parts.slice(0, f.first), merged, ...f.parts.slice(f.k + 1)].join(", ");
 }
 
 /** True when the sentence uses a list of three or more ("A, B and C"). The "At X, I" lead is ignored. */
 export function hasTripleList(sentence: string): boolean {
-  const t = String(sentence || "").replace(/^At [^,]{1,40},\s*/, "");
-  return /(?:^|[\s(])[^,.;:]{1,40},\s+[^,.;:]{1,40},?\s+(?:and|or)\s+\w/.test(t);
+  return !!findList(sentence);
+}
+
+/**
+ * Finds a list of three or more in comma segments: short middle items, then
+ * "X and Y". With no middle item it only counts when the items are names
+ * ("React, TypeScript and GraphQL").
+ */
+function findList(sentence: string): { parts: string[]; first: number; k: number; conj: string; last: string } | null {
+  const parts = String(sentence || "").split(/,\s+/);
+  const words = (x: string) => x.trim().split(/\s+/).length;
+  for (let k = parts.length - 1; k >= 1; k--) {
+    const m = parts[k].match(/^(.{1,40}?)\s+(and|or)\s+(.+?)[.!?]?$/);
+    if (!m || words(m[1]) > 4) continue;
+    let i = k;
+    while (i - 1 >= 1 && words(parts[i - 1]) <= 4) i--;
+    const middle = k - i;
+    if (middle >= 1) return { parts, first: middle >= 2 ? i : i - 1, k, conj: m[2], last: m[3].split(/\s+/).slice(0, 4).join(" ") === m[3] ? m[3] : m[3] };
+    const prevLast = (parts[k - 1].trim().split(/\s+/).pop() || "");
+    const cap = (x: string) => /^[A-Z0-9]/.test(x.trim());
+    if (k - 1 >= 1 && cap(prevLast) && cap(m[1]) && cap(m[3])) return { parts, first: k - 1, k, conj: m[2], last: m[3] };
+  }
+  return null;
 }
 
 const BOAST = [
