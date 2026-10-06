@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { assembleLetter, checkSlots, parseSlots, profileTextOf, rightToWorkSentence, slotPrompt, slotRetryPrompt, type SlotName, type Slots } from "./letterSlots.ts";
+import { assembleLetter, profileBullets, checkSlots, parseSlots, profileTextOf, rightToWorkSentence, slotPrompt, slotRetryPrompt, type SlotName, type Slots } from "./letterSlots.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -4862,14 +4862,18 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     let slotLetterBuilt = false;
     {
       const story = String(userProfile.openingStory || "").trim();
+      const slotBullets = profileBullets(userProfile.professionalExperience || []);
       const slotCtx = {
         experience: userProfile.professionalExperience || [],
+        bullets: slotBullets,
+        company,
+        story,
         cvText: String(result.tailoredResume || ""),
         description: String(description || ""),
         tools: letterToolList(userProfile.skills || [], jdKeywords.allKeywords),
         profileText: profileTextOf(userProfile),
       };
-      const basePrompt = slotPrompt({ role: jobTitle, company, requirements: topRequirements, experience: slotCtx.experience, description: slotCtx.description, story });
+      const basePrompt = slotPrompt({ role: jobTitle, company, requirements: topRequirements, bullets: slotBullets, description: slotCtx.description, story });
       const askSlots = async (prompt: string): Promise<Slots | null> => {
         try {
           const r = await fetch(apiConfig.endpoint, {
@@ -4897,14 +4901,15 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
       if (first && Object.keys(first).length) {
         const slots: Slots = { ...first };
         if (story) delete slots.opening;
-        let failed = checkSlots(slots, slotCtx, story);
+        let failed = checkSlots(slots, slotCtx);
         if (Object.keys(failed).length) {
           console.log(`[COVER LETTER SLOTS] Failed: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
           const retry = await askSlots(slotRetryPrompt(basePrompt, slots, failed));
           for (const k of Object.keys(failed) as SlotName[]) {
-            if (retry?.[k]) slots[k] = retry[k]; else delete slots[k];
+            const bk = `${k}Bullet` as "result1Bullet";
+            if (retry?.[k]) { slots[k] = retry[k]; if (retry[bk]) slots[bk] = retry[bk]; } else delete slots[k];
           }
-          failed = checkSlots(slots, slotCtx, story);
+          failed = checkSlots(slots, slotCtx);
           for (const k of Object.keys(failed) as SlotName[]) delete slots[k];
           if (Object.keys(failed).length) console.log(`[COVER LETTER SLOTS] Dropped after retry: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
         }
@@ -4917,6 +4922,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
           rightToWork: rightToWorkSentence(userProfile.citizenship || "", userProfile.workAuthorizedCountries || [], location || ""),
           notice: userProfile.noticePeriod || "",
           signOff: letterSignOff(location || ""),
+          employers: slotBullets.map((b) => b.company),
         });
         slotLetterBuilt = true;
         console.log(`[COVER LETTER SLOTS] Used: ${Object.keys(slots).join(", ") || "none"}; ${wordCount(result.tailoredCoverLetter)} words`);

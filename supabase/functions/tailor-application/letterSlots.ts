@@ -269,10 +269,10 @@ export function orderResults(results: string[], before: string, employers: strin
     const a = employerOf(s, employers), b = employerOf(prev, employers);
     return !a || a !== b;
   });
-  for (let k = results.length; k > 0; k--) {
-    const subsets = results.length === k ? [results] : results.flatMap((_, i) => [results.filter((__, j) => j !== i)]).filter((x) => x.length === k);
-    for (const sub of subsets) for (const p of perms(sub)) if (ok(p)) return p;
-  }
+  const subsets: string[][] = [];
+  for (let m = (1 << results.length) - 1; m > 0; m--) subsets.push(results.filter((_, i) => m & (1 << i)));
+  subsets.sort((a, b) => b.length - a.length);
+  for (const sub of subsets) for (const p of perms(sub)) if (ok(p)) return p;
   return [];
 }
 
