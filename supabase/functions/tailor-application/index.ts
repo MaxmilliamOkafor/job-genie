@@ -32,7 +32,8 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { assembleLetter, checkSlots, parseSlots, profileTextOf, rightToWorkSentence, slotPrompt, slotRetryPrompt, type SlotName, type Slots } from "./letterSlots.ts";
+import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -4912,8 +4913,76 @@ ${
       }
     }
 
+    // COVER LETTER FROM CHECKED SLOTS. The model writes short slots; code checks
+    // each against the profile, the CV and the posting, then assembles the letter.
+    let slotLetterBuilt = false;
+    {
+      const story = String(userProfile.openingStory || "").trim();
+      const slotCtx = {
+        experience: userProfile.professionalExperience || [],
+        cvText: String(result.tailoredResume || ""),
+        description: String(description || ""),
+        tools: letterToolList(userProfile.skills || [], jdKeywords.allKeywords),
+        profileText: profileTextOf(userProfile),
+      };
+      const basePrompt = slotPrompt({ role: jobTitle, company, requirements: topRequirements, experience: slotCtx.experience, description: slotCtx.description, story });
+      const askSlots = async (prompt: string): Promise<Slots | null> => {
+        try {
+          const r = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              max_tokens: 1200,
+              temperature: apiConfig.temperature,
+              messages: [
+                { role: "system", content: "You write cover-letter slots as JSON. Never add a fact, number or tool the profile does not show. No em dashes." },
+                { role: "user", content: prompt },
+              ],
+            }),
+          });
+          if (!r.ok) { console.log(`[COVER LETTER SLOTS] Request failed: ${r.status}`); return null; }
+          const d = JSON.parse(await r.text());
+          return parseSlots(String(d.choices?.[0]?.message?.content || ""));
+        } catch (e) {
+          console.log(`[COVER LETTER SLOTS] Error: ${e instanceof Error ? e.message : String(e)}`);
+          return null;
+        }
+      };
+      const first = await askSlots(basePrompt);
+      if (first && Object.keys(first).length) {
+        const slots: Slots = { ...first };
+        if (story) delete slots.opening;
+        let failed = checkSlots(slots, slotCtx, story);
+        if (Object.keys(failed).length) {
+          console.log(`[COVER LETTER SLOTS] Failed: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
+          const retry = await askSlots(slotRetryPrompt(basePrompt, slots, failed));
+          for (const k of Object.keys(failed) as SlotName[]) {
+            if (retry?.[k]) slots[k] = retry[k]; else delete slots[k];
+          }
+          failed = checkSlots(slots, slotCtx, story);
+          for (const k of Object.keys(failed) as SlotName[]) delete slots[k];
+          if (Object.keys(failed).length) console.log(`[COVER LETTER SLOTS] Dropped after retry: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
+        }
+        if (!slots.companyFact) delete slots.why;
+        result.tailoredCoverLetter = assembleLetter({
+          name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
+          contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
+          greeting: "Dear Hiring Team,",
+          story, role: jobTitle, company, slots,
+          rightToWork: rightToWorkSentence(userProfile.citizenship || "", userProfile.workAuthorizedCountries || [], location || ""),
+          notice: userProfile.noticePeriod || "",
+          signOff: letterSignOff(location || ""),
+        });
+        slotLetterBuilt = true;
+        console.log(`[COVER LETTER SLOTS] Used: ${Object.keys(slots).join(", ") || "none"}; ${wordCount(result.tailoredCoverLetter)} words`);
+      } else {
+        console.log("[COVER LETTER SLOTS] No slots returned; kept the full draft letter");
+      }
+    }
+
     // COVER LETTER CHECK: employer named outside the greeting, 2 of 3 requirements. One retry at most.
-    if (result.tailoredCoverLetter) {
+    if (!slotLetterBuilt && result.tailoredCoverLetter) {
       const firstFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements);
       if (firstFailed.length) {
         console.log(`[COVER LETTER CHECK] Failed: ${firstFailed.join(" | ")}`);
@@ -4954,7 +5023,7 @@ ${
       }
     }
     // COVER LETTER LENGTH: over 280 words gets one request to shorten to 200 to 280.
-    if (result.tailoredCoverLetter && wordCount(result.tailoredCoverLetter) > 280) {
+    if (!slotLetterBuilt && result.tailoredCoverLetter && wordCount(result.tailoredCoverLetter) > 280) {
       const before = wordCount(result.tailoredCoverLetter);
       const currentFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements).length;
       try {
@@ -4993,7 +5062,7 @@ ${
         console.log(`[COVER LETTER LENGTH] Shorten error: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    if (result.tailoredCoverLetter) {
+    if (!slotLetterBuilt && result.tailoredCoverLetter) {
       // Every CV line counts: no run of 8 or more words may match the tailored CV.
       const letterBullets = String(result.tailoredResume || "").split("\n").map((l: string) => l.match(/^\s*[•*\-▪·]\s+(.*)$/)?.[1] || l.trim()).filter(Boolean);
       // Sentences copying a CV bullet are reworded in one extra request, never deleted.
