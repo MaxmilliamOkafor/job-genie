@@ -397,12 +397,12 @@ describe('final cover letter round', () => {
   });
 
   it('opening problem sentence uses only words from its line, and only when the line states a problem', async () => {
-    const exp = [...experience, { company: 'Northwind', title: 'Analyst', bullets: ['Automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter'] }];
+    const exp = [{ company: 'Northwind', title: 'Analyst', bullets: ['Automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter'] }];
     const c2 = { ...ctx, experience: exp, bullets: pb4(exp), requirements: ['client accounts', 'deadline', 'submissions'] };
-    const good = JSON.stringify({ opening: { line: 7, problem: 'Three submissions had been late in a single year.' }, results: [] });
+    const good = JSON.stringify({ opening: { line: 1, problem: 'Three submissions had been late in a single year.' }, results: [] });
     const o1 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => good);
     expect(o1!.parts.opening).toBe('Three submissions had been late in a single year. At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
-    const bad = JSON.stringify({ opening: { line: 7, problem: 'The client struggled with chaotic reporting.' }, results: [] });
+    const bad = JSON.stringify({ opening: { line: 1, problem: 'The client struggled with chaotic reporting.' }, results: [] });
     const o2 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => bad);
     expect(o2!.parts.opening).toBe('At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
     expect(o2!.parts.opening).not.toContain('I am applying');
