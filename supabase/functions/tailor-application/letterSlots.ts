@@ -123,6 +123,17 @@ export function bannedIn(text: string): string[] {
   return [...words, ...pats];
 }
 
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000, million: 1000000, billion: 1000000000, half: 0.5, twice: 2 };
+
+/** Every number in a text (digits or words), as [value, as written]. "all but three" gives ["3", "three"]. */
+export function numberEntries(text: string): [string, string][] {
+  const out: [string, string][] = [];
+  for (const m of String(text || "").matchAll(/\d+(?:[.,]\d+)*/g)) out.push([m[0].replace(/,/g, ""), m[0]]);
+  for (const m of String(text || "").toLowerCase().matchAll(/\b[a-z]+\b/g)) if (m[0] in NUMBER_WORDS) out.push([String(NUMBER_WORDS[m[0]]), m[0]]);
+  return out;
+}
+const numberValues = (text: string) => numberEntries(text).map(([v]) => v);
+
 /** Checks a result slot against the numbered profile line it says it used. */
 export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefined, tools: string[]): string[] {
   if (!bullet) return ["does not name a valid profile line number"];
@@ -134,6 +145,8 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   if (words.length && found.length / words.length < 0.6) fails.push(`shares only ${Math.round((found.length / words.length) * 100)}% of its words with line ${bullet.n} (needs 60%)`);
   const bFlat = flat(bullet.text);
   for (const n of numbersIn(text)) if (!bFlat.includes(n.toLowerCase())) fails.push(`adds the number ${n}, which line ${bullet.n} does not have`);
+  const kept = new Set(numberValues(text));
+  for (const [v, shown] of numberEntries(bullet.text)) if (!kept.has(v)) fails.push(`drops the number "${shown}" from line ${bullet.n}`);
   for (const tool of tools) if (has(text, tool) && !has(bullet.text, tool)) fails.push(`adds ${tool}, which line ${bullet.n} does not name`);
   for (const w of NO_ADD_WORDS) {
     const root = stem(w).slice(0, 5);
@@ -272,11 +285,28 @@ export function factFromPosting(description: string, company: string): string {
 }
 
 /** Lines ranked by how many requirement and posting words they share; the story line is never offered. */
-export function rankLines(bullets: ProfileBullet[], requirements: string[], description: string, story: string): ProfileBullet[] {
-  const req = stemSet(requirements.join(" ")), desc = stemSet(description);
+// Words that describe the work of a role family, matched on the role title.
+const ROLE_TERMS: [RegExp, string][] = [
+  [/design|ux|ui\b/i, "design designed designing user users research usability prototype prototyping product roadmap interface interaction journey"],
+  [/product manager|product owner|product lead/i, "product roadmap users requirements research discovery prioritisation launch customers"],
+  [/engineer|developer|programmer/i, "built engineering code software services platform deployed tooling performance"],
+  [/data|analyst|scientist/i, "data analysis model models analytics sql reporting insight"],
+  [/security|risk|compliance/i, "security risk compliance audit controls governance"],
+];
+export function roleTerms(role: string): string[] {
+  return ROLE_TERMS.filter(([re]) => re.test(role)).flatMap(([, w]) => w.split(" ")).concat(contentWords(role));
+}
+
+/**
+ * Lines ranked by match with the job's top three requirements and the role title
+ * (for a designer: design, users, research, product, roadmap). Shared posting
+ * words only break ties. The story line is never offered.
+ */
+export function rankLines(bullets: ProfileBullet[], requirements: string[], description: string, story: string, role = ""): ProfileBullet[] {
+  const req = stemSet(requirements.slice(0, 3).join(" ")), roleSet = new Set(roleTerms(role).map(stem)), desc = stemSet(description);
   const score = (b: ProfileBullet) => {
     const w = [...stemSet(b.text)];
-    return w.filter((x) => req.has(x)).length * 3 + w.filter((x) => desc.has(x)).length + (/\d/.test(b.text) ? 2 : 0);
+    return w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.25 + (/\d/.test(b.text) ? 0.5 : 0);
   };
   return bullets.filter((b) => !isStoryLine(b, story)).map((b) => ({ b, s: score(b) })).sort((a, z) => z.s - a.s).map((x) => x.b);
 }
@@ -284,6 +314,7 @@ export function rankLines(bullets: ProfileBullet[], requirements: string[], desc
 const lineList = (bullets: ProfileBullet[]) => bullets.map((b) => `${b.n}. [${b.company}] ${b.text}`).join("\n");
 
 const CLAUSE_RULES = `Each "clause" retells ONE numbered line in your own word order as what the candidate did, starting with a past-tense verb, without "I" and without the employer's name (code adds "At {Employer}, I"). 18 to 30 words.
+- Keep every number from the line exactly as written ("all but three gaps", never "nearly all gaps").
 - Keep the line's own words and facts: at least 60% of the clause's words must come from that line. Add no number, tool or claim the line does not have. Never add: ${NO_ADD_WORDS.join(", ")}, unless the line has the word.
 - Never copy ${COPY_RUN} or more words in a row from the line: reorder it or split it after a comma.
 - Never use: ${SLOT_BANNED.map((b) => `"${b}"`).join(", ")}, and never "I am eager/excited/thrilled/keen/delighted to apply".
@@ -293,7 +324,8 @@ export function slotPrompt(o: { role: string; company: string; requirements: str
   return `Write parts of a cover letter for the ${o.role} role at ${o.company}. Return one JSON object and nothing else:
 {${o.story ? "" : `"opening": {"line": N, "clause": "..."}, `}"results": [{"line": N, "clause": "..."}, ...], "companyFact": "...", "why": "..."}
 
-${o.story ? "" : `- "opening": the candidate's strongest line for the job's top requirement (${o.requirements[0] || "the main requirement"}).\n`}- "results": four lines ranked best first, each from a DIFFERENT employer${o.story ? "" : " and different from the opening's employer"}, matching: ${o.requirements.join("; ")}.
+${o.story ? "" : `- "opening": the candidate's strongest line for the job's top requirement (${o.requirements[0] || "the main requirement"}).\n`}- Lines are listed best match first for this role and its top requirements; prefer the earliest.
+- "results": four lines ranked best first, each from a DIFFERENT employer${o.story ? "" : " and different from the opening's employer"}, matching: ${o.requirements.join("; ")}.
 - "companyFact": one plain sentence starting with "${o.company}" saying what the company does, using only words from the job description, as a full grammatical sentence with its punctuation. No quotation marks.
 - "why": one sentence linking companyFact to ${o.story ? "the opening story" : "a result"} by naming the same problem (for example identity, fraud, patients). Name only facts that are in the story or result itself. Never a generic link such as "connects to my experience" or "similar to".
 
@@ -379,9 +411,9 @@ export async function buildSlotLetter(
   ask: (prompt: string) => Promise<string | null>,
   log: (m: string) => void = () => {},
 ): Promise<{ letter: string; parts: LetterParts; used: string[] } | null> {
-  const lines = rankLines(ctx.bullets, ctx.requirements, ctx.description, ctx.story);
+  const lines = rankLines(ctx.bullets, ctx.requirements, ctx.description, ctx.story, base.role);
   const byN = new Map(ctx.bullets.map((b) => [b.n, b]));
-  const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, lines: ctx.bullets.filter((b) => !isStoryLine(b, ctx.story)), description: ctx.description, story: ctx.story }));
+  const raw = await ask(slotPrompt({ role: base.role, company: ctx.company, requirements: ctx.requirements, lines, description: ctx.description, story: ctx.story }));
   if (raw == null) return null;
   const reply = parseReply(raw);
   const tried = new Set<number>();

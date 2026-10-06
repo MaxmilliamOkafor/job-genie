@@ -391,3 +391,22 @@ describe('why adds nothing new', () => {
     expect(checkWhy2('Patient access to treatment depends on patient data, which I defined requirements for.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx)).toEqual([]);
   });
 });
+
+import { rankLines as rank2, checkAgainstBullet as cab2, profileBullets as pb2 } from '../supabase/functions/tailor-application/letterSlots';
+describe('ranking and numbers', () => {
+  const lines = pb2([
+    { company: 'Citigroup', bullets: ['Led the analysis behind the IFRS 9 staging criteria review across four years of loan data'] },
+    { company: 'SolimHealth', bullets: ['Owned the product roadmap and ran user research for every release of the clinician app'] },
+    { company: 'Meta', bullets: ['Delivered ranking model improvements in Python and PyTorch for the ads platform'] },
+  ]);
+  it('ranks by the top three requirements and the role title, not shared posting words', () => {
+    const desc = 'loan data analysis review staging criteria years models ranking platform python';
+    const r = rank2(lines, ['Figma', 'user research', 'prototyping'], desc, '', 'Senior Product Designer');
+    expect(r[0].company).toBe('SolimHealth');
+  });
+  it('keeps every number from the source line exactly', () => {
+    const b = pb2([{ company: 'Accenture', bullets: ['Led the security architecture for a regulated client and closed all but three gaps found in their ISO 27001 pre-audit'] }])[0];
+    expect(cab2('At Accenture, I led the security architecture for a regulated client, closing nearly all gaps found in their ISO 27001 pre-audit.', b, []).join()).toContain('drops the number "three"');
+    expect(cab2('At Accenture, I led the security architecture for a regulated client, closing all but three gaps found in their ISO 27001 pre-audit.', b, [])).toEqual([]);
+  });
+});
