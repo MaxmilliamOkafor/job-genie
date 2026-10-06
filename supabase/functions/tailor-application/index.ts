@@ -3539,6 +3539,9 @@ ${
     let lastRateLimitBody = "";
 
     let response: Response | null = null;
+    // The reply body is read inside the retry loop: a connection that drops
+    // mid-body ("error reading a body from connection") is retried, not a 500.
+    let responseBody = "";
 
     // Determine API endpoint and model based on provider
     const getApiConfig = () => {
@@ -3606,6 +3609,7 @@ ${
         });
 
         if (response.ok) {
+          responseBody = await response.text();
           break; // Success, exit retry loop
         }
 
@@ -3649,6 +3653,8 @@ ${
       } catch (fetchError) {
         console.error(`Fetch error (attempt ${attempt + 1}):`, fetchError);
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        response = null;
+        if (attempt < maxRetries - 1) await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
         if (attempt === maxRetries - 1) {
           throw lastError;
         }
@@ -3673,7 +3679,7 @@ ${
       );
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseBody);
     const content = data.choices?.[0]?.message?.content;
     const tokensUsed = data.usage?.total_tokens || 0;
 
