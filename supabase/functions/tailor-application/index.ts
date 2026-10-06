@@ -3401,6 +3401,9 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
 2) COVER LETTER: do not write one. Return "tailoredCoverLetter" as an empty string; the letter is built separately.
 
+${
+  includeReferral
+    ? `
 3) CREATE REFERRAL EMAIL:
    Subject: Referral Request - ${jobTitle} at ${company}
    Body: Professional request mentioning specific role
