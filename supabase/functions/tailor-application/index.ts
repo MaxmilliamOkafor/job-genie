@@ -32,7 +32,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { assembleLetter, profileBullets, checkSlots, parseSlots, profileTextOf, rightToWorkSentence, slotPrompt, slotRetryPrompt, type SlotName, type Slots } from "./letterSlots.ts";
+import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -4875,16 +4875,16 @@ ${
         description: String(description || ""),
         tools: letterToolList(userProfile.skills || [], jdKeywords.allKeywords),
         profileText: profileTextOf(userProfile),
+        requirements: topRequirements,
       };
-      const basePrompt = slotPrompt({ role: jobTitle, company, requirements: topRequirements, bullets: slotBullets, description: slotCtx.description, story });
-      const askSlots = async (prompt: string): Promise<Slots | null> => {
+      const askSlots = async (prompt: string): Promise<string | null> => {
         try {
           const r = await fetch(apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: apiConfig.model,
-              max_tokens: 1200,
+              max_tokens: 1500,
               temperature: apiConfig.temperature,
               messages: [
                 { role: "system", content: "You write cover-letter slots as JSON. Never add a fact, number or tool the profile does not show. No em dashes." },
@@ -4894,43 +4894,30 @@ ${
           });
           if (!r.ok) { console.log(`[COVER LETTER SLOTS] Request failed: ${r.status}`); return null; }
           const d = JSON.parse(await r.text());
-          return parseSlots(String(d.choices?.[0]?.message?.content || ""));
+          return String(d.choices?.[0]?.message?.content || "");
         } catch (e) {
           console.log(`[COVER LETTER SLOTS] Error: ${e instanceof Error ? e.message : String(e)}`);
           return null;
         }
       };
-      const first = await askSlots(basePrompt);
-      if (first && Object.keys(first).length) {
-        const slots: Slots = { ...first };
-        if (story) delete slots.opening;
-        let failed = checkSlots(slots, slotCtx);
-        if (Object.keys(failed).length) {
-          console.log(`[COVER LETTER SLOTS] Failed: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
-          const retry = await askSlots(slotRetryPrompt(basePrompt, slots, failed));
-          for (const k of Object.keys(failed) as SlotName[]) {
-            const bk = `${k}Bullet` as "result1Bullet";
-            if (retry?.[k]) { slots[k] = retry[k]; if (retry[bk]) slots[bk] = retry[bk]; } else delete slots[k];
-          }
-          failed = checkSlots(slots, slotCtx);
-          for (const k of Object.keys(failed) as SlotName[]) delete slots[k];
-          if (Object.keys(failed).length) console.log(`[COVER LETTER SLOTS] Dropped after retry: ${Object.entries(failed).map(([k, f]) => `${k} (${(f || []).join("; ")})`).join(" | ")}`);
-        }
-        if (!slots.companyFact) delete slots.why;
-        result.tailoredCoverLetter = assembleLetter({
-          name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
-          contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
-          greeting: "Dear Hiring Team,",
-          story, role: jobTitle, company, slots,
-          rightToWork: rightToWorkSentence(userProfile.citizenship || "", userProfile.workAuthorizedCountries || [], location || ""),
-          notice: userProfile.noticePeriod || "",
-          signOff: letterSignOff(location || ""),
-          employers: slotBullets.map((b) => b.company),
-        });
+      // Right to work only when rightToWorkStatement returns one for this job.
+      const rtwSentence = rightToWork ? rightToWorkSentence(userProfile.citizenship || "", userProfile.workAuthorizedCountries || [], location || "") : "";
+      const built = await buildSlotLetter({
+        name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
+        contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
+        greeting: "Dear Hiring Team,",
+        story, role: jobTitle, company,
+        rightToWork: rtwSentence,
+        notice: userProfile.noticePeriod || "",
+        signOff: letterSignOff(location || ""),
+        employers: [...new Set(slotBullets.map((b) => b.company))],
+      }, slotCtx, askSlots, (m) => console.log(`[COVER LETTER SLOTS] ${m}`));
+      if (built) {
+        result.tailoredCoverLetter = built.letter;
         slotLetterBuilt = true;
-        console.log(`[COVER LETTER SLOTS] Used: ${Object.keys(slots).join(", ") || "none"}; ${wordCount(result.tailoredCoverLetter)} words`);
+        console.log(`[COVER LETTER SLOTS] Used: ${built.used.join(", ") || "none"}; body ${bodyWords(built.parts)} words`);
       } else {
-        console.log("[COVER LETTER SLOTS] No slots returned; kept the full draft letter");
+        console.log("[COVER LETTER SLOTS] No slots returned; no letter written");
       }
     }
 

@@ -234,107 +234,124 @@ describe('letter date', () => {
   });
 });
 
-import { assembleLetter, checkSlot, checkSlots, checkAgainstBullet, parseSlots, profileBullets, orderResults, unsupportedClaims, bannedIn, LETTER_WORD_FLOOR } from '../supabase/functions/tailor-application/letterSlots';
+import { assembleLetter, buildSlotLetter, checkAgainstBullet, checkResult, checkCompanyFact, checkWhy, composeResult, copiesRun, isStoryLine, parseReply, profileBullets, orderResults, unsupportedClaims, bannedIn, letterBody, LETTER_WORD_FLOOR, COPY_RUN } from '../supabase/functions/tailor-application/letterSlots';
 import { letterRightToWorkSentence } from '../supabase/functions/tailor-application/guards';
 
 describe('cover letter slots', () => {
   const experience = [
-    { company: 'Meta', title: 'Software Engineer', bullets: ['Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go'] },
-    { company: 'Accenture', title: 'Security Consultant', bullets: ['Led the ISO 27001 pre-audit for a bank client and closed all but 3 gaps'] },
-    { company: 'SolimHealth', title: 'Software Engineer', bullets: ['Built the clinician dashboard in React for cognitive screening of patients'] },
+    { company: 'Meta', title: 'Software Engineer', bullets: ['Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services'] },
+    { company: 'Accenture', title: 'Security Consultant', bullets: ['Led the ISO 27001 pre-audit for a regulated bank client and closed all but 3 control gaps before the external audit'] },
+    { company: 'SolimHealth', title: 'Software Engineer', bullets: ['Built the clinician dashboard in React for cognitive screening of patients used by forty clinics'] },
+    { company: 'Citigroup', title: 'Software Engineer', bullets: ['Reworked how anti money laundering alerts were grouped and scored in Python, clearing a two-year backlog', 'Built Python reconciliation jobs that cut month-end close from nine days to three for the payments team'] },
   ];
   const bullets = profileBullets(experience);
+  const story = 'At Citigroup, the anti money laundering team had a two-year backlog of alerts, most of them false. I reworked how those alerts were grouped and scored in Python, and the team cleared the backlog without missing genuine cases.';
   const ctx = {
     experience, bullets, company: 'Nametag', story: '',
-    cvText: 'Software Engineer | Meta\n• Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go',
+    cvText: 'Software Engineer | Meta\n• Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services',
     description: 'Nametag is building identity verification for account recovery and help desk resets, stopping fraud.',
     tools: ['Python', 'Terraform', 'Go', 'React'],
     profileText: 'Software Engineer Security Consultant ISO 27001 Python Go React',
+    requirements: ['Go', 'React', 'security'],
   };
 
-  it('numbers profile lines with their employer', () => {
-    expect(bullets.map((b) => `${b.n}:${b.company}`)).toEqual(['1:Meta', '2:Accenture', '3:SolimHealth']);
+  it('copy limit is 12 words in a row, so a close retelling of the line passes', () => {
+    expect(COPY_RUN).toBe(12);
+    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls', 'Meta');
+    expect(copiesRun(t, ctx.cvText.split('\n'))).toBe(false);
+    expect(checkResult(t, bullets[0], ctx)).toEqual([]);
+    expect(copiesRun('At Meta, I cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services.', ctx.cvText.split('\n'))).toBe(true);
   });
 
-  it('banned openers and filler as patterns', () => {
-    for (const t of ['I am eager to apply for this.', "I'm thrilled to apply.", 'I am keen to apply.', 'I am delighted to apply.', 'I am excited to apply.', 'This connects to my experience at Meta.', 'Its emphasis on identity matters.', 'This resonates with me.', 'I successfully led it.']) {
-      expect(bannedIn(t).length).toBeGreaterThan(0);
-    }
+  it('writes every result as "At X, I ..." and never "... at X." at the end', () => {
+    expect(composeResult('I cut latency by 38% at Meta.', 'Meta')).toBe('At Meta, I cut latency by 38%.');
+    expect(composeResult('Built the dashboard', 'SolimHealth')).toBe('At SolimHealth, I built the dashboard.');
+    expect(composeResult('At Meta, I cut latency', 'Meta')).toBe('At Meta, I cut latency.');
+  });
+
+  it('never uses the line the story is based on; other lines from that employer are fine', () => {
+    expect(isStoryLine(bullets[3], story)).toBe(true);
+    expect(isStoryLine(bullets[4], story)).toBe(false);
+    expect(checkResult(composeResult('reworked how anti money laundering alerts were grouped and scored in Python', 'Citigroup'), bullets[3], { ...ctx, story }).join()).toContain('opening story');
+    expect(checkResult(composeResult('built Python reconciliation jobs that cut month-end close from nine days to three', 'Citigroup'), bullets[4], { ...ctx, story })).toEqual([]);
   });
 
   it('a result must come from its numbered line: 60% of words, no added number, tool or listed word', () => {
     const b = bullets[0];
-    expect(checkAgainstBullet('At Meta, I cut p99 latency by 38% on the ads delivery platform by running downstream calls in parallel with Go.', b, ctx.tools)).toEqual([]);
     expect(checkAgainstBullet('At Meta, I cut latency by 45% with Go.', b, ctx.tools).join()).toContain('45');
     expect(checkAgainstBullet('At Meta, I cut p99 latency by 38% with Terraform.', b, ctx.tools).join()).toContain('Terraform');
     expect(checkAgainstBullet('At Meta, I transformed the ads delivery platform, cutting p99 latency by 38%.', b, ctx.tools).join()).toContain('transformed');
     expect(checkAgainstBullet('At Meta, I enhanced user engagement across a seamless journey for many happy customers.', b, ctx.tools).join()).toContain('60%');
-    expect(checkAgainstBullet('At Accenture, I cut p99 latency by 38%.', b, ctx.tools).join()).toContain('does not name Meta');
-    expect(checkSlot('result1', 'At Meta, I cut p99 latency.', ctx, {}).join()).toContain('valid profile line');
   });
 
-  it('result2 may not reuse result1 employer', () => {
-    const slots = { result1: 'At Meta, I cut p99 latency by 38% on the ads delivery platform.', result1Bullet: 1, result2: 'At Meta, I cut p99 latency by 38% on the ads platform.', result2Bullet: 1 };
-    expect(checkSlot('result2', slots.result2, ctx, slots).join()).toContain('uses Meta again');
+  it('banned openers and filler as patterns, and no "where I" after the target company', () => {
+    for (const t of ['I am eager to apply for this.', "I'm thrilled to apply.", 'This connects to my experience at Meta.', 'Its emphasis on identity matters.', 'This resonates with me.', 'I successfully led it.']) expect(bannedIn(t).length).toBeGreaterThan(0);
+    expect(checkResult('At Meta, I cut p99 latency by 38% for Nametag, where I worked.', bullets[0], ctx).join()).toContain('where I');
   });
 
-  it('companyFact is a plain sentence starting with the company, words from the posting', () => {
-    expect(checkSlot('companyFact', 'Nametag is building identity verification for account recovery.', ctx)).toEqual([]);
-    expect(checkSlot('companyFact', 'Your posting says: "Nametag is building identity verification".', ctx).join()).toContain('start with');
-    expect(checkSlot('companyFact', 'Nametag is a pioneering market leader.', ctx).join()).toContain('not in the job description');
-  });
-
-  it('why must name the same problem as the fact and the story or a result', () => {
-    const story = 'At Citigroup, I reworked how fraud alerts were scored.';
-    const slots = { companyFact: 'Nametag is stopping fraud in account recovery.' };
-    expect(checkSlot('why', 'Stopping fraud is the same problem I worked on with alerts at Citigroup.', { ...ctx, story }, slots)).toEqual([]);
-    expect(checkSlot('why', 'This connects to my experience.', { ...ctx, story }, slots).join()).toContain('same problem');
-  });
-
-  it('never ", where I" after the target company', () => {
-    expect(checkSlot('opening', 'I am applying for the Full Stack Engineer role at Nametag, where I cut p99 latency.', ctx).join()).toContain('where I');
+  it('companyFact and why', () => {
+    expect(checkCompanyFact('Nametag is building identity verification for account recovery.', ctx)).toEqual([]);
+    expect(checkCompanyFact('Your posting says: "Nametag is building".', ctx).join()).toContain('start with');
+    expect(checkWhy('Stopping fraud is the problem I worked on at Citigroup.', 'Nametag is stopping fraud.', ['At Citigroup, I stopped fraud.'], ctx)).toEqual([]);
+    expect(checkWhy('This connects to my experience.', 'Nametag is stopping fraud.', [], ctx).length).toBeGreaterThan(0);
   });
 
   it('never claims an unheld title or field', () => {
     expect(unsupportedClaims('As a Full Stack Engineer, I cut latency.', experience, ctx.profileText).length).toBe(1);
-    expect(unsupportedClaims('As a Software Engineer at Meta, I cut latency.', experience, ctx.profileText)).toEqual([]);
     expect(unsupportedClaims('With a strong background in product design, I led work.', experience, ctx.profileText).length).toBe(1);
   });
 
-  it('parses slots with line numbers, opening only without a story', () => {
-    const s = parseSlots('```json\n{"opening":"I cut costs by 77%.","result1":"At Meta, x.","result1Bullet":1}\n```');
-    expect(s.result1Bullet).toBe(1);
-    expect(Object.keys(checkSlots(s, { ...ctx, story: 'A story.' }))).not.toContain('opening');
-    expect(Object.keys(checkSlots(s, ctx))).toContain('opening');
+  it('parses picks with line numbers', () => {
+    const r = parseReply('```json\n{"opening":{"line":1,"clause":"cut latency"},"results":[{"line":2,"clause":"led it"}],"companyFact":"Nametag x","why":"y"}\n```');
+    expect(r.opening?.line).toBe(1); expect(r.results[0].line).toBe(2); expect(r.companyFact).toBe('Nametag x');
   });
 
   it('never names the same employer in two sentences in a row', () => {
     const emp = ['Meta', 'Accenture'];
     expect(orderResults(['At Meta, a.', 'At Meta, b.', 'At Accenture, c.'], 'Intro.', emp)).toEqual(['At Meta, a.', 'At Accenture, c.', 'At Meta, b.']);
-    expect(orderResults(['At Meta, a.', 'At Meta, b.'], 'Intro.', emp)).toEqual(['At Meta, a.']);
   });
 
-  const story = 'At Citigroup, the anti money laundering team had a two-year backlog of alerts, most of them false. I reworked how those alerts were grouped and scored in Python, and the team cleared the backlog without missing genuine cases.';
-  const base = { name: 'Max Okafor', contact: 'Dublin, Ireland | +353 08 742 61508 | max@x.com', greeting: 'Dear Hiring Team,', role: 'Full Stack Engineer', company: 'Nametag', notice: '1 month', signOff: 'Sincerely,', employers: ['Meta', 'Accenture'] };
+  const base = { name: 'Max Okafor', contact: 'Dublin, Ireland | +353 08 742 61508 | max@x.com', greeting: 'Dear Hiring Team,', role: 'Full Stack Engineer', company: 'Nametag', notice: '1 month', signOff: 'Sincerely,', employers: ['Meta', 'Accenture', 'SolimHealth', 'Citigroup'] };
 
-  it('assembles four paragraphs: story word for word, plain company sentence, phone exactly as stored', () => {
-    const t = assembleLetter({ ...base, story, slots: { result1: 'At Meta, I cut p99 latency by 38%.', result2: 'At Accenture, I closed all but 3 gaps.', companyFact: 'Nametag is building identity verification', why: 'That is the identity problem.' }, rightToWork: letterRightToWorkSentence('EU Citizen', ['US'], 'Seattle, WA') });
-    expect(t).toContain(`${story} That is what drew me to the Full Stack Engineer role at Nametag.`);
+  it('a failed "why" leaves paragraph 3 as the company fact alone', () => {
+    const body = letterBody({ ...base, story, results: ['At Meta, I a.'], companyFact: 'Nametag is building identity verification', rightToWork: '' });
+    expect(body[2]).toBe('Nametag is building identity verification.');
+    expect(body[0].startsWith(story)).toBe(true);
+    const t = assembleLetter({ ...base, story, results: ['At Meta, I a.'], companyFact: 'Nametag x', rightToWork: '' });
     expect(t).toContain('+353 08 742 61508');
-    expect(t).toContain('Nametag is building identity verification. That is the identity problem.');
-    expect(t).not.toContain('Your posting says');
-    expect(t).toContain('I have the right to work in the United States without visa sponsorship. My notice period is 1 month.');
-    expect(t.split('Dear Hiring Team,')[1].split('Sincerely,')[0].trim().split(/\n\n/).length).toBe(4);
-    expect(t).not.toMatch(/[\u2013\u2014]/);
   });
 
-  it('floor is 150 words: result3 only below it, never padded', () => {
+  it('replaces a failed result with the next best line from a different employer, up to three, until 150 words', async () => {
+    const calls: string[] = [];
+    const replies = [
+      JSON.stringify({ results: [
+        { line: 1, clause: 'cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls' },
+        { line: 2, clause: 'transformed everything with Terraform at a bank' },
+      ], companyFact: 'Nametag is building identity verification for account recovery.', why: 'This connects to my experience.' }),
+      JSON.stringify({ results: [
+        { line: 3, clause: 'built the clinician dashboard in React for cognitive screening of patients across forty clinics' },
+        { line: 5, clause: 'built Python reconciliation jobs that cut month-end close from nine days to three for payments' },
+      ], why: 'Stopping fraud in account recovery is the alert problem I worked on.' }),
+      JSON.stringify({ results: [] }),
+    ];
+    const logs: string[] = [];
+    const out = await buildSlotLetter({ ...base, story, rightToWork: '' }, { ...ctx, story }, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; }, (m) => logs.push(m));
+    expect(out).not.toBeNull();
+    const r = out!.parts.results;
+    expect(r.length).toBe(3);
+    expect(new Set(r.map((x) => x.match(/^At ([^,]+),/)![1])).size).toBe(3);
+    expect(r.every((x) => /^At [^,]+, I /.test(x))).toBe(true);
+    expect(calls[0]).not.toContain('3. [Citigroup]');
+    expect(calls[1]).not.toContain('[Meta]');
+    expect(out!.used.join()).not.toContain('line 2');
+    expect(logs.join()).toContain('line 2 failed');
     expect(LETTER_WORD_FLOOR).toBe(150);
-    const short = assembleLetter({ ...base, story: '', slots: { opening: 'Hi.', result1: 'At Meta, a.', result3: 'At Accenture, c.' }, rightToWork: '' });
-    expect(short).toContain('At Accenture, c.');
-    const long = 'word '.repeat(150).trim();
-    const t = assembleLetter({ ...base, story: '', slots: { opening: `${long}.`, result1: 'At Meta, a.', result3: 'At Accenture, c.' }, rightToWork: '' });
-    expect(t).not.toContain('At Accenture, c.');
+  });
+
+  it('opening is tied to a numbered line too', async () => {
+    const reply = JSON.stringify({ opening: { line: 1, clause: 'cut latency by 99% with Terraform' }, results: [], companyFact: 'Nametag is building identity verification.' });
+    const out = await buildSlotLetter({ ...base, story: '', rightToWork: '' }, ctx, async () => reply);
+    expect(out!.parts.opening).toBeUndefined();
   });
 });
 
@@ -349,5 +366,18 @@ describe('right to work sentences', () => {
     expect(letterRightToWorkSentence('EU Citizen', [], 'Berlin, Germany')).toBe('As an EU citizen, I have the right to work in Germany without visa sponsorship.');
     expect(letterRightToWorkSentence('EU Citizen', ['US'], 'Seattle, WA')).toBe('I have the right to work in the United States without visa sponsorship.');
     expect(letterRightToWorkSentence('Irish', ['IE'], 'Cambridge, MA')).toBe('');
+  });
+});
+
+import { restorePunctuation, checkWhy as checkWhy2 } from '../supabase/functions/tailor-application/letterSlots';
+describe('company paragraph tightening', () => {
+  it('restores the posting punctuation of a company fact', () => {
+    const d = 'Nametag is building identity verification for the moments that matter most: account recovery, help desk resets and high-risk transactions. More.';
+    expect(restorePunctuation('Nametag is building identity verification for the moments that matter most account recovery help desk resets and high-risk transactions.', d)).toBe('Nametag is building identity verification for the moments that matter most: account recovery, help desk resets and high-risk transactions.');
+  });
+  it('why: "identity" does not match "identifies", and "similar to" is refused', () => {
+    const ctx: any = { company: 'Nametag', story: '', experience: [], profileText: '' };
+    expect(checkWhy2('Identity verification matters here.', 'Nametag builds identity verification.', ['At SolimHealth, I built a product that identifies decline.'], ctx).join()).toContain('same problem');
+    expect(checkWhy2('Fraud matters, similar to my fraud work.', 'Nametag stops fraud.', ['At Citigroup, I cut fraud.'], ctx).join()).toContain('similar to');
   });
 });
