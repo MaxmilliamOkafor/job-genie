@@ -255,6 +255,11 @@ export function checkWhy(s: string, fact: string, evidence: string[], ctx: SlotC
   const problem = contentWords(s, [ctx.company]).filter((w) => w.length >= 5 && !GENERIC.has(w)).map(whole);
   const fails = problem.some((w) => f.has(w) && ev.has(w)) ? [] : ["does not name the same problem as the company fact and the story or a result"];
   if (/\bsimilar(?:ly)? to\b/i.test(s)) fails.push('uses a generic "similar to" link');
+  if (copiesRun(s, [fact], 8)) fails.push("repeats the company fact");
+  // Every claim in the link comes from the fact, the story or a used result.
+  const known = stemSet([fact, ctx.story, ...evidence].filter(Boolean).join(" "));
+  const cw = contentWords(s, [ctx.company]);
+  if (cw.length && cw.filter((w) => known.has(stem(w))).length / cw.length < 0.7) fails.push("adds claims not in the company fact, the story or a result");
   for (const w of NO_ADD_WORDS) if (new RegExp(`\\b${w.slice(0, 5)}\\w*`, "i").test(s)) fails.push(`uses "${w}"`);
   return [...fails, ...commonFails(s, ctx), ...unsupportedClaims(s, ctx.experience, ctx.profileText)];
 }

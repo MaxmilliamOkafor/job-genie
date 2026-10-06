@@ -381,3 +381,13 @@ describe('company paragraph tightening', () => {
     expect(checkWhy2('Fraud matters, similar to my fraud work.', 'Nametag stops fraud.', ['At Citigroup, I cut fraud.'], ctx).join()).toContain('similar to');
   });
 });
+
+describe('why adds nothing new', () => {
+  it('refuses a why that repeats the fact or adds claims', () => {
+    const ctx: any = { company: 'Eucalyptus', story: '', experience: [], profileText: '' };
+    const fact = 'Eucalyptus builds direct-to-patient brands helping thousands of patients access healthcare treatment.';
+    expect(checkWhy2('Eucalyptus builds direct-to-patient brands helping thousands of patients access healthcare treatment, which requires security architecture.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx).join()).toContain('repeats the company fact');
+    expect(checkWhy2('Patients need strong governance, budgets and leadership, as patient data does.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx).join()).toContain('adds claims');
+    expect(checkWhy2('Patient access to treatment depends on patient data, which I defined requirements for.', fact, ['At SolimHealth, I defined patient data requirements.'], ctx)).toEqual([]);
+  });
+});
