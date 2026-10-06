@@ -292,7 +292,7 @@ describe('cover letter slots', () => {
   it('companyFact and why', () => {
     expect(checkCompanyFact('Nametag is building identity verification for account recovery.', ctx)).toEqual([]);
     expect(checkCompanyFact('Your posting says: "Nametag is building".', ctx).join()).toContain('start with');
-    expect(checkWhy('Stopping fraud is the problem I worked on at Citigroup.', 'Nametag is stopping fraud.', ['At Citigroup, I stopped fraud.'], ctx)).toEqual([]);
+    expect(checkWhy('Stopping fraud is what I did at Citigroup.', 'Nametag is stopping fraud.', ['At Citigroup, I stopped fraud.'], ctx)).toEqual([]);
     expect(checkWhy('This connects to my experience.', 'Nametag is stopping fraud.', [], ctx).length).toBeGreaterThan(0);
   });
 
