@@ -279,7 +279,7 @@ describe('cover letter slots', () => {
   });
 
   it('checks opening only without a story, and parses JSON', () => {
-    const s = parseSlots('```json\n{"opening":"x","result1":"At Meta, I cut p99 latency by 38% with Go."}\n```');
+    const s = parseSlots('```json\n{"opening":"I cut costs by 77%.","result1":"At Meta, I cut p99 latency by 38% with Go."}\n```');
     expect(s.result1).toContain('Meta');
     expect(Object.keys(checkSlots(s, ctx, 'A story.'))).not.toContain('opening');
     expect(Object.keys(checkSlots(s, ctx, ''))).toContain('opening');
