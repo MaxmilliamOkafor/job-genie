@@ -367,7 +367,7 @@ function validateRequest(data: any): TailorRequest {
     citizenship: profile.citizenship ? validateString(profile.citizenship, MAX_STRING_SHORT, "citizenship") : "",
     workAuthorizedCountries: validateStringArray(profile.workAuthorizedCountries || profile.work_authorized_countries || [], MAX_ARRAY_SIZE, MAX_STRING_SHORT, "workAuthorizedCountries"),
     noticePeriod: profile.noticePeriod || profile.notice_period ? validateString(profile.noticePeriod || profile.notice_period, MAX_STRING_SHORT, "noticePeriod") : "",
-    openingStory: profile.openingStory || profile.opening_story ? validateString(profile.openingStory || profile.opening_story, MAX_STRING_MEDIUM, "openingStory") : "",
+    openingStory: profile.openingStory || profile.opening_story ? validateString(profile.openingStory || profile.opening_story, MAX_STRING_LONG, "openingStory") : "",
   };
 
   // Cover letter tone selection
