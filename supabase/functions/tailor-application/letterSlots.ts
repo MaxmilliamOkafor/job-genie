@@ -87,7 +87,7 @@ const STOP = new Set("about above after again against also among and another aro
 // Words too general to count as naming the same problem.
 const GENERIC = new Set("experience work worked working role team teams company companies skills skill building build built focus approach background career platform product products service services system systems solution solutions people users customers role roles result results candidate".split(" "));
 const stem = (w: string) => w.toLowerCase().replace(/(ies|ied)$/, "y").replace(/(ing|ed|es|s)$/, "").slice(0, 6);
-const contentWords = (s: string, skip: string[] = []) => {
+export const contentWords = (s: string, skip: string[] = []) => {
   const drop = new Set(skip.flatMap((x) => flat(x).split(/[^a-z0-9]+/)).filter(Boolean));
   return (flat(s).match(/[a-z][a-z'-]{3,}/g) || []).map((w) => w.replace(/'s$/, "")).filter((w) => !STOP.has(w) && !drop.has(w));
 };
@@ -390,6 +390,8 @@ export function endsOnGrandClaim(s: string): boolean {
 export function stripGrand(s: string): string {
   let t = String(s || "");
   for (const re of GRAND) t = t.replace(re, "");
+  // "the infrastructure, including A and B" reads as "the infrastructure of A and B" once the claim has gone.
+  t = t.replace(/^(\S+(?:\s+\S+){1,5}?\s+the\s+\w+),\s+including\s+/, "$1 of ");
   return t.replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").trim();
 }
 
