@@ -422,14 +422,18 @@ export async function buildSlotLetter(
   const chosen: { n: number; text: string }[] = [];
   let opening: { n: number; text: string } | undefined;
 
+  // A line gets two attempts, so a strong line that failed once (for example by copying) is asked for again.
+  const attempts = new Map<number, number>();
   const accept = (p: Pick, label: string): { n: number; text: string } | null => {
-    tried.add(p.line);
+    attempts.set(p.line, (attempts.get(p.line) || 0) + 1);
+    if ((attempts.get(p.line) || 0) >= 2) tried.add(p.line);
     const b = byN.get(p.line);
     if (!b) { log(`${label} line ${p.line} failed: not a profile line`); return null; }
-    if (usedEmployers.has(b.company)) { log(`${label} line ${p.line} failed: ${b.company} already used`); return null; }
+    if (usedEmployers.has(b.company)) { tried.add(p.line); log(`${label} line ${p.line} failed: ${b.company} already used`); return null; }
     const text = composeResult(p.clause, b.company);
     const f = checkResult(text, b, ctx);
-    if (f.length) { log(`${label} line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2)); return null; }
+    if (f.length) { log(`${label} line ${p.line} failed: ${f.join("; ")}`); notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`)); return null; }
+    tried.add(p.line);
     return { n: p.line, text };
   };
 

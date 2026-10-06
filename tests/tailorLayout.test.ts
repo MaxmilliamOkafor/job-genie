@@ -410,3 +410,22 @@ describe('ranking and numbers', () => {
     expect(cab2('At Accenture, I led the security architecture for a regulated client, closing all but three gaps found in their ISO 27001 pre-audit.', b, [])).toEqual([]);
   });
 });
+
+import { buildSlotLetter as bsl2, profileBullets as pb3 } from '../supabase/functions/tailor-application/letterSlots';
+describe('best line gets a second attempt', () => {
+  it('asks again for the top-ranked line after it failed once', async () => {
+    const experience = [
+      { company: 'SolimHealth', bullets: ['Owned the product roadmap and ran user research for every release of the clinician app across forty clinics'] },
+      { company: 'Meta', bullets: ['Delivered ranking model improvements in Python for the ads platform'] },
+    ];
+    const ctx: any = { experience, bullets: pb3(experience), company: 'Eucalyptus', story: '', cvText: 'Owned the product roadmap and ran user research for every release of the clinician app across forty clinics', description: 'Eucalyptus is a digital health company.', tools: [], profileText: '', requirements: ['user research', 'product roadmap', 'design'] };
+    const calls: string[] = [];
+    const replies = [
+      JSON.stringify({ opening: { line: 1, clause: 'owned the product roadmap and ran user research for every release of the clinician app across forty clinics' }, results: [] }),
+      JSON.stringify({ results: [{ line: 1, clause: 'ran user research and owned the roadmap for each clinician app release, used across forty clinics' }] }),
+    ];
+    const out = await bsl2({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Product Designer', company: 'Eucalyptus', rightToWork: '', notice: '', signOff: 'Kind regards,', employers: ['SolimHealth', 'Meta'] }, ctx, async (p) => { calls.push(p); return replies[calls.length - 1] ?? '{}'; });
+    expect(calls[1]).toContain('1. [SolimHealth]');
+    expect(out!.parts.opening).toContain('At SolimHealth, I ran user research');
+  });
+});
