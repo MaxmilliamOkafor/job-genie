@@ -468,3 +468,17 @@ describe('results by fit', () => {
     expect(ls5(b[0], [], '', 'Senior Product Designer')).toBe(0);
   });
 });
+
+import { trimList as tl6, problemOverlap as po6, hasTripleList as htl6 } from '../supabase/functions/tailor-application/letterSlots';
+describe('lists and opening problem', () => {
+  it('a second list of three is cut to two items, keeping the numbers', () => {
+    const t = tl6('At Accenture, I led security architecture covering access control, credential rotation, network segmentation and encryption, closing all but three gaps.');
+    expect(htl6(t)).toBe(false);
+    expect(t).toContain('all but three gaps');
+    expect(tl6('Dragos protects the infrastructure that runs civilization, including electric utilities, oil and gas, manufacturing and water.')).toBe('Dragos protects the infrastructure that runs civilization.');
+  });
+  it('the problem sentence uses only the line\'s facts', () => {
+    expect(po6('A legacy application hindered efficiency and increased costs.', 'Migrated a legacy application to AWS, cutting infrastructure costs by 31%')).toBeLessThan(0.75);
+    expect(po6('The clinical team needed a clear product roadmap.', 'Owned the product roadmap for every release committed to the clinical team')).toBeGreaterThanOrEqual(0.75);
+  });
+});

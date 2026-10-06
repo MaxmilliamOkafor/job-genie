@@ -369,6 +369,11 @@ export function problemOverlap(problem: string, line: string): number {
 
 /** Cuts a list of three ("A, B and C") to its first two items ("A and B"). */
 export function trimList(sentence: string): string {
+  const cut = String(sentence).search(/,\s+(?:including|such as)\b|:\s/);
+  if (cut > 0) {
+    const head = String(sentence).slice(0, cut).trim();
+    if (head.split(/\s+/).length >= 6 && !hasTripleList(head)) return `${head}.`;
+  }
   const lead = (String(sentence).match(/^At [^,]{1,40},\s*/) || [""])[0];
   const rest = String(sentence).slice(lead.length);
   const out = rest.replace(/([^,.;:]{1,40}),\s+([^,.;:]{1,40}?)(?:,\s+[^,.;:]{1,40}?)*,?\s+(?:and|or)\s+[^,.;:]{1,40}?(?=[,.;:]|$)/, "$1 and $2");
