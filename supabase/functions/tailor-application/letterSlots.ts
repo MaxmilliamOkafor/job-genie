@@ -300,8 +300,11 @@ export function roleTerms(role: string): string[] {
 
 /** Fit of one line for the role: top three requirements and the role family. Shared posting words only break ties. */
 export function lineScore(b: ProfileBullet, requirements: string[], description: string, role: string): number {
-  const req = stemSet(requirements.slice(0, 3).join(" ")), roleSet = new Set(roleTerms(role).map(stem)), desc = stemSet(description);
-  const w = [...stemSet(b.text)];
+  // Whole words with simple endings only, so "product" never matches "produced".
+  const whole = (x: string) => x.toLowerCase().replace(/(?:'s|ies|es|s|ed|ing)$/, "");
+  const set = (x: string) => new Set(contentWords(x).map(whole));
+  const req = set(requirements.slice(0, 3).join(" ")), roleSet = new Set(roleTerms(role).map(whole)), desc = set(description);
+  const w = [...set(b.text)];
   return w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
 }
 
@@ -331,8 +334,8 @@ export function pickResultLines(ranked: ProfileBullet[], exclude: Set<number>, u
   while (out.length < n) {
     const left = pool.filter((b) => !out.includes(b) && (count.get(b.company) || 0) < 2);
     if (!left.length) break;
-    const fresh = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top / 2);
-    const pick = fresh || left.find((b) => score(b) >= top / 2) || left.find((b) => !(count.get(b.company) || 0)) || left[0];
+    const fresh = left.find((b) => !(count.get(b.company) || 0) && score(b) >= top * 0.6);
+    const pick = fresh || left.find((b) => score(b) >= top * 0.6) || left.find((b) => !(count.get(b.company) || 0)) || left[0];
     out.push(pick);
     count.set(pick.company, (count.get(pick.company) || 0) + 1);
   }
