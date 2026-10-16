@@ -222,18 +222,30 @@ export function splitSentences(text: string): string[] {
 const LEGAL = /,?\s+(?:Inc\.?|Ltd\.?|LLC\.?|plc|PLC|GmbH|Corp\.?)(?![A-Za-z])/g;
 /** The employer's name without its legal suffix, as written in prose. */
 export const plainCompany = (name: string) => String(name || "").replace(LEGAL, "").trim();
-/** Removes legal suffixes after the given names, double full stops, and stray capitals after a suffix. */
+const CARRY_ON = /^(?:Is|Has|Was|Are|[A-Z][a-z]*(?:s|ed))$/;
+const SENTENCE_START = new Set(["The", "We", "Our", "I", "It", "This", "That", "They"]);
+/**
+ * Removes legal suffixes after the given names and double full stops. The word
+ * after a removed suffix is lowercased only when it is a verb carrying the
+ * sentence on ("NextRoll Inc. Sells the" becomes "NextRoll sells the"). A
+ * sentence start keeps its capital and its full stop ("Acme Inc. The team"
+ * becomes "Acme. The team"); a proper noun is left as it was ("Acme London").
+ */
 export function cleanNames(text: string, names: string[]): string {
   let t = String(text || "");
   for (const n of names.filter(Boolean)) {
     const plain = plainCompany(n);
     if (!plain) continue;
-    t = t.replace(new RegExp(`\\b${esc(plain)}(?:,?\\s+(?:Inc\\.?|Ltd\\.?|LLC\\.?|plc|PLC|GmbH|Corp\\.?))(?![A-Za-z])(\\s+)?([A-Z][a-z]+)?`, "g"), (_m, sp, w) => {
-      if (!w) return `${plain}${sp || ""}`;
-      return `${plain}${sp}${w.toLowerCase()}`;
+    const re = new RegExp(`\\b${esc(plain)},?\\s+(Inc\\.?|Ltd\\.?|LLC\\.?|plc|PLC|GmbH|Corp\\.?)(?![A-Za-z])(?:(\\s+)([A-Z][a-z]*)(?=(\\s+[a-z])?))?`, "g");
+    t = t.replace(re, (_m, suffix: string, sp?: string, w?: string, nextLower?: string) => {
+      if (!w) return plain;
+      if (CARRY_ON.test(w) && nextLower) return `${plain}${sp}${w.toLowerCase()}`;
+      if (suffix.endsWith(".") && SENTENCE_START.has(w)) return `${plain}.${sp}${w}`;
+      return `${plain}${sp}${w}`;
     });
   }
-  return t.replace(/\.{2,}/g, ".");
+  // A double full stop becomes one; an ellipsis is left alone.
+  return t.replace(/(?<!\.)\.\.(?!\.)/g, ".");
 }
 
 /** Code writes every result as "At {Employer}, I {clause}." */

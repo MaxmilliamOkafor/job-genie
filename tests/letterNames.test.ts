@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { factFromPosting, composeOpening, rankLines, dedupeSentences } from '../supabase/functions/tailor-application/letterSlots';
+import { cleanNames, factFromPosting, composeOpening, rankLines, dedupeSentences } from '../supabase/functions/tailor-application/letterSlots';
 
 describe('cover letter names, openings and sales ranking', () => {
   it('drops the legal suffix from the company fact', () => {
@@ -22,5 +22,15 @@ describe('cover letter names, openings and sales ranking', () => {
     ];
     const r = rankLines(bullets, [], '', '', 'Sr. Strategic Account Executive');
     expect(r[0].n).toBe(2);
+  });
+
+  it('keeps sentence starts and proper nouns after a removed suffix', () => {
+    expect(cleanNames('NextRoll Inc. Sells the AdRoll platform.', ['NextRoll'])).toBe('NextRoll sells the AdRoll platform.');
+    expect(cleanNames('I worked with clients at Acme Inc. The team there trusted me.', ['Acme'])).toBe('I worked with clients at Acme. The team there trusted me.');
+    expect(cleanNames('Acme Inc. London is where the role is based.', ['Acme'])).toBe('Acme London is where the role is based.');
+  });
+
+  it('removes a double full stop but keeps an ellipsis', () => {
+    expect(cleanNames('Ended at Acme.. Then... more.', ['Acme'])).toBe('Ended at Acme. Then... more.');
   });
 });
