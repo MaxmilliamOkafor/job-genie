@@ -44,6 +44,7 @@ export const BANNED_PHRASES = [
   "in today's fast-paced", "ever-evolving", "I am writing to express my interest",
   "I am excited to apply", "I believe I would be a great fit", "aligns with your goals",
   "I look forward to discussing how my skills", "Furthermore", "Moreover", "Additionally",
+  "harnessed", "harnessing", "garnered", "bolstered", "multifaceted", "holistic", "realm", "embarked", "cornerstone", "tapestry", "testament to", "underscores", "delve", "showcasing", "fostering", "notably", "subsequently", "thereby", "well-versed in", "adept at", "demonstrated ability to", "strong foundation in", "uniquely positioned", "it is worth noting", "this experience has taught me", "at the intersection of", "in an era of", "at the forefront of", "commitment to excellence", "renowned", "world-class", "industry-leading", "nestled", "in the heart of", "vibrant",
 ];
 
 export function humanWordingBlock(jobKeywords: string[]): string {
@@ -53,7 +54,17 @@ export function humanWordingBlock(jobKeywords: string[]): string {
 - Do not use these words or phrases: ${banned.map((b) => `"${b}"`).join(", ")}.
 - Use plain verbs such as led, used, built, ran, cut, improved.
 - No em dashes or en dashes used as pauses; a hyphen in a date range is fine.
-- A word above is never removed if it is one of the job's keywords.`;
+- A word above is never removed if it is one of the job's keywords.
+- No "not X, but Y" or "it is not X, it is Y" contrasts. State the point directly.
+- No closing line that only restates ("That is what I bring.") and no rows of short fragments ("No excuses. Just results.").
+- No lead-ins before the point ("Here's the thing", "At its core", "To be clear", "Let's be honest").
+- Every CV bullet ends on a result, a number or a concrete thing. Never end a bullet on a vague "-ing" phrase such as ", enabling growth" or ", highlighting my ability to deliver value".
+- Use "is" and "has", not "serves as" or "boasts".
+- In the cover letter, at most two "X, Y and Z" lists. Prefer one item or a pair.
+- Vary sentence length: never three sentences in a row of about the same length. No two paragraphs start with the same word.
+- Do not praise the employer ("renowned", "world-class", "commitment to excellence"). One plain fact about them, or nothing.
+- Never write "associated with"; say what you did.
+- No chatbot leftovers ("I hope this helps", "Here is your cover letter", "Let me know if you would like changes").`;
 }
 
 /** Em/en dashes: date ranges become a hyphen, pauses become a comma. */
