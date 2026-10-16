@@ -229,7 +229,7 @@ export function cleanNames(text: string, names: string[]): string {
     const plain = plainCompany(n);
     if (!plain) continue;
     t = t.replace(new RegExp(`\\b${esc(plain)}(?:,?\\s+(?:Inc\\.?|Ltd\\.?|LLC\\.?|plc|PLC|GmbH|Corp\\.?))(?![A-Za-z])(\\s+)?([A-Z][a-z]+)?`, "g"), (_m, sp, w) => {
-      if (!w) return plain;
+      if (!w) return `${plain}${sp || ""}`;
       return `${plain}${sp}${w.toLowerCase()}`;
     });
   }
