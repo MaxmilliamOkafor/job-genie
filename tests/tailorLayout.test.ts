@@ -401,7 +401,7 @@ describe('final cover letter round', () => {
     const c2 = { ...ctx, experience: exp, bullets: pb4(exp), requirements: ['client accounts', 'deadline', 'submissions'] };
     const good = JSON.stringify({ opening: { line: 1, problem: 'Three submissions had been late in a single year.' }, results: [] });
     const o1 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => good);
-    expect(o1!.parts.opening).toBe('Three submissions had been late in a single year. At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
+    expect(o1!.parts.opening).toBe('At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
     const bad = JSON.stringify({ opening: { line: 1, problem: 'The client struggled with chaotic reporting.' }, results: [] });
     const o2 = await bsl3({ name: 'M', contact: 'c', greeting: 'Dear Hiring Team,', story: '', role: 'Senior Customer Success Manager', company: 'Dragos', rightToWork: '', notice: '', signOff: 'Sincerely,', employers: [] }, c2, async () => bad);
     expect(o2!.parts.opening).toBe('At Northwind, I automated the client accounts feed after three late submissions in a single year, and it met every deadline thereafter.');
@@ -433,8 +433,8 @@ describe('final cover letter round', () => {
   });
 
   it('a failed "why" ends the company paragraph with the reason line', () => {
-    const body = lb3({ name: 'M', contact: 'c', greeting: 'g', story: 'A story.', role: 'Full Stack Engineer', company: 'Nametag', results: ['At Meta, I a.'], companyFact: 'Nametag is building identity verification', rightToWork: '', notice: '', signOff: '' });
-    expect(body[2]).toBe('Nametag is building identity verification. That is the work I want to be part of as your Full Stack Engineer.');
+    const body = lb3({ name: 'M', contact: 'c', greeting: 'g', story: 'A story.', role: 'Full Stack Engineer', company: 'Nametag', results: ['At Meta, I a.'], companyFact: 'Nametag is building identity verification software', rightToWork: '', notice: '', signOff: '' });
+    expect(body[2]).toBe('Nametag is building identity verification software. That is the work I want to be part of as your Full Stack Engineer.');
   });
 
   it('replaces a failed result with the next best line from a different employer', async () => {

@@ -210,6 +210,32 @@ export function parseReply(raw: string): SlotReply {
   }
 }
 
+
+// Abbreviations that end in a full stop but never end a sentence.
+const ABBREV = /\b(Inc|Ltd|Co|Corp|LLC|e\.g|i\.e|U\.S)\./g;
+const DOT = "\u0002";
+/** Splits text into sentences without breaking after "Inc.", "Ltd.", "e.g." and the like. */
+export function splitSentences(text: string): string[] {
+  const masked = String(text || "").replace(/\s+/g, " ").replace(ABBREV, (m) => m.replace(/\./g, DOT));
+  return (masked.match(/[^.!?]+[.!?]+/g) || []).map((x) => x.replaceAll(DOT, ".").trim()).filter(Boolean);
+}
+const LEGAL = /,?\s+(?:Inc\.?|Ltd\.?|LLC\.?|plc|PLC|GmbH|Corp\.?)(?![A-Za-z])/g;
+/** The employer's name without its legal suffix, as written in prose. */
+export const plainCompany = (name: string) => String(name || "").replace(LEGAL, "").trim();
+/** Removes legal suffixes after the given names, double full stops, and stray capitals after a suffix. */
+export function cleanNames(text: string, names: string[]): string {
+  let t = String(text || "");
+  for (const n of names.filter(Boolean)) {
+    const plain = plainCompany(n);
+    if (!plain) continue;
+    t = t.replace(new RegExp(`\\b${esc(plain)}(?:,?\\s+(?:Inc\\.?|Ltd\\.?|LLC\\.?|plc|PLC|GmbH|Corp\\.?))(?![A-Za-z])(\\s+)?([A-Z][a-z]+)?`, "g"), (_m, sp, w) => {
+      if (!w) return `${plain}${sp || ""}`;
+      return `${plain}${sp}${w.toLowerCase()}`;
+    });
+  }
+  return t.replace(/\.{2,}/g, ".");
+}
+
 /** Code writes every result as "At {Employer}, I {clause}." */
 export function composeResult(clause: string, employer: string): string {
   let c = String(clause || "").trim().replace(/[.!?]+$/, "").trim();
@@ -255,8 +281,7 @@ export function checkCompanyFact(s: string, ctx: SlotContext): string[] {
 export function restorePunctuation(fact: string, description: string): string {
   const sq = (x: string) => flat(x).replace(/[^a-z0-9]+/g, " ").trim();
   const f = sq(fact);
-  const sents = String(description || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]/g) || [];
-  return sents.map((x) => x.trim()).find((x) => sq(x) === f) || fact;
+  return splitSentences(description).find((x) => sq(x) === f) || fact;
 }
 
 /** "why" must name the same problem as the company fact and the story or a used result. */
@@ -281,15 +306,19 @@ export function checkWhy(s: string, fact: string, evidence: string[], ctx: SlotC
 
 /** Fallback company fact: a posting sentence that starts with the company name, word for word. */
 export function factFromPosting(description: string, company: string): string {
-  const sents = String(description || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]/g) || [];
-  const hit = sents.map((x) => x.trim()).find((x) => flat(x).startsWith(flat(company)) && x.split(/\s+/).length <= 40 && !bannedIn(x).length);
-  return hit || "";
+  const plain = plainCompany(company);
+  const hit = splitSentences(description).find((x) => flat(x).startsWith(flat(plain)) && x.split(/\s+/).length <= 40 && !bannedIn(x).length);
+  if (!hit) return "";
+  const out = cleanNames(hit, [company, plain]);
+  // A company fact shorter than six words says nothing.
+  return out.split(/\s+/).length >= 6 ? out : "";
 }
 
 /** Lines ranked by how many requirement and posting words they share; the story line is never offered. */
 // Words that describe the work of a role family, matched on the role title.
 const ROLE_TERMS: [RegExp, string][] = [
   [/customer success|account manag|client|customer|relationship/i, "client clients account accounts stakeholder stakeholders presented presenting presentation executive executives cto ctos adoption renewal renewals escalation escalations onboarding trust regulated"],
+  [/sales|account executive|business development|\bbdr\b|\bsdr\b|partnerships/i, "pipeline quota revenue deal deals closed client clients pre-sales bid bids proposal proposals negotiated contract contracts renewal renewals upsell accounts stakeholder stakeholders presented presenting cto ctos engagements"],
   [/engineer|developer|programmer|architect/i, "built building build scaled scaling scale reliability reliable performance latency deployed services"],
   [/data|analyst|analytics|scientist/i, "reporting report reports model models pipeline pipelines accuracy analysis"],
   [/product|design|ux|ui\b/i, "user users research roadmap requirements shipped shipping ship live launch launched product"],
@@ -580,14 +609,30 @@ export const reasonLine = (role: string) => `That is the work I want to be part 
 
 export function letterBody(o: LetterParts): string[] {
   const employers = (o.employers || []).filter(Boolean);
+  const company = plainCompany(o.company);
+  const names = [o.company, company, ...employers];
   const lead = o.story ? o.story.trim() : (o.opening || "");
-  const p1 = lead ? `${lead} That is what drew me to the ${o.role} role at ${o.company}.` : `That is what drew me to the ${o.role} role at ${o.company}.`;
-  const lastOfP1 = p1.split(/(?<=[.!?])\s+/).pop() || "";
-  const p3 = o.companyFact ? [sentence(o.companyFact), o.why ? sentence(o.why) : reasonLine(o.role)].join(" ") : "";
+  const p1 = dedupeSentences(lead ? `${lead} That is what drew me to the ${o.role} role at ${company}.` : `That is what drew me to the ${o.role} role at ${company}.`);
+  const lastOfP1 = splitSentences(p1).pop() || "";
+  const fact = o.companyFact ? cleanNames(o.companyFact, names) : "";
+  const fewWords = fact.split(/\s+/).filter(Boolean).length < 6;
+  const p3 = fact && !fewWords ? [sentence(fact), o.why ? sentence(o.why) : reasonLine(o.role)].join(" ") : "";
   const notice = o.notice ? `My notice period is ${o.notice.trim().replace(/[.]$/, "")}.` : "";
   const p4 = [o.rightToWork, notice, "I am available for a call whenever suits you."].filter(Boolean).join(" ");
   const uk = /^kind regards/i.test(String(o.signOff || "Kind regards,"));
-  return [p1, orderResults(o.results, lastOfP1, employers).join(" "), p3, p4].filter(Boolean).map((x) => (uk ? ukSpelling(x) : x));
+  return [p1, orderResults(o.results, lastOfP1, employers).join(" "), p3, p4].filter(Boolean).map((x) => cleanNames(x, names)).map((x) => (uk ? ukSpelling(x) : x));
+}
+
+/** Drops any sentence whose content words all appear in the other sentences of the paragraph. */
+export function dedupeSentences(paragraph: string): string {
+  let sents = splitSentences(paragraph);
+  for (let i = sents.length - 1; i >= 0 && sents.length > 1; i--) {
+    const own = contentWords(sents[i]).map(stem);
+    if (!own.length) continue;
+    const rest = new Set(sents.filter((_, j) => j !== i).flatMap((x) => contentWords(x).map(stem)));
+    if (own.every((w) => rest.has(w))) sents = sents.filter((_, j) => j !== i);
+  }
+  return sents.join(" ");
 }
 
 /** Builds the letter from checked parts. Missing parts are left out, never padded. */
@@ -610,6 +655,10 @@ const toOpening = (x: any): OpeningPick | null => {
 export function composeOpening(o: { problem?: string; line: string }, employer: string): string {
   const result = composeResult(lineAsClause(o.line), employer);
   if (!o.problem) return result;
+  // The line already states the problem: saying it first would say it twice.
+  const pw = contentWords(o.problem).map(stem);
+  const lw = new Set(contentWords(o.line).map(stem));
+  if (pw.length && pw.filter((w) => lw.has(w)).length / pw.length >= 0.8) return result;
   const pr = sentence(shortForms(o.problem));
   return `${pr.charAt(0).toUpperCase()}${pr.slice(1)} ${result}`;
 }
