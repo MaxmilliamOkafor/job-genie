@@ -20,7 +20,8 @@ export type SkillCategory =
   | "data"
   | "cloud"
   | "tools"
-  | "methods";
+  | "methods"
+  | "professional";
 
 /** The label written when the section has no equivalent group already. */
 export const CATEGORY_LABEL: Record<SkillCategory, string> = {
@@ -29,6 +30,7 @@ export const CATEGORY_LABEL: Record<SkillCategory, string> = {
   cloud: "Cloud & DevOps",
   tools: "Tools & Platforms",
   methods: "Methods & Delivery",
+  professional: "Professional",
 };
 
 /**
@@ -42,10 +44,12 @@ const LABEL_HINTS: Record<SkillCategory, string[]> = {
   cloud: ["cloud", "devops", "infrastructure", "platform engineering", "deployment", "ci/cd", "sre", "operations"],
   tools: ["tool", "platform", "software", "systems", "applications", "productivity", "itsm tool"],
   methods: ["method", "delivery", "process", "practice", "agile", "ways of working", "governance", "framework"],
+  professional: ["professional", "soft", "interpersonal", "core", "business"],
 };
 
 /** Known terms, by category. Matching is exact on the lower-cased term. */
 const KNOWN: Record<SkillCategory, string[]> = {
+  professional: [],
   programming: [
     "python", "java", "javascript", "typescript", "c", "c++", "c#", "go", "golang", "rust", "ruby", "php",
     "scala", "kotlin", "swift", "r", "matlab", "perl", "bash", "shell", "shell scripting", "powershell",
@@ -96,9 +100,8 @@ function cloudCue(): SkillCategory { return "cloud"; }
 function programmingCue(): SkillCategory { return "programming"; }
 
 /**
- * Capabilities that belong in an achievement, never in a skills list. These are
- * demonstrated by what a bullet says happened; asserted as list items they read
- * as filler and a reviewer discounts the whole section.
+ * Soft capabilities route to Professional. Whether they are supported by the
+ * saved experience is decided by the evidence guard, not this placement helper.
  */
 const SOFT_CAPABILITIES = new Set([
   "communication", "communications", "written communication", "verbal communication",
@@ -116,6 +119,7 @@ export function isSoftCapability(term: string): boolean {
 }
 
 export function categoriseSkill(term: string): SkillCategory {
+  if (isSoftCapability(term)) return "professional";
   const key = term.trim().toLowerCase();
   for (const [cat, list] of Object.entries(KNOWN) as Array<[SkillCategory, string[]]>) {
     if (list.includes(key)) return cat;
@@ -218,7 +222,6 @@ export function placeSkillsInSection(resume: string, terms: string[]): Placement
   for (const raw of terms) {
     const term = raw.trim();
     if (!term) continue;
-    if (isSoftCapability(term)) { skipped.push({ term, reason: "soft capability" }); continue; }
     const key = term.toLowerCase();
     if (present.has(key) || whole(sectionLower, key)) { skipped.push({ term, reason: "duplicate" }); continue; }
 

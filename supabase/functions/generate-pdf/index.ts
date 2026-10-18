@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
 import {
   PDFDocument,
@@ -125,42 +126,6 @@ const stripDatesFromField = (fieldValue: string): string => {
     .trim();
 };
 
-const sanitizeText = (text: string | null | undefined): string => {
-  if (!text) return "";
-  return (
-    String(text)
-      .replace(/[\n\r\t]/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
-      .replace(/[\u2018\u2019\u201A\u2039\u203A]/g, "'")
-      .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
-      .replace(/[\u2013\u2014\u2015\u2212]/g, "-")
-      .replace(/\u2026/g, "...")
-      .replace(
-        /[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25AB\u25A0\u25A1\u25CF\u25CB\u25D8\u25D9\u2B24\u2B58\u29BF\u25C6\u25C7\u2666\u2756\u2605\u2606\u2713\u2714\u2717\u2718\u2794\u27A4\u25B6\u25B8\u25BA\u25BC\u25BE\u25C0\u25C2\u25C4]/g,
-        "-",
-      )
-      .replace(/[\u2190-\u21FF]/g, "->")
-      .replace(/[\u2713\u2714\u2715\u2716\u2717\u2718]/g, "*")
-      .replace(/\u00A9/g, "(c)")
-      .replace(/\u00AE/g, "(R)")
-      .replace(/\u2122/g, "(TM)")
-      // Currency symbols are kept: "GBP2.6bn" misreads as a code, and both
-      // symbols exist in the document font and in ATS text extraction.
-
-      .replace(/\u00A5/g, "JPY")
-      .replace(/\u00B0/g, " deg")
-      .replace(/\u00B1/g, "+/-")
-      .replace(/\u00D7/g, "x")
-      .replace(/\u00F7/g, "/")
-      // Preserve middot (·) used as our contact separator and the pound and
-      // euro signs used in figures; strip other non-ASCII
-      .replace(/[^\x00-\x7F\u00B7\u00A3\u20AC]/g, " ")
-
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-};
 
 // ============================================================
 // PREMIUM PDF DESIGN SYSTEM (Deep Navy, ATS-safe, single column)
@@ -946,16 +911,8 @@ interface StructuredCvRequest {
 async function setupPdf(
   title: string,
   author: string,
-  subject: string,
-  keywords: string[] = [],
 ): Promise<{ pdfDoc: PDFDocument; fonts: Fonts }> {
-  const pdfDoc = await PDFDocument.create();
-  pdfDoc.setTitle(title);
-  pdfDoc.setAuthor(author);
-  pdfDoc.setSubject(subject);
-  pdfDoc.setKeywords(["resume", "cv", "professional", ...keywords]);
-  pdfDoc.setCreator("QuantumHire ATS Optimizer");
-  pdfDoc.setProducer("QuantumHire");
+  const pdfDoc = await createCandidatePdf(PDFDocument, title, author);
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
@@ -997,11 +954,9 @@ serve(async (req) => {
     const sanitizedData = sanitizeObject(data) as ResumeData;
     const { pdfDoc, fonts } = await setupPdf(
       sanitizedData.type === "resume"
-        ? `${sanitizedData.personalInfo.name} - Resume`
-        : `${sanitizedData.personalInfo.name} - Cover Letter`,
+        ? `${sanitizedData.personalInfo.name} CV`
+        : `${sanitizedData.personalInfo.name} Cover Letter`,
       sanitizedData.personalInfo.name,
-      sanitizedData.type === "resume" ? "Professional Resume" : "Cover Letter",
-      sanitizedData.skills?.primary?.slice(0, 20) || [],
     );
 
     let docxBytes: Uint8Array;
@@ -2210,8 +2165,7 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
 
 
   const doc = new DocxDocument({
-    creator: "QuantumHire",
-    title: `${data.personalInfo.name} - Resume`,
+    ...candidateDocumentProperties(data.personalInfo.name, "resume"),
     styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
     sections: [{
       properties: {
@@ -2277,8 +2231,7 @@ async function buildCoverLetterDocxBytes(data: {
   }));
 
   const doc = new DocxDocument({
-    creator: "QuantumHire",
-    title: `${data.personalInfo.name} - Cover Letter`,
+    ...candidateDocumentProperties(data.personalInfo.name, "cover_letter"),
     styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
     sections: [{
       properties: {

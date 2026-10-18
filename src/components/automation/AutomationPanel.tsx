@@ -231,7 +231,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         jobTitle: job.title,
         company: job.company,
         status: 'applied',
-        message: `${attachmentStatus} | ATS Score: ${data.matchScore}% | Files: ${data.cvFileName}, ${data.coverLetterFileName}`
+        message: `${attachmentStatus} | ATS Score: ${data.matchScore}% | Files: ${data.cvFileName}, ${data.coverLetterFileName}${data.requiredQualifications ? ` | Required: ${data.requiredQualifications.shown} of ${data.requiredQualifications.total} in work history` : ''}`
       });
 
       return true;
