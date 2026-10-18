@@ -45,7 +45,7 @@ describe('category routing', () => {
     expect(categoriseSkill('Scrum')).toBe('methods');
   });
 
-  it('keeps capabilities out of the skills list', () => {
+  it('identifies capabilities for the Professional skills line', () => {
     expect(isSoftCapability('Communication')).toBe(true);
     expect(isSoftCapability('Mentorship')).toBe(true);
     expect(isSoftCapability('Kubernetes')).toBe(false);
@@ -65,19 +65,20 @@ describe('placement into an existing grouped section', () => {
   it('creates one labelled line when no group fits', () => {
     expect(first.text).toContain('Tools & Platforms: Jira, ServiceNow');
     expect(first.text).toContain('Methods & Delivery: UAT, Agile');
-    expect(first.text.match(/Tools & Platforms:/g)!.length).toBe(1);
+    expect(first.text.match(/Tools & Platforms:/g)?.length).toBe(1);
   });
 
-  it('skips duplicates and capabilities', () => {
+  it('skips duplicates but places supported capabilities', () => {
     const reasons = Object.fromEntries(first.skipped.map((s) => [s.term, s.reason]));
     expect(reasons['Python']).toBe('duplicate');
-    expect(reasons['Communication']).toBe('soft capability');
+    expect(reasons['Communication']).toBeUndefined();
+    expect(first.text).toContain('Professional: Communication');
   });
 
   it('preserves the citizenship line and every other section', () => {
     expect(first.text).toContain('Languages & Citizenship: English (native), French (native) - EU Citizen');
     for (const heading of ['PROFESSIONAL SUMMARY', 'PROFESSIONAL EXPERIENCE', 'TECHNICAL SKILLS', 'PROJECTS', 'EDUCATION']) {
-      expect(first.text.match(new RegExp(heading, 'g'))!.length).toBe(1);
+      expect(first.text.match(new RegExp(heading, 'g'))?.length).toBe(1);
     }
     expect(first.text).toContain('January 2023 - Present');
     expect(first.text).toContain('BSc Computer Science');
