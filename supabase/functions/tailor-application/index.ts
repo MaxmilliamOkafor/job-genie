@@ -11,6 +11,8 @@ import {
   applyProjectsSection,
   buildProjectsSection,
   evaluateRevision,
+  compareRevisionGaps,
+  requiredQualifications,
   measureCoverage,
   termAppearsIn,
   type RevisionRecord,
@@ -33,7 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
-import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes } from "./guards.ts";
+import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
 
@@ -79,6 +81,7 @@ interface TailorRequest {
   company: string;
   description: string;
   requirements: string[];
+  requiredTerms: string[];
   location?: string;
   extractedCity?: string; // City extracted by extension for "[CITY] | open to relocation" CV format
   jobId?: string;
@@ -322,6 +325,9 @@ function validateRequest(data: any): TailorRequest {
 
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_REQUIREMENTS, MAX_STRING_MEDIUM, "requirements");
+  const rawRequired = data.keywordCoverageTarget?.highPriority;
+  const validatedRequired = validateStringArray(rawRequired || [], 40, MAX_STRING_MEDIUM, "keywordCoverageTarget.highPriority");
+  const requiredTerms = [...new Map(validatedRequired.filter(Boolean).map((term) => [term.toLowerCase(), term])).values()];
   const location = data.location ? validateString(data.location, MAX_STRING_SHORT, "location") : undefined;
   const extractedCity = data.extractedCity
     ? validateString(data.extractedCity, MAX_STRING_SHORT, "extractedCity")
@@ -380,6 +386,7 @@ function validateRequest(data: any): TailorRequest {
     company,
     description,
     requirements,
+    requiredTerms,
     location,
     extractedCity,
     jobId,
@@ -2272,6 +2279,7 @@ serve(async (req) => {
       company,
       description,
       requirements,
+      requiredTerms,
       location,
       extractedCity,
       jobId,
@@ -2664,7 +2672,7 @@ anywhere in the source CV. Every one came from the job description.
 - Missing keywords that cannot be honestly claimed are reported in
   KEYWORDS OMITTED. That is the correct outcome, not a failure.
 
-Rewrite TECHNICAL SKILLS as labelled group lines such as "Programming:", "Cloud & DevOps:" and "Data Engineering:". Use each label once, cap each line at ten items, use commas only, and never flatten the section into one comma list. Include only hard skills the candidate can legitimately claim; soft capabilities belong in experience bullets.
+Rewrite TECHNICAL SKILLS as labelled group lines such as "Programming:", "Cloud & DevOps:" and "Data Engineering:". Use each label once, cap each line at ten items, use commas only, and never flatten the section into one comma list. Include the hard skills the candidate can legitimately claim, and on a "Professional" line the soft skills the posting asks for that the candidate's experience shows. Soft skills also belong in the experience bullets that show them.
 
 RULE 3 - EXPERIENCE BULLETS: INJECT WEIGHTED TERMS (subject to Rule 0)
 For each role in work history:
@@ -2690,7 +2698,7 @@ If the JD uses "petabytes" and the CV says "10TB", rewrite to contextualise rela
 If the JD says "millions of users", reference the candidate's production scale in that language.
 
 RULE 5 - SOFT SKILLS: WEAVE INTO BULLETS (worth ~5 points)
-Do not just list soft skills. Weave them into experience bullets:
+List them on the Professional line and also weave them into experience bullets:
 - "growth mindset" → "...continuously improved pipeline performance through iterative feedback loops..."
 - "seeks feedback" → "...actively sought peer code reviews to..."
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
@@ -2742,8 +2750,8 @@ KEYWORD EXTRACTION AND CATEGORISATION: Before writing anything, read the job des
 
 KEYWORD PLACEMENT STRATEGY (this decides whether the CV wins): distribute the selected terms as follows.
 - PROFESSIONAL SUMMARY: no keywords at all (see RULE 7).
-- TECHNICAL SKILLS: hard skills only, 12 to 25 of them, grouped by label, using the posting's exact phrasing where the candidate genuinely has the skill ("Kubernetes" not "K8s" when the posting says Kubernetes). Never list a soft skill here: "leadership", "communication", "collaboration", "problem-solving", "adaptability", "stakeholder management" and similar are FORBIDDEN in TECHNICAL SKILLS.
-- PROFESSIONAL EXPERIENCE: the bulk of the impact. For each of the top 10 to 15 selected terms, at least one bullet in the relevant role must show that term in action. Hard skills are named explicitly in context with what they achieved. Soft skills are NEVER listed - they are demonstrated through the action and outcome of a bullet: leadership as "Led a team of four engineers to...", collaboration as "Partnered with product, design and data teams to...", communication as "Presented architecture proposals to senior leadership and non-technical stakeholders...", problem-solving as "Diagnosed and resolved a production incident affecting...".
+- TECHNICAL SKILLS: hard skills only, 12 to 25 of them, grouped by label, using the posting's exact phrasing where the candidate genuinely has the skill ("Kubernetes" not "K8s" when the posting says Kubernetes). Include posting-requested soft skills supported by experience on a Professional line, as well as in the experience bullets that show them.
+- PROFESSIONAL EXPERIENCE: the bulk of the impact. For each of the top 10 to 15 selected terms, at least one bullet in the relevant role must show that term in action. Hard skills are named explicitly in context with what they achieved. Soft skills are listed on the Professional line and also demonstrated through the action and outcome of a bullet: leadership as "Led a team of four engineers to...", collaboration as "Partnered with product, design and data teams to...", communication as "Presented architecture proposals to senior leadership and non-technical stakeholders...", problem-solving as "Diagnosed and resolved a production incident affecting...".
 - PROJECTS and CERTIFICATIONS: use them to reinforce two to four high-value posting terms that do not fit naturally into the experience section. Never create a SOFT SKILLS section anywhere.
 Loading the TECHNICAL SKILLS section with posting terms while leaving the experience bullets generic is a failure of this rule.
 
@@ -3152,7 +3160,7 @@ FIRST, RANK THE KEYWORDS. Three tiers, in this order:
   TIER 1  stated as required, or repeated three or more times in the JD
   TIER 2  repeated twice, or listed under responsibilities
   TIER 3  mentioned once, or listed as preferred/nice-to-have
-Tier 1 is what the CV must prove. Tier 3 is what the skills line catches.
+${requiredTerms.length ? `REQUIRED BY THIS AD (always Tier 1): ${requiredTerms.join(", ")}. Each one the profile supports must appear in an EXPERIENCE bullet of the role where that work happened, not only in the skills list. Workday shows the recruiter where in the work history each required qualification appears.\n` : ""}Tier 1 is what the CV must prove. Tier 3 is what the skills line catches.
 
 THEN PLACE THEM.
 
@@ -3823,11 +3831,7 @@ ${
         }
         const gaps = assessed
           .filter((g): g is { term: string; tier: "explicit" | "demonstrated"; evidence: string } => Boolean(g.evidence))
-          .sort((a, b) => {
-            const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
-            const bReq = requirementText.includes(b.term.toLowerCase()) ? 0 : 1;
-            return aReq - bReq || a.term.localeCompare(b.term);
-          })
+          .sort((a, b) => compareRevisionGaps(a, b, requiredTerms, requirementText))
           .slice(0, 12);
 
 
@@ -4568,10 +4572,12 @@ ${
       // candidate cannot defend in an interview is worse than a gap.
       // It uses evidenceOf, the same rule as the revision pass and the final
       // validator, so a term is never added here that validation would strip.
-      // Only EXPLICIT records may be added to the skills list: a capability
-      // demonstrated by an achievement belongs in that achievement's sentence,
-      // not asserted as a listed skill.
-      const singleWordMissing = actualMissing.filter((kw) => evidenceOf(kw).tier === "explicit");
+      // Named tools still require explicit records. Posting-requested soft
+      // capabilities demonstrated by experience also belong on Professional.
+      const singleWordMissing = actualMissing.filter((kw) => {
+        const tier = evidenceOf(kw).tier;
+        return tier === "explicit" || (isSoftCapability(kw) && tier === "demonstrated");
+      });
       const unevidencedSkipped = actualMissing.length - singleWordMissing.length;
       if (unevidencedSkipped > 0) {
         console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
@@ -4609,7 +4615,7 @@ ${
         // the template's position: after experience, before PROJECTS /
         // CERTIFICATIONS / EDUCATION.
         if (placement.skipped.some((s) => s.reason === "no skills section")) {
-          const eligible = toInjectSingles.filter((t) => !isSoftCapability(t));
+          const eligible = toInjectSingles;
           if (eligible.length) {
             const grouped = new Map<string, string[]>();
             for (const term of eligible) {
@@ -5060,8 +5066,8 @@ ${
     }
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = fixGreeting(result.tailoredCoverLetter, contactName || "");
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(applySignOff(stripLetterBanned(result.tailoredCoverLetter, userProfile.openingStory || ""), location || ""), location || "");
-    if (result.tailoredResume) result.tailoredResume = stripDashes(result.tailoredResume);
-    if (result.tailoredCoverLetter) result.tailoredCoverLetter = withProtected(result.tailoredCoverLetter, userProfile.openingStory || "", stripDashes);
+    if (result.tailoredResume) result.tailoredResume = stripInvisible(stripDashes(result.tailoredResume));
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripInvisible(withProtected(result.tailoredCoverLetter, userProfile.openingStory || "", stripDashes));
 
     result.truthfulness = {
       removedYearsClaims,
@@ -5084,6 +5090,7 @@ ${
     const finalText = `${result.tailoredResume || ""}`;
     const coverLetterOnlyCoverage = measureCoverage(result.tailoredCoverLetter || "", jdKeywords.allKeywords);
     const measured = measureCoverage(finalText, jdKeywords.allKeywords);
+    if (requiredTerms.length) result.requiredQualifications = requiredQualifications(finalText, requiredTerms);
 
     // TWO SEPARATE NUMBERS, NEVER BLENDED.
     //
