@@ -939,11 +939,18 @@ export function stripSummaryFiller(resume: string): string {
 
 // Cover letter.
 
+export function stripInvisible(text: string): string {
+  return String(text || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u00AD]/g, "")
+    .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
+}
+
 export const LETTER_BANNED = [
   "aligns with your mission", "I welcome the opportunity", "I am excited about the opportunity", "impactful", "actionable insights",
   "leverage", "utilize", "seamless", "robust", "significantly", "effectively", "showing my ability",
   "Also,", "Additionally,", "Furthermore,", "Alongside that,",
   "showing my capabilities", "showing effective", "I am excited", "passionate",
+  "Moreover", "Consequently", "In conclusion", "In summary",
 ];
 
 /** Removes the banned cover-letter phrases that a model may still write. */
@@ -960,7 +967,10 @@ export function stripLetterBanned(letter: string, protectText = ""): string {
     .replace(/\butili[sz](?:e|ed|es|ing)\b/gi, (m) => ({ e: "use", ed: "used", es: "uses", ing: "using" } as Record<string, string>)[m.toLowerCase().replace(/^utili[sz]/, "")] || "use")
     .replace(/\bactionable insights\b/gi, "insights")
     .replace(/\s*\b(impactful|seamless(?:ly)?|robust|significantly|effectively)\b/gi, "")
-    .replace(/(^|[.!?\u0002]\s+|\n)(?:also|additionally|furthermore|alongside that),\s+(\p{L})/giu, cap)
+    .replace(/(^|[.!?\u0002]\s+|\n)(?:also|additionally|furthermore|alongside that|moreover|in addition|consequently|thus|hence|therefore|overall|ultimately|in summary|to summarise|to summarize|to sum up|in essence|essentially|in conclusion),\s+(\p{L})/giu, cap)
+    .replace(/(^|[.!?\u0002]\s+|\n)(?:nevertheless|nonetheless),\s+/gi, "$1Still, ")
+    .replace(/(^|[.!?\u0002]\s+|\n)firstly,\s+/gi, "$1First, ")
+    .replace(/(^|[.!?\u0002]\s+|\n)secondly,\s+/gi, "$1Second, ")
     .replace(/\bpassionate about\b/gi, "focused on")
     .replace(/\bpassionate\b/gi, "committed")
     .replace(/[ \t]{2,}/g, " ")

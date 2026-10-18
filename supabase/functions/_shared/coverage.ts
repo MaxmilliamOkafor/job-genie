@@ -66,6 +66,38 @@ export interface CoverageResult {
   percent: number;
 }
 
+/** Required ad terms outrank the existing requirement-text and alphabetical order. */
+export function compareRevisionGaps(a: { term: string }, b: { term: string }, requiredTerms: string[], requirementText: string): number {
+  const required = (term: string) => requiredTerms.some((requiredTerm) => termAppearsIn(term, requiredTerm)) ? 0 : 1;
+  const mentioned = (term: string) => requirementText.includes(term.toLowerCase()) ? 0 : 1;
+  return required(a.term) - required(b.term) || mentioned(a.term) - mentioned(b.term) || a.term.localeCompare(b.term);
+}
+
+/** Count required qualifications in work history separately from declarations elsewhere. */
+export function requiredQualifications(text: string, terms: string[]) {
+  const lines = text.split("\n");
+  const history: string[] = [];
+  let inHistory = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(?:PROFESSIONAL EXPERIENCE|EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY)$/.test(trimmed)) {
+      inHistory = true;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9 &/\-]{2,}$/.test(trimmed)) inHistory = false;
+    if (inHistory) history.push(line);
+  }
+  const unique = measureCoverage("", terms).missing;
+  const workHistory = history.join("\n");
+  const shown = unique.filter((term) => termAppearsIn(workHistory, term)).length;
+  const listedOnly = unique.filter((term) => !termAppearsIn(workHistory, term) && termAppearsIn(text, term)).length;
+  const absent = unique.filter((term) => !termAppearsIn(text, term)).length;
+  return {
+    total: unique.length, shown, listedOnly, absent,
+    label: `Required by the ad: ${shown} of ${unique.length} shown in your work history (Workday grades on these).`,
+  };
+}
+
 
 /** Coverage counted off real document text: matched unique terms / total unique terms. */
 export function measureCoverage(text: string, terms: string[]): CoverageResult {
