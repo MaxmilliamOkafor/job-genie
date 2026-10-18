@@ -5,7 +5,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
-- [ ] 15. Apply uploaded required-qualification, Professional skills, invisible-character, document-property and letter-joining rules; test all and deploy both functions.
+- [x] 15. Apply uploaded required-qualification, Professional skills, invisible-character, document-property and letter-joining rules; test all and deploy both functions.
 - [x] 9. Enforce grammatical, evidence-led summaries; ignore rank words when matching held titles, fall back to the current role, and reject bias-prone opening claims.
 - [ ] 10. Keep education dates in profile data but remove them from tailored CVs; restore a missing EDUCATION section before responding.
 - [x] 11. Confirm stale-tab skill merging and newest-first profile display remain intact.
