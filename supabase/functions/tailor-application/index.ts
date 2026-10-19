@@ -35,6 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
+import { reviewSystemPrompt, reviewUserPrompt, runReview } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -5069,6 +5070,44 @@ ${
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = applyLetterDate(applySignOff(stripLetterBanned(result.tailoredCoverLetter, userProfile.openingStory || ""), location || ""), location || "");
     if (result.tailoredResume) result.tailoredResume = stripInvisible(stripDashes(result.tailoredResume));
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripInvisible(withProtected(result.tailoredCoverLetter, userProfile.openingStory || "", stripDashes));
+
+    // HIRING-MANAGER REVIEW. One extra call suggests exact-text edits; code
+    // applies only grounded edits. A failure or timeout leaves both as they were.
+    if (result.tailoredResume || result.tailoredCoverLetter) {
+      const story = userProfile.openingStory || "";
+      const reviewed = await runReview(
+        async (signal) => {
+          const res = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            signal,
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              max_tokens: apiConfig.maxTokens,
+              temperature: apiConfig.temperature,
+              messages: [
+                { role: "system", content: reviewSystemPrompt(jobTitle, company) },
+                { role: "user", content: reviewUserPrompt(description, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile)) },
+              ],
+            }),
+          });
+          if (!res.ok) throw new Error(`review call returned ${res.status}`);
+          const d = await res.json();
+          return String(d.choices?.[0]?.message?.content || "");
+        },
+        { cv: result.tailoredResume || "", letter: result.tailoredCoverLetter || "" },
+        { profileText: `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`, protectedTerms: [...new Set([...requiredTerms, ...jdKeywords.allKeywords])] },
+        (doc, text) => doc === "cv"
+          ? stripInvisible(stripDashes(text))
+          : stripInvisible(withProtected(stripLetterBanned(text, story), story, stripDashes)),
+      );
+      if (reviewed.review) {
+        result.tailoredResume = reviewed.cv;
+        result.tailoredCoverLetter = reviewed.letter;
+        result.review = reviewed.review;
+        console.log(`[HIRING MANAGER REVIEW] applied ${reviewed.review.applied}, rejected ${reviewed.review.rejected.length}, gaps ${reviewed.review.gaps.length}`);
+      }
+    }
 
     result.truthfulness = {
       removedYearsClaims,
