@@ -6,8 +6,13 @@ import { containsTerm } from "./guards.ts";
 
 export type ReviewDoc = "cv" | "letter";
 export interface ReviewEdit { doc: ReviewDoc; old: string; new: string; reason: string }
-export interface ReviewResult { applied: number; rejected: { reason: string; old: string }[]; gaps: string[] }
-export interface ReviewContext { profileText: string; protectedTerms: string[] }
+export interface ReviewResult { applied: number; rejected: { reason: string; old: string }[]; gaps: string[]; appliedEdits: ReviewEdit[] }
+export interface ReviewContext { profileText: string; protectedTerms: string[]; criteriaTerms?: string[] }
+
+export type CriterionKind = "must" | "preferred";
+export interface ScreenerCriterion { requirement: string; kind: CriterionKind; adSays: string }
+export interface ScreenerGrade { requirement: string; kind: CriterionKind; status: "met" | "partial" | "missing"; cvLine: string; profileProof: string }
+export interface ScreenerResult { grades: ScreenerGrade[]; applied: number; rejected: { reason: string; old: string }[]; gaps: string[] }
 
 export const REVIEW_TIMEOUT_MS = 20000;
 
