@@ -379,6 +379,17 @@ function validateRequest(data: any): TailorRequest {
     openingStory: profile.openingStory || profile.opening_story ? validateString(profile.openingStory || profile.opening_story, MAX_STRING_LONG, "openingStory") : "",
   };
 
+  // Optional AI-screener criteria from the extension; when absent the
+  // screener pass extracts criteria from the posting itself.
+  const screenerCriteria: ScreenerCriterion[] = (Array.isArray(data.screenerCriteria) ? data.screenerCriteria : [])
+    .slice(0, 12)
+    .map((c: any, i: number) => ({
+      requirement: validateString(c?.requirement || "", MAX_STRING_MEDIUM, `screenerCriteria[${i}].requirement`),
+      kind: (c?.kind === "must" ? "must" : "preferred") as "must" | "preferred",
+      adSays: validateString(c?.adSays || "", MAX_STRING_MEDIUM, `screenerCriteria[${i}].adSays`),
+    }))
+    .filter((c: ScreenerCriterion) => c.requirement);
+
   // Cover letter tone selection
   const validTones = ["professional", "enthusiastic", "concise"];
   const coverLetterTone = validTones.includes(data.coverLetterTone) ? data.coverLetterTone : "professional";
