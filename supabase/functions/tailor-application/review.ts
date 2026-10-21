@@ -12,7 +12,7 @@ export interface ReviewContext { profileText: string; protectedTerms: string[]; 
 export type CriterionKind = "must" | "preferred";
 export interface ScreenerCriterion { requirement: string; kind: CriterionKind; adSays: string }
 export interface ScreenerGrade { requirement: string; kind: CriterionKind; status: "met" | "partial" | "missing"; cvLine: string; profileProof: string }
-export interface ScreenerResult { grades: ScreenerGrade[]; applied: number; rejected: { reason: string; old: string }[]; gaps: string[] }
+export interface ScreenerResult { grades: ScreenerGrade[]; applied: number; rejected: { reason: string; old: string }[]; gaps: string[]; passes?: number }
 
 export const REVIEW_TIMEOUT_MS = 20000;
 
@@ -28,6 +28,7 @@ CV:
 - No keyword tacked onto the end of a bullet ("...through effective communication", "...using Salesforce").
 - No skills line with a single item.
 - Every number, date, employer and title matches the profile exactly (reason "grounding").
+- Each experience bullet reads Action, Context, Result: it opens with what the candidate did (a strong past-tense verb), says where or at what scale (the system, client, team or volume the profile gives), and ends with the outcome, with its number when the profile has one. A bullet with no result keeps the result the profile records for that work; none is invented. At most two lines. No "learned", "gained" or reflection sentences in bullets. Edits made for this rule use reason "style" and go through the same checks as every other edit.
 Cover letter:
 - The opening sentence names the role and the company and leads with the single strongest match to the posting.
 - A proof paragraph: one or two concrete results from the role where that work happened, with their numbers.
@@ -83,12 +84,20 @@ function occurrences(hay: string, needle: string): number {
 }
 
 /** Why an edit must be rejected, or null when it may be applied. */
+const REFLECTION = /\b(?:learned|learnt|gained|taught me)\b/i;
+/** True when new text has a reflection sentence the old text did not have. */
+export function addsReflection(oldText: string, newText: string): boolean {
+  const olds = new Set(String(oldText).split(/(?<=[.!?])\s+/).map((x) => x.trim().toLowerCase()));
+  return String(newText).split(/(?<=[.!?])\s+/).some((x) => REFLECTION.test(x) && !olds.has(x.trim().toLowerCase()));
+}
+
 export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext): string | null {
   if (!edit || (edit.doc !== "cv" && edit.doc !== "letter") || typeof edit.old !== "string" || typeof edit.new !== "string" || !edit.old.trim()) return "malformed edit";
   const count = occurrences(doc, edit.old);
   if (count === 0) return "old text not found";
   if (count > 1) return "old text occurs more than once";
   if (edit.doc === "cv" && experienceSection(doc).includes(edit.old) && /\b(?:learned|gained)\b/i.test(edit.new)) return "adds learned or gained reflection in an experience bullet";
+  if (addsReflection(edit.old, edit.new)) return "adds a learned, learnt, gained or taught me sentence";
   const profile = ctx.profileText;
   const profileNums = new Set(numberEntries(profile).map(([v]) => v));
   const oldNums = new Set(numberEntries(edit.old).map(([v]) => v));
@@ -275,6 +284,7 @@ CV:
 - The summary is two or three complete sentences that name the target job title and say what the candidate does best for this posting. No fragments ("Background in software engineering."). No number of years in the summary.
 - No skills line with a single item.
 - Every number, date, employer and title matches the profile exactly (reason "grounding").
+- Each experience bullet reads Action, Context, Result: it opens with what the candidate did (a strong past-tense verb), says where or at what scale (the system, client, team or volume the profile gives), and ends with the outcome, with its number when the profile has one. A bullet with no result keeps the result the profile records for that work; none is invented. At most two lines. No "learned", "gained" or reflection sentences in bullets. Edits made for this rule use reason "style" and go through the same checks as every other edit.
 Cover letter:
 - The opening sentence names the role and the company and leads with the single strongest match to the posting's must-haves.
 - A proof paragraph: one or two concrete results from the role where that work happened, with their numbers.
@@ -363,4 +373,51 @@ export async function runScreener(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/** Supported must-haves still not met: kind "must", not "met", not listed in gaps. */
+export function remainingMusts(s: ScreenerResult): string[] {
+  const gaps = new Set(s.gaps.map((g) => g.trim().toLowerCase()));
+  return s.grades.filter((g) => g.kind === "must" && g.status !== "met" && !gaps.has(g.requirement.trim().toLowerCase())).map((g) => g.requirement);
+}
+
+export function secondPassNote(remaining: string[]): string {
+  return `\n\nSecond pass. Only these must-haves are still not stated plainly in an experience bullet: ${remaining.join("; ")}. Suggest edits for these only; change nothing else.`;
+}
+
+export const SECOND_PASS_MAX_FIRST_MS = 15000;
+
+/**
+ * Runs the screener once, then at most once more when a supported must-have
+ * is still not met and the first pass took 15 seconds or less. A failed second
+ * pass leaves the first pass's result exactly as it was. Never a third pass.
+ */
+export async function runScreenerPasses(
+  call: (signal: AbortSignal, docs: { cv: string; letter: string }, remaining: string[] | null) => Promise<string>,
+  docs: { cv: string; letter: string },
+  ctx: ReviewContext,
+  clean: (doc: ReviewDoc, text: string) => string,
+  timeoutMs = SCREENER_TIMEOUT_MS,
+  now: () => number = Date.now,
+): Promise<{ cv: string; letter: string; screener: ScreenerResult | null }> {
+  const t0 = now();
+  const first = await runScreener((sig) => call(sig, docs, null), docs, ctx, clean, timeoutMs);
+  if (!first.screener) return first;
+  const one = { ...first, screener: { ...first.screener, passes: 1 } };
+  const remaining = remainingMusts(first.screener);
+  if (!remaining.length || now() - t0 > SECOND_PASS_MAX_FIRST_MS) return one;
+  const edited = { cv: first.cv, letter: first.letter };
+  const second = await runScreener((sig) => call(sig, edited, remaining), edited, ctx, clean, timeoutMs);
+  if (!second.screener) return one;
+  return {
+    cv: second.cv,
+    letter: second.letter,
+    screener: {
+      grades: second.screener.grades,
+      applied: first.screener.applied + second.screener.applied,
+      rejected: [...first.screener.rejected, ...second.screener.rejected],
+      gaps: [...new Set([...first.screener.gaps, ...second.screener.gaps])],
+      passes: 2,
+    },
+  };
 }

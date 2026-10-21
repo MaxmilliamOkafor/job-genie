@@ -231,7 +231,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         jobTitle: job.title,
         company: job.company,
         status: 'applied',
-        message: `${attachmentStatus} | ATS Score: ${data.matchScore}% | Files: ${data.cvFileName}, ${data.coverLetterFileName}${data.requiredQualifications ? ` | Required: ${data.requiredQualifications.shown} of ${data.requiredQualifications.total} in work history` : ''}${data.review ? ` | Hiring-manager review: ${data.review.applied} edits` : ''}${data.screener ? ` | AI screener: ${data.screener.grades.filter((g: { kind: string; status: string }) => g.kind === 'must' && g.status === 'met').length}/${data.screener.grades.filter((g: { kind: string }) => g.kind === 'must').length} must-haves met, ${data.screener.applied} edits` : ''}`
+        message: `${attachmentStatus} | ATS Score: ${data.matchScore}% | Files: ${data.cvFileName}, ${data.coverLetterFileName}${data.requiredQualifications ? ` | Required: ${data.requiredQualifications.shown} of ${data.requiredQualifications.total} in work history` : ''}${data.review ? ` | Hiring-manager review: ${data.review.applied} edits` : ''}${data.screener ? ` | AI screener: ${data.screener.grades.filter((g: { kind: string; status: string }) => g.kind === 'must' && g.status === 'met').length}/${data.screener.grades.filter((g: { kind: string }) => g.kind === 'must').length} must-haves met, ${data.screener.applied} edits, ${data.screener.passes ?? 1} pass(es)` : ''}`
       });
 
       return true;

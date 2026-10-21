@@ -203,3 +203,73 @@ test("experience rewrites cannot add learned or gained reflection sentences even
     expect(out.cv).toBe(CV);
   }
 });
+
+// Second screener pass: at most one, only when a supported must-have remains.
+import { runScreenerPasses } from "../supabase/functions/tailor-application/review.ts";
+
+const mustGrade = (requirement: string, status: string) => ({ requirement, kind: "must", status, cvLine: "", profileProof: "" });
+const passCall = (responses: (string | Error)[], seen: (string[] | null)[]) =>
+  async (_s: AbortSignal, _d: unknown, remaining: string[] | null) => {
+    seen.push(remaining);
+    const r = responses[seen.length - 1];
+    if (r === undefined) throw new Error("unexpected extra pass");
+    if (r instanceof Error) throw r;
+    return r;
+  };
+
+test("a supported must-have still partial after pass 1 triggers exactly one second pass", async () => {
+  const seen: (string[] | null)[] = [];
+  const out = await runScreenerPasses(passCall([
+    JSON.stringify({ grades: [mustGrade("React", "partial")], edits: [], gaps: [] }),
+    JSON.stringify({ grades: [mustGrade("React", "met")], edits: [{ doc: "cv", old: "- Built Node.js services processing 2m records a day.", new: "- Built Node.js services processing 2m records a day for the React portal.", reason: "criterion" }], gaps: [] }),
+  ], seen), { cv: CV, letter: "" }, CTX, (_d, t) => t);
+  expect(seen).toEqual([null, ["React"]]);
+  expect(out.screener?.passes).toBe(2);
+  expect(out.screener?.grades[0].status).toBe("met");
+  expect(out.screener?.applied).toBe(1);
+});
+
+test("no second pass when every must-have is met or the rest are gaps", async () => {
+  for (const r of [
+    { grades: [mustGrade("React", "met")], edits: [], gaps: [] },
+    { grades: [mustGrade("Kubernetes", "missing")], edits: [], gaps: ["Kubernetes"] },
+  ]) {
+    const seen: (string[] | null)[] = [];
+    const out = await runScreenerPasses(passCall([JSON.stringify(r)], seen), { cv: CV, letter: "" }, CTX, (_d, t) => t);
+    expect(seen.length).toBe(1);
+    expect(out.screener?.passes).toBe(1);
+  }
+});
+
+test("never a third pass even when pass 2 leaves a must-have partial", async () => {
+  const seen: (string[] | null)[] = [];
+  const partial = JSON.stringify({ grades: [mustGrade("React", "partial")], edits: [], gaps: [] });
+  const out = await runScreenerPasses(passCall([partial, partial, partial], seen), { cv: CV, letter: "" }, CTX, (_d, t) => t);
+  expect(seen.length).toBe(2);
+  expect(out.screener?.passes).toBe(2);
+});
+
+test("a failed second pass keeps the first pass's documents and screener", async () => {
+  const seen: (string[] | null)[] = [];
+  const first = JSON.stringify({ grades: [mustGrade("React", "partial")], edits: [{ doc: "cv", old: "BSc Computer Science", new: "BSc in Computer Science", reason: "style" }], gaps: [] });
+  const out = await runScreenerPasses(passCall([first, new Error("screener call returned 500")], seen), { cv: CV, letter: "" }, CTX, (_d, t) => t);
+  expect(seen.length).toBe(2);
+  expect(out.cv).toContain("BSc in Computer Science");
+  expect(out.screener?.passes).toBe(1);
+  expect(out.screener?.applied).toBe(1);
+  expect(out.screener?.grades[0].status).toBe("partial");
+});
+
+test("no second pass when the first pass took more than 15 seconds", async () => {
+  const seen: (string[] | null)[] = [];
+  let t = 0;
+  const out = await runScreenerPasses(passCall([JSON.stringify({ grades: [mustGrade("React", "partial")], edits: [], gaps: [] })], seen), { cv: CV, letter: "" }, CTX, (_d, x) => x, 25000, () => (t += 16000));
+  expect(seen.length).toBe(1);
+  expect(out.screener?.passes).toBe(1);
+});
+
+test("a rewrite adding a learnt or taught me sentence is rejected anywhere", () => {
+  const old = "- Built Node.js services processing 2m records a day.";
+  expect(rejectReason(CV, { doc: "cv", old, new: old + " This taught me patience.", reason: "style" }, CTX)).not.toBeNull();
+  expect(rejectReason(CV, { doc: "cv", old: "BSc Computer Science", new: "BSc Computer Science. I learnt a lot.", reason: "style" }, CTX)).not.toBeNull();
+});
