@@ -2301,6 +2301,7 @@ serve(async (req) => {
       userProfile,
       includeReferral,
       coverLetterTone,
+      screenerCriteria,
     } = validateRequest(rawData);
 
     // Validate that profile has required info
