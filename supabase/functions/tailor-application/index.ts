@@ -35,7 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
-import { reviewSystemPrompt, reviewUserPrompt, runReview } from "./review.ts";
+import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreener, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -120,6 +120,7 @@ interface TailorRequest {
 
   includeReferral?: boolean;
   coverLetterTone?: "professional" | "enthusiastic" | "concise";
+  screenerCriteria: ScreenerCriterion[];
 }
 
 async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
@@ -378,6 +379,17 @@ function validateRequest(data: any): TailorRequest {
     openingStory: profile.openingStory || profile.opening_story ? validateString(profile.openingStory || profile.opening_story, MAX_STRING_LONG, "openingStory") : "",
   };
 
+  // Optional AI-screener criteria from the extension; when absent the
+  // screener pass extracts criteria from the posting itself.
+  const screenerCriteria: ScreenerCriterion[] = (Array.isArray(data.screenerCriteria) ? data.screenerCriteria : [])
+    .slice(0, 12)
+    .map((c: any, i: number) => ({
+      requirement: validateString(c?.requirement || "", MAX_STRING_MEDIUM, `screenerCriteria[${i}].requirement`),
+      kind: (c?.kind === "must" ? "must" : "preferred") as "must" | "preferred",
+      adSays: validateString(c?.adSays || "", MAX_STRING_MEDIUM, `screenerCriteria[${i}].adSays`),
+    }))
+    .filter((c: ScreenerCriterion) => c.requirement);
+
   // Cover letter tone selection
   const validTones = ["professional", "enthusiastic", "concise"];
   const coverLetterTone = validTones.includes(data.coverLetterTone) ? data.coverLetterTone : "professional";
@@ -395,6 +407,7 @@ function validateRequest(data: any): TailorRequest {
     userProfile,
     includeReferral: !!data.includeReferral,
     coverLetterTone: coverLetterTone as "professional" | "enthusiastic" | "concise",
+    screenerCriteria,
   };
 }
 
@@ -2288,6 +2301,7 @@ serve(async (req) => {
       userProfile,
       includeReferral,
       coverLetterTone,
+      screenerCriteria,
     } = validateRequest(rawData);
 
     // Validate that profile has required info
@@ -5071,11 +5085,15 @@ ${
     if (result.tailoredResume) result.tailoredResume = stripInvisible(stripDashes(result.tailoredResume));
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = stripInvisible(withProtected(result.tailoredCoverLetter, userProfile.openingStory || "", stripDashes));
 
-    // HIRING-MANAGER REVIEW. One extra call suggests exact-text edits; code
-    // applies only grounded edits. A failure or timeout leaves both as they were.
+    // AI SCREENER + HIRING-MANAGER REVIEW. One extra call grades every
+    // requirement and suggests exact-text edits; code applies only grounded
+    // edits. A failure or timeout leaves both documents as they were and
+    // omits result.screener, so it can never fail a tailoring run.
     if (result.tailoredResume || result.tailoredCoverLetter) {
       const story = userProfile.openingStory || "";
-      const reviewed = await runReview(
+      const criteria = screenerCriteria.length ? screenerCriteria : extractCriteria(description, 10);
+      const stepDown = isStepDown(jobTitle, description, profileYearsSpan(userProfile));
+      const screened = await runScreener(
         async (signal) => {
           const res = await fetch(apiConfig.endpoint, {
             method: "POST",
@@ -5086,26 +5104,33 @@ ${
               max_tokens: apiConfig.maxTokens,
               temperature: apiConfig.temperature,
               messages: [
-                { role: "system", content: reviewSystemPrompt(jobTitle, company) },
-                { role: "user", content: reviewUserPrompt(description, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile)) },
+                { role: "system", content: screenerSystemPrompt(jobTitle, company) },
+                { role: "user", content: screenerUserPrompt(description, criteria, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile), stepDown) },
               ],
             }),
           });
-          if (!res.ok) throw new Error(`review call returned ${res.status}`);
+          if (!res.ok) throw new Error(`screener call returned ${res.status}`);
           const d = await res.json();
           return String(d.choices?.[0]?.message?.content || "");
         },
         { cv: result.tailoredResume || "", letter: result.tailoredCoverLetter || "" },
-        { profileText: `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`, protectedTerms: [...new Set([...requiredTerms, ...jdKeywords.allKeywords])] },
+        {
+          profileText: `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+          protectedTerms: [...new Set([...requiredTerms, ...jdKeywords.allKeywords])],
+          criteriaTerms: criteriaTerms(criteria),
+        },
         (doc, text) => doc === "cv"
           ? stripInvisible(stripDashes(text))
           : stripInvisible(withProtected(stripLetterBanned(text, story), story, stripDashes)),
       );
-      if (reviewed.review) {
-        result.tailoredResume = reviewed.cv;
-        result.tailoredCoverLetter = reviewed.letter;
-        result.review = reviewed.review;
-        console.log(`[HIRING MANAGER REVIEW] applied ${reviewed.review.applied}, rejected ${reviewed.review.rejected.length}, gaps ${reviewed.review.gaps.length}`);
+      if (screened.screener) {
+        result.tailoredResume = screened.cv;
+        result.tailoredCoverLetter = screened.letter;
+        result.review = { applied: screened.screener.applied, rejected: screened.screener.rejected, gaps: screened.screener.gaps };
+        result.screener = screened.screener;
+        const mustGrades = screened.screener.grades.filter((g) => g.kind === "must");
+        const metMust = mustGrades.filter((g) => g.status === "met").length;
+        console.log(`[AI SCREENER] ${metMust}/${mustGrades.length} must-haves met, applied ${screened.screener.applied}, rejected ${screened.screener.rejected.length}, gaps ${screened.screener.gaps.length}`);
       }
     }
 
