@@ -88,6 +88,7 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
   const count = occurrences(doc, edit.old);
   if (count === 0) return "old text not found";
   if (count > 1) return "old text occurs more than once";
+  if (edit.doc === "cv" && experienceSection(doc).includes(edit.old) && /\b(?:learned|gained)\b/i.test(edit.new)) return "adds learned or gained reflection in an experience bullet";
   const profile = ctx.profileText;
   const profileNums = new Set(numberEntries(profile).map(([v]) => v));
   const oldNums = new Set(numberEntries(edit.old).map(([v]) => v));

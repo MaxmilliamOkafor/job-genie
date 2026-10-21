@@ -170,3 +170,36 @@ test("parseScreener tolerates fenced JSON and caps lists", () => {
   expect(parsed.grades[0].status).toBe("met");
   expect(parsed.gaps).toEqual(["g1"]);
 });
+
+test("an Action, Context, Result style rewrite keeps its source number and is applied", () => {
+  const old = "- Delivered a client portal in React, cutting support tickets by 30%.";
+  const replacement = "- Built a React portal for the client, reducing support tickets by 30%.";
+  const out = applyReviewEdits({ cv: CV, letter: "" }, [{ doc: "cv", old, new: replacement, reason: "style" }], CTX);
+  expect(out.review.applied).toBe(1);
+  expect(out.review.rejected).toEqual([]);
+  expect(out.cv).toContain(replacement);
+});
+
+test("an Action, Context, Result rewrite cannot add an unsupported number or client scale", () => {
+  const old = "- Delivered a client portal in React, cutting support tickets by 30%.";
+  for (const replacement of [
+    "- Delivered a client portal in React, cutting support tickets by 40%.",
+    "- Delivered a portal in React for 40 clients, cutting support tickets by 30%.",
+  ]) {
+    const out = applyReviewEdits({ cv: CV, letter: "" }, [{ doc: "cv", old, new: replacement, reason: "style" }], CTX);
+    expect(out.review.applied).toBe(0);
+    expect(out.review.rejected[0]?.reason).toContain("adds the number 40");
+    expect(out.cv).toBe(CV);
+  }
+});
+
+test("experience rewrites cannot add learned or gained reflection sentences even if the profile contains them", () => {
+  const old = "- Delivered a client portal in React, cutting support tickets by 30%.";
+  const ctx = { ...CTX, profileText: `${CTX.profileText} Learned about client support. Gained client support experience.` };
+  for (const reflection of ["Learned about client support.", "Gained client support experience."]) {
+    const out = applyReviewEdits({ cv: CV, letter: "" }, [{ doc: "cv", old, new: `${old} ${reflection}`, reason: "style" }], ctx);
+    expect(out.review.applied).toBe(0);
+    expect(out.review.rejected[0]?.reason).toBe("adds learned or gained reflection in an experience bullet");
+    expect(out.cv).toBe(CV);
+  }
+});
