@@ -407,6 +407,7 @@ function validateRequest(data: any): TailorRequest {
     userProfile,
     includeReferral: !!data.includeReferral,
     coverLetterTone: coverLetterTone as "professional" | "enthusiastic" | "concise",
+    screenerCriteria,
   };
 }
 
