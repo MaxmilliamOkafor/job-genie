@@ -7,7 +7,7 @@ import { containsTerm } from "./guards.ts";
 export type ReviewDoc = "cv" | "letter";
 export interface ReviewEdit { doc: ReviewDoc; old: string; new: string; reason: string }
 export interface ReviewResult { applied: number; rejected: { reason: string; old: string }[]; gaps: string[]; appliedEdits: ReviewEdit[] }
-export interface ReviewContext { profileText: string; protectedTerms: string[]; criteriaTerms?: string[] }
+export interface ReviewContext { profileText: string; protectedTerms: string[]; criteriaTerms?: string[]; jobTitle?: string; heldTitles?: string[] }
 
 export type CriterionKind = "must" | "preferred";
 export interface ScreenerCriterion { requirement: string; kind: CriterionKind; adSays: string }
@@ -23,7 +23,7 @@ export function reviewSystemPrompt(jobTitle: string, company: string): string {
 export function reviewUserPrompt(posting: string, cv: string, letter: string, profileJson: string): string {
   return `Check the drafts against this list.
 CV:
-- The summary is two or three complete sentences that name the target job title and the years of experience the profile supports, and says what the candidate does best for this posting. No fragments ("Background in software engineering.").
+- The summary follows RULE 7: it leads with a job title the employment history actually contains, never the posting's title as a title held, and never states a number of years. The target job title may appear only as the role being applied for ("for the <title> role"). No fragments ("Background in software engineering."). Never edit the summary's leading title.
 - Each required term the profile supports appears in an experience bullet of the role where the work happened, not only in the skills list.
 - No keyword tacked onto the end of a bullet ("...through effective communication", "...using Salesforce").
 - No skills line with a single item.
@@ -91,6 +91,49 @@ export function addsReflection(oldText: string, newText: string): boolean {
   return String(newText).split(/(?<=[.!?])\s+/).some((x) => REFLECTION.test(x) && !olds.has(x.trim().toLowerCase()));
 }
 
+/** Text of the PROFESSIONAL SUMMARY section, empty when absent. */
+export function summarySection(doc: string): string {
+  const lines = String(doc || "").split("\n");
+  const start = lines.findIndex((l) => /^\s*(?:PROFESSIONAL\s+)?SUMMARY\s*:?/.test(l));
+  if (start < 0) return "";
+  const out: string[] = [lines[start].replace(/^\s*(?:PROFESSIONAL\s+)?SUMMARY\s*:?\s*/, "")];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^[A-Z][A-Z &/]{3,}$/.test(lines[i].trim())) break;
+    out.push(lines[i]);
+  }
+  return out.join("\n").trim();
+}
+
+const YEARS = /\b(?:\d+\+?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s*\+?\s*(?:years?|yrs?)\b/gi;
+const countYears = (t: string) => (String(t).match(YEARS) || []).length;
+
+/** Leading capitalised title of a summary ("Solutions Architect working ..." gives "Solutions Architect"). */
+export function leadingTitle(summary: string): string {
+  const m = String(summary || "").trim().match(/^((?:[A-Z][\w&/+.-]*\s*)+?)(?=\s+(?:[a-z]|with\b)|[.,;:]|$)/);
+  return m ? m[1].trim() : "";
+}
+
+/** Summary rule (RULE 7): no years, posting title only as "the <title> role", leading title must be held. */
+export function summaryReject(doc: string, edit: ReviewEdit, ctx: ReviewContext): string | null {
+  if (edit.doc !== "cv") return null;
+  const before = summarySection(doc);
+  if (!before || !before.includes(edit.old)) return null;
+  if (countYears(edit.new) > countYears(edit.old)) return "adds a number of years to the summary";
+  const title = String(ctx.jobTitle || "").trim();
+  if (title) {
+    const esc = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const all = new RegExp(esc, "gi");
+    const asRole = new RegExp(`\\bthe\\s+${esc}\\s+role\\b`, "gi");
+    const bare = (t: string) => (t.match(all) || []).length - (t.match(asRole) || []).length;
+    if (bare(edit.new) > bare(edit.old)) return "adds the posting's title to the summary outside \"the <title> role\"";
+  }
+  const after = summarySection(doc.replace(edit.old, () => edit.new));
+  const lead0 = leadingTitle(before), lead1 = leadingTitle(after);
+  const held = (ctx.heldTitles || []).map((t) => t.trim().toLowerCase());
+  if (lead1 && lead1.toLowerCase() !== lead0.toLowerCase() && !held.includes(lead1.toLowerCase())) return `changes the summary's leading title to "${lead1}", not a held title`;
+  return null;
+}
+
 export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext): string | null {
   if (!edit || (edit.doc !== "cv" && edit.doc !== "letter") || typeof edit.old !== "string" || typeof edit.new !== "string" || !edit.old.trim()) return "malformed edit";
   const count = occurrences(doc, edit.old);
@@ -98,6 +141,8 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
   if (count > 1) return "old text occurs more than once";
   if (edit.doc === "cv" && experienceSection(doc).includes(edit.old) && /\b(?:learned|gained)\b/i.test(edit.new)) return "adds learned or gained reflection in an experience bullet";
   if (addsReflection(edit.old, edit.new)) return "adds a learned, learnt, gained or taught me sentence";
+  const summaryWhy = summaryReject(doc, edit, ctx);
+  if (summaryWhy) return summaryWhy;
   const profile = ctx.profileText;
   const profileNums = new Set(numberEntries(profile).map(([v]) => v));
   const oldNums = new Set(numberEntries(edit.old).map(([v]) => v));
@@ -281,7 +326,7 @@ SCREENER RULES (edits with reason "criterion"), in this order:
 
 HIRING-MANAGER CHECKS (reasons "angle", "reframe", "style", "grounding"):
 CV:
-- The summary is two or three complete sentences that name the target job title and say what the candidate does best for this posting. No fragments ("Background in software engineering."). No number of years in the summary.
+- The summary follows RULE 7: it leads with a job title the employment history actually contains, never the posting's title as a title held, and never states a number of years. The target job title may appear only as the role being applied for ("for the <title> role"). No fragments ("Background in software engineering."). Never edit the summary's leading title.
 - No skills line with a single item.
 - Every number, date, employer and title matches the profile exactly (reason "grounding").
 - Each experience bullet reads Action, Context, Result: it opens with what the candidate did (a strong past-tense verb), says where or at what scale (the system, client, team or volume the profile gives), and ends with the outcome, with its number when the profile has one. A bullet with no result keeps the result the profile records for that work; none is invented. At most two lines. No "learned", "gained" or reflection sentences in bullets. Edits made for this rule use reason "style" and go through the same checks as every other edit.

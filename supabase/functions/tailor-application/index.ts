@@ -5118,6 +5118,8 @@ ${
           profileText: `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
           protectedTerms: [...new Set([...requiredTerms, ...jdKeywords.allKeywords])],
           criteriaTerms: criteriaTerms(criteria),
+          jobTitle,
+          heldTitles: ((userProfile as any).workExperience || (userProfile as any).professionalExperience || []).map((e: any) => String(e?.title || "")).filter(Boolean),
         },
         (doc, text) => doc === "cv"
           ? stripInvisible(stripDashes(text))

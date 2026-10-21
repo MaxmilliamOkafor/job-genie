@@ -273,3 +273,27 @@ test("a rewrite adding a learnt or taught me sentence is rejected anywhere", () 
   expect(rejectReason(CV, { doc: "cv", old, new: old + " This taught me patience.", reason: "style" }, CTX)).not.toBeNull();
   expect(rejectReason(CV, { doc: "cv", old: "BSc Computer Science", new: "BSc Computer Science. I learnt a lot.", reason: "style" }, CTX)).not.toBeNull();
 });
+
+// Summary edits follow RULE 7: no years, posting title only as "the <title> role".
+import { reviewUserPrompt, screenerUserPrompt as sup } from "../supabase/functions/tailor-application/review.ts";
+const SUM_CV = ["PROFESSIONAL SUMMARY", "Solutions Architect working across delivery and client reporting.", "", "PROFESSIONAL EXPERIENCE", "- Built Node.js services processing 2m records a day."].join("\n");
+const SUM_CTX: ReviewContext = { ...CTX, jobTitle: "Consulting Manager", heldTitles: ["Solutions Architect", "Software Engineer"] };
+
+test("a summary edit adding years of experience is rejected", () => {
+  const old = "Solutions Architect working across delivery and client reporting.";
+  expect(rejectReason(SUM_CV, { doc: "cv", old, new: "Solutions Architect with 9 years of experience working across delivery and client reporting.", reason: "angle" }, SUM_CTX)).toContain("years");
+});
+
+test("the posting's title as a held title is rejected; as the role applied for it is accepted", () => {
+  const old = "Solutions Architect working across delivery and client reporting.";
+  expect(rejectReason(SUM_CV, { doc: "cv", old, new: "Consulting Manager working across delivery and client reporting.", reason: "angle" }, SUM_CTX)).not.toBeNull();
+  expect(rejectReason(SUM_CV, { doc: "cv", old, new: old + " Bringing this experience to the Consulting Manager role.", reason: "angle" }, SUM_CTX)).toBeNull();
+});
+
+test("neither review prompt asks for years or the target title as a held title", () => {
+  for (const p of [reviewUserPrompt("posting", SUM_CV, "", "{}"), sup("posting", [], SUM_CV, "", "{}", false)]) {
+    expect(p).not.toContain("name the target job title");
+    expect(p).not.toContain("years of experience the profile supports");
+    expect(p).toContain("never states a number of years");
+  }
+});
