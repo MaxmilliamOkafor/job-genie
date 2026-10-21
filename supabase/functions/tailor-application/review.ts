@@ -99,6 +99,8 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
     if (!oldLower.includes(l) && !profileLower.includes(l)) return `adds "${name}", not in the profile`;
   }
   for (const term of ctx.protectedTerms) if (term && containsTerm(edit.old, term) && !containsTerm(edit.new, term)) return `removes required term "${term}"`;
+  for (const term of ctx.criteriaTerms || []) if (term && containsTerm(edit.old, term) && !containsTerm(edit.new, term)) return `removes screener criterion "${term}"`;
+  if (edit.reason === "criterion" && !experienceSection(doc).includes(edit.old)) return "criterion edit outside the experience section";
   const after = doc.replace(edit.old, () => edit.new);
   const before = headingsOf(doc);
   const kept = new Set(headingsOf(after));
