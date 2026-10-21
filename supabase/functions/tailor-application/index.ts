@@ -5105,7 +5105,10 @@ ${
               temperature: apiConfig.temperature,
               messages: [
                 { role: "system", content: screenerSystemPrompt(jobTitle, company) },
-                { role: "user", content: screenerUserPrompt(description, criteria, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile), stepDown) },
+                { role: "user", content: screenerUserPrompt(description, criteria, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile), stepDown) + `
+Additional hiring-manager CV check:
+- Each experience bullet reads Action, Context, Result: it opens with what the candidate did (a strong past-tense verb), says where or at what scale (the system, client, team or volume the profile gives), and ends with the outcome, with its number when the profile has one. A bullet with no result keeps the result the profile records for that work; none is invented. At most two lines. No "learned", "gained" or reflection sentences in bullets.
+Edits for this rule use reason "style" and must pass the same evidence, exact-text, required-term and criterion checks as every other edit.` },
               ],
             }),
           });
