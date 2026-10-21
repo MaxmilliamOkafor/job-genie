@@ -84,13 +84,15 @@ test("a criterion edit adding Java is applied when the profile shows Java", () =
 });
 
 test("a criterion edit outside the EXPERIENCE section is rejected", () => {
+  const profileWithK8s = { ...PROFILE, skills: [...PROFILE.skills, "Kubernetes"] };
+  const ctx: ReviewContext = { ...CTX, profileText: JSON.stringify(profileWithK8s) };
   const reason = rejectReason(CV, {
     doc: "cv",
     old: "- TypeScript, React, Node.js",
     new: "- TypeScript, React, Node.js, Kubernetes",
     reason: "criterion",
-  }, CTX);
-  expect(reason).toBe("criterion edit outside EXPERIENCE section");
+  }, ctx);
+  expect(reason).toBe("criterion edit outside the experience section");
 });
 
 test("an edit removing a screener criterion term from a bullet is rejected", () => {
@@ -101,11 +103,11 @@ test("an edit removing a screener criterion term from a bullet is rejected", () 
     new: "- Built Node.js services processing 2m records a day.",
     reason: "criterion",
   }, CTX);
-  expect(reason).toBe('removes required term "Kubernetes"');
+  expect(reason).toBe('removes screener criterion "Kubernetes"');
 });
 
 test("step-down triggers for an entry-level posting with a 9-year profile, not for a senior posting", () => {
-  const years = profileYearsSpan({ professional_experience: [{ startDate: "01-2016", endDate: "06-2025" }] });
+  const years = profileYearsSpan({ professionalExperience: [{ startDate: "01-2016", endDate: "06-2025" }] });
   expect(years).toBeGreaterThanOrEqual(9);
   expect(isStepDown("IT Support Technician (Entry Level)", "First-line support role.", years)).toBe(true);
   expect(isStepDown("Senior Software Engineer", "Lead complex platform work.", years)).toBe(false);
