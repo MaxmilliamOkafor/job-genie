@@ -151,7 +151,8 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
   const oldLower = edit.old.toLowerCase();
   for (const name of properNames(edit.new)) {
     const l = name.toLowerCase();
-    if (!oldLower.includes(l) && !profileLower.includes(l)) return `adds "${name}", not in the profile`;
+    const asRole = ctx.jobTitle && l === ctx.jobTitle.trim().toLowerCase() && edit.new.toLowerCase().includes(`the ${l} role`);
+    if (!asRole && !oldLower.includes(l) && !profileLower.includes(l)) return `adds "${name}", not in the profile`;
   }
   for (const term of ctx.protectedTerms) if (term && containsTerm(edit.old, term) && !containsTerm(edit.new, term)) return `removes required term "${term}"`;
   for (const term of ctx.criteriaTerms || []) if (term && containsTerm(edit.old, term) && !containsTerm(edit.new, term)) return `removes screener criterion "${term}"`;
