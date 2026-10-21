@@ -35,7 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
-import { reviewSystemPrompt, reviewUserPrompt, runReview } from "./review.ts";
+import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreener, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -120,6 +120,7 @@ interface TailorRequest {
 
   includeReferral?: boolean;
   coverLetterTone?: "professional" | "enthusiastic" | "concise";
+  screenerCriteria: ScreenerCriterion[];
 }
 
 async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
