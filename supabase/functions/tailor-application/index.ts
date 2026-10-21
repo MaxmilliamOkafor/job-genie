@@ -35,7 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
-import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreener, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
+import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -5093,8 +5093,8 @@ ${
       const story = userProfile.openingStory || "";
       const criteria = screenerCriteria.length ? screenerCriteria : extractCriteria(description, 10);
       const stepDown = isStepDown(jobTitle, description, profileYearsSpan(userProfile));
-      const screened = await runScreener(
-        async (signal) => {
+      const screened = await runScreenerPasses(
+        async (signal, cur, remaining) => {
           const res = await fetch(apiConfig.endpoint, {
             method: "POST",
             signal,
@@ -5105,10 +5105,7 @@ ${
               temperature: apiConfig.temperature,
               messages: [
                 { role: "system", content: screenerSystemPrompt(jobTitle, company) },
-                { role: "user", content: screenerUserPrompt(description, criteria, result.tailoredResume || "", result.tailoredCoverLetter || "", JSON.stringify(userProfile), stepDown) + `
-Additional hiring-manager CV check:
-- Each experience bullet reads Action, Context, Result: it opens with what the candidate did (a strong past-tense verb), says where or at what scale (the system, client, team or volume the profile gives), and ends with the outcome, with its number when the profile has one. A bullet with no result keeps the result the profile records for that work; none is invented. At most two lines. No "learned", "gained" or reflection sentences in bullets.
-Edits for this rule use reason "style" and must pass the same evidence, exact-text, required-term and criterion checks as every other edit.` },
+                { role: "user", content: screenerUserPrompt(description, criteria, cur.cv, cur.letter, JSON.stringify(userProfile), stepDown) + (remaining ? secondPassNote(remaining) : "") },
               ],
             }),
           });
@@ -5133,7 +5130,7 @@ Edits for this rule use reason "style" and must pass the same evidence, exact-te
         result.screener = screened.screener;
         const mustGrades = screened.screener.grades.filter((g) => g.kind === "must");
         const metMust = mustGrades.filter((g) => g.status === "met").length;
-        console.log(`[AI SCREENER] ${metMust}/${mustGrades.length} must-haves met, applied ${screened.screener.applied}, rejected ${screened.screener.rejected.length}, gaps ${screened.screener.gaps.length}`);
+        console.log(`[AI SCREENER] ${metMust}/${mustGrades.length} must-haves met, applied ${screened.screener.applied}, rejected ${screened.screener.rejected.length}, gaps ${screened.screener.gaps.length}, passes ${screened.screener.passes}`);
       }
     }
 
