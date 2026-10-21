@@ -110,8 +110,8 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
 
 export function applyReviewEdits(docs: { cv: string; letter: string }, edits: ReviewEdit[], ctx: ReviewContext): { cv: string; letter: string; review: ReviewResult } {
   const out = { ...docs };
-  const review: ReviewResult = { applied: 0, rejected: [], gaps: [] };
-  for (const edit of (Array.isArray(edits) ? edits : []).slice(0, 12)) {
+  const review: ReviewResult = { applied: 0, rejected: [], gaps: [], appliedEdits: [] };
+  for (const edit of (Array.isArray(edits) ? edits : []).slice(0, 14)) {
     const key: ReviewDoc = edit?.doc === "letter" ? "letter" : "cv";
     const reason = rejectReason(out[key] || "", edit, ctx);
     if (reason) {
@@ -121,6 +121,7 @@ export function applyReviewEdits(docs: { cv: string; letter: string }, edits: Re
     }
     out[key] = out[key].replace(edit.old, () => edit.new);
     review.applied++;
+    review.appliedEdits.push(edit);
   }
   return { ...out, review };
 }
