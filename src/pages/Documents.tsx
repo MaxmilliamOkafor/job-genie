@@ -45,7 +45,8 @@ export default function Documents() {
         !q
           ? true
           : `${a.job?.title ?? ''} ${a.job?.company ?? ''}`.toLowerCase().includes(q)
-      );
+      )
+      .sort((a, b) => (Date.parse(b.updated_at || '') || 0) - (Date.parse(a.updated_at || '') || 0));
   }, [applications, query]);
 
   return (

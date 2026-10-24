@@ -34,7 +34,7 @@ import {
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence } from "./letterSlots.ts";
+import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
@@ -2730,7 +2730,7 @@ The summary is read as a description of the PERSON, so it must be true and check
 
 <a job title the employment history actually contains> working across <two or three requirements from this posting that the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>.
 
-Worked example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite for a GBP 2.6bn portfolio; cut month-end close from nine working days to three."
+Worked example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite; cut month-end close from nine working days to three."
 
 NEVER IN THE SUMMARY:
 - A job title the candidate has not held. The headline under the name carries the target role; the summary must lead with the HELD title closest to the posting, never the posting's title itself.
@@ -2744,7 +2744,8 @@ NEVER IN THE SUMMARY:
 
 THE SCOPE CLAUSE: two or three requirements in the POSTING'S OWN WORDING, and only where a PROFESSIONAL EXPERIENCE bullet evidences them. A term appearing only in the skills list is a word on a page, not work done. If fewer than two qualify, write NO scope clause at all and let the outcomes carry the sentence. Never pad it - "working across audit" alone names a scope narrower than the job.
 
-THE OUTCOMES, ranked highest first: (1) a before and after ("from nine working days to three", "from six hours to under one"); (2) a magnitude (GBP 2.6bn, billions of requests daily, 47 services, 40,000 cases); (3) a percentage; (4) a plain count. Use TWO outcomes joined with a SEMICOLON, never as two separate sentences. Use the profile's figures exactly as written: never round, never drop a figure to shorten a sentence, never invent one. A spelled-out number is fine and often better ("nine working days to three" beats "9 to 3").
+THE OUTCOMES, ranked highest first: (1) a before and after ("from nine working days to three", "from six hours to under one"); (2) a magnitude ("billions of requests daily", "47 services", "24 analysts"); (3) a percentage; (4) a plain count. Use TWO outcomes joined with a SEMICOLON, never as two separate sentences. Use the profile's figures exactly as written: never round, never drop a figure to shorten a sentence, never invent one. A spelled-out number is fine and often better ("nine working days to three" beats "9 to 3").
+Use a figure only when it appears word for word in the candidate's profile. Never add a money amount, portfolio size or deal value the profile does not state.
 
 Every figure in the profile's bullets must survive verbatim into the bullets, because the summary is assembled from the strongest quantified bullet on the page.
 
@@ -3301,7 +3302,8 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 === END CRITICAL RULE ===
 
 ABSOLUTE RULES:
-1. PROFESSIONAL SUMMARY - REQUIRED SHAPE, two sentences, 150 to 220 characters total: "<a job title the employment history actually contains> working across <two or three requirements from this posting that the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>." Example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite for a GBP 2.6bn portfolio; cut month-end close from nine working days to three."
+1. PROFESSIONAL SUMMARY - REQUIRED SHAPE, two sentences, 150 to 220 characters total: "<a job title the employment history actually contains> working across <two or three requirements from this posting that the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>." Example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite; cut month-end close from nine working days to three."
+Use a figure only when it appears word for word in the candidate's profile. Never add a money amount, portfolio size or deal value the profile does not state.
 1a. NEVER IN THE SUMMARY: a title never held (lead with the HELD title closest to the posting, never the posting's own title - the headline under the name carries that), employer names, total years of experience, place names, any adjective describing the candidate (accomplished, seasoned, passionate, dynamic, results-driven, proven track record, strong background, operational excellence), any self-rating (expert, world-class, exceptional), first person, "seeking"/"looking for", or tools/technologies/skill runs. Scope terms must be in the posting's wording AND evidenced by an experience bullet, not the skills list; if fewer than two qualify, omit the scope clause entirely rather than pad it. Two outcomes joined by a SEMICOLON, never two sentences; figures exactly as the profile states them - never rounded, never dropped, never invented; prefer a before-and-after, then a magnitude, then a percentage, then a count.
 
 1b. KEYWORD PLACEMENT: posting keywords live in TECHNICAL SKILLS (hard skills plus evidenced posting-requested soft skills on Professional) and above all in PROFESSIONAL EXPERIENCE bullets, where each of the top 10-15 evidenced posting terms is shown in action. Soft skills (leadership, communication, collaboration, problem-solving, stakeholder management) supported by experience are listed on the Professional line and also demonstrated inside bullets through action and outcome. Weight keyword integration towards the most recent, most relevant role and its first one or two bullets. Loading the skills section while leaving bullets generic is a failure.
@@ -4928,7 +4930,7 @@ ${
         name: `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim(),
         contact: [smartLocation, userProfile.phone, userProfile.email].filter(Boolean).join(" | "),
         greeting: "Dear Hiring Team,",
-        story, role: jobTitle, company,
+        story, role: shortTitle(jobTitle), company,
         rightToWork: rtwSentence,
         notice: userProfile.noticePeriod || "",
         signOff: letterSignOff(location || ""),

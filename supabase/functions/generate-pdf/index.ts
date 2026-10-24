@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { parseCoverLetterStyle, signatureDimensions, type CoverLetterStyle } from "./coverLetterStyle.ts";
 import {
   PDFDocument,
   rgb,
@@ -16,6 +18,7 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  ImageRun,
   ExternalHyperlink,
   AlignmentType,
   TabStopType,
@@ -103,6 +106,12 @@ const normaliseSkillGroups = (groups: Array<{ label: string; items: string[] }>)
     byLabel.set(key, current);
   }
   return [...byLabel.values()].filter((group) => group.items.length > 0);
+};
+
+const shortTitle = (title: string): string => {
+  const whole = String(title || "").trim();
+  const trimmed = whole.replace(/^\([^)]*\)\s+/, "").split(/ - | \u2013 | \| |: | \(|, /)[0].trim();
+  return trimmed.split(/\s+/).filter(Boolean).length >= 2 ? trimmed : whole;
 };
 
 // ============================================================
@@ -598,10 +607,13 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   };
 
   // ---- Cover letter body ----
-  const drawCoverLetterBody = (opts: {
+  const drawCoverLetterBody = async (opts: {
     jobTitle: string;
     paragraphs: string[];
     signatureName: string;
+    style?: CoverLetterStyle;
+    greeting?: string;
+    signOff?: string;
   }) => {
     const dateStr = new Date().toLocaleDateString("en-GB", {
       year: "numeric",
@@ -612,7 +624,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     page.drawText(dateStr, { x: MARGIN, y, size: 10, font: fonts.regular, color: MUTED });
     y -= 10 * 1.5 + 6;
 
-    if (opts.jobTitle) {
+    if (opts.jobTitle && opts.style?.template !== "block") {
       ensureSpace(20);
       const subj = `Re: ${sanitizeText(opts.jobTitle)}`;
       page.drawText(subj, { x: MARGIN, y, size: 11, font: fonts.bold, color: NAVY });
@@ -620,7 +632,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
 
     ensureSpace(20);
-    page.drawText("Dear Hiring Manager,", {
+    page.drawText(opts.greeting || "Dear Hiring Manager,", {
       x: MARGIN,
       y,
       size: 10.5,
@@ -637,7 +649,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 6;
     ensureSpace(40);
-    page.drawText("Sincerely,", {
+    page.drawText(opts.signOff || "Sincerely,", {
       x: MARGIN,
       y,
       size: 10.5,
@@ -645,6 +657,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       color: BODY,
     });
     y -= 10.5 * 2.2;
+    if (opts.style) await drawSignature(opts.style);
     page.drawText(sanitizeText(opts.signatureName), {
       x: MARGIN,
       y,
@@ -654,11 +667,32 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     });
   };
 
+  const drawBlockHeader = (name: string, role: string, contact: ContactInfo, accent: string) => {
+    const colour = rgb(parseInt(accent.slice(0, 2), 16) / 255, parseInt(accent.slice(2, 4), 16) / 255, parseInt(accent.slice(4, 6), 16) / 255);
+    drawWrapped(name.toUpperCase(), MARGIN, 22, fonts.bold, colour);
+    for (const text of [role, contact.location, contact.phone, contact.email]) if (text) drawWrapped(text, MARGIN, 10.5, fonts.regular);
+    y -= 12;
+  };
+
+  const drawSignature = async (style: CoverLetterStyle) => {
+    if (!style.signature) return;
+    const sig = style.signature;
+    const image = await pdfDoc.embedPng(Uint8Array.from(atob(sig.png), (c) => c.charCodeAt(0)));
+    const dimensions = signatureDimensions({ ...sig, w: image.width, h: image.height });
+    const width = dimensions.width * 72, height = dimensions.height * 72;
+    ensureSpace(height + 35);
+    const x = sig.align === "right" ? PAGE_W - MARGIN - width : sig.align === "center" ? MARGIN + (CONTENT_W - width) / 2 : MARGIN;
+    page.drawImage(image, { x, y: y - height, width, height });
+    y -= height + 8;
+  };
+
   return {
     get pages() {
       return pages;
     },
     drawTopHeader,
+    drawBlockHeader,
+    drawSignature,
     drawSectionHeader,
     drawSummary,
     drawExperienceEntry,
@@ -794,21 +828,29 @@ function renderResume(
   return r.pages;
 }
 
-function renderCoverLetter(
+async function renderCoverLetter(
   pdfDoc: PDFDocument,
   fonts: Fonts,
   data: {
     personalInfo: { name: string; contact: ContactInfo };
     jobTitle: string;
     paragraphs: string[];
+    style?: CoverLetterStyle;
+    greeting?: string;
+    signOff?: string;
   },
-): PDFPage[] {
+): Promise<PDFPage[]> {
   const r = makeRenderer(pdfDoc, fonts);
-  r.drawTopHeader(data.personalInfo.name, data.personalInfo.contact);
-  r.drawCoverLetterBody({
+  const style = data.style || parseCoverLetterStyle(null);
+  if (style.template === "block") r.drawBlockHeader(data.personalInfo.name, shortTitle(data.jobTitle), data.personalInfo.contact, style.accent);
+  else r.drawTopHeader(data.personalInfo.name, data.personalInfo.contact);
+  await r.drawCoverLetterBody({
     jobTitle: data.jobTitle,
     paragraphs: data.paragraphs,
     signatureName: data.personalInfo.name,
+    style,
+    greeting: data.greeting,
+    signOff: data.signOff,
   });
   return r.pages;
 }
@@ -928,13 +970,27 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.json();
+    const requestType = String(requestBody.type || "").toLowerCase().replace(/[^a-z]/g, "");
+    let letterStyle: CoverLetterStyle | undefined;
+    if (["coverletter", "letter"].includes(requestType)) {
+      const authorization = req.headers.get("Authorization") || "";
+      const token = authorization.replace(/^Bearer\s+/i, "");
+      const client = createClient(Deno.env.get("SUPABASE_URL") || "", Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authorization } }, auth: { persistSession: false },
+      });
+      const { data: auth, error: authError } = await client.auth.getUser(token);
+      if (authError || !auth.user) return new Response(JSON.stringify({ error: "Sign in to export a cover letter." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: profile, error } = await client.from("profiles").select("cover_letter_style").eq("user_id", auth.user.id).maybeSingle();
+      if (error) throw new Error("The saved cover letter style could not be loaded.");
+      letterStyle = parseCoverLetterStyle(profile?.cover_letter_style);
+    }
 
     if (requestBody.content && typeof requestBody.content === "string") {
-      return handleRawContentRequest(requestBody);
+      return handleRawContentRequest(requestBody, letterStyle);
     }
 
     if (requestBody.structuredCv && requestBody.type) {
-      return handleStructuredCvRequest(requestBody);
+      return handleStructuredCvRequest(requestBody, letterStyle);
     }
 
     // ResumeData (or profileData → ResumeData)
@@ -960,6 +1016,7 @@ serve(async (req) => {
     );
 
     let docxBytes: Uint8Array;
+    let letterPdf: Uint8Array | undefined;
     if (sanitizedData.type === "resume") {
       const contact: ContactInfo = {
         location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
@@ -1002,7 +1059,10 @@ serve(async (req) => {
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         jobTitle: sanitizedData.coverLetter.jobTitle,
         paragraphs: sanitizedData.coverLetter.paragraphs || [],
+        style: letterStyle,
       });
+      await renderCoverLetter(pdfDoc, fonts, { personalInfo: { name: sanitizedData.personalInfo.name, contact }, jobTitle: sanitizedData.coverLetter.jobTitle, paragraphs: sanitizedData.coverLetter.paragraphs || [], style: letterStyle });
+      letterPdf = await pdfDoc.save();
     } else {
       docxBytes = new Uint8Array();
     }
@@ -1012,7 +1072,7 @@ serve(async (req) => {
     console.log(`Premium DOCX generated: ${fileName} Size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ pdf: base64Docx, docx: base64Docx, fileName }),
+      JSON.stringify({ pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx, docx: base64Docx, fileName }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
@@ -1150,7 +1210,7 @@ function computeFileName(data: ResumeData): string {
 // STRUCTURED CV REQUEST HANDLER
 // ============================================================
 
-async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Response> {
+async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?: CoverLetterStyle): Promise<Response> {
   const { type, fileName, structuredCv, personalInfo, plainText } = body;
   console.log("[generate-pdf] StructuredCv request:", {
     type,
@@ -1164,6 +1224,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       pInfo?.name || `${pInfo?.firstName || ""} ${pInfo?.lastName || ""}`.trim();
 
     let docxBytes: Uint8Array = new Uint8Array();
+    let letterPdf: Uint8Array | undefined;
     const baseName = (fileName || `${candidateName}_${type === "resume" ? "CV" : "Cover_Letter"}`).replace(/\.(pdf|docx)$/i, "");
     const outFileName = `${baseName}.docx`;
 
@@ -1213,14 +1274,18 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         personalInfo: { name: candidateName, contact },
         jobTitle: "",
         paragraphs,
+        style: letterStyle,
       });
+      const { pdfDoc, fonts } = await setupPdf(`${candidateName} Cover Letter`, candidateName);
+      await renderCoverLetter(pdfDoc, fonts, { personalInfo: { name: candidateName, contact }, jobTitle: "", paragraphs, style: letterStyle });
+      letterPdf = await pdfDoc.save();
     }
 
     const base64Docx = bytesToBase64(docxBytes);
     console.log(`[generate-pdf] StructuredCv DOCX generated: ${outFileName}, size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ success: true, pdf: base64Docx, docx: base64Docx, fileName: outFileName }),
+      JSON.stringify({ success: true, pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx, docx: base64Docx, fileName: outFileName }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 
@@ -1248,7 +1313,7 @@ async function handleRawContentRequest(body: {
   firstName?: string;
   lastName?: string;
   summary?: string;
-}): Promise<Response> {
+}, letterStyle?: CoverLetterStyle): Promise<Response> {
   const {
     content,
     type: rawType = "cv",
@@ -1771,6 +1836,7 @@ async function handleRawContentRequest(body: {
 
     // ---- Render ----
     let docxBytes: Uint8Array;
+    let letterPdf: Uint8Array | undefined;
     if (type === "cv") {
       if (jobTitle) norm.targetTitle = jobTitle;
       docxBytes = await buildResumeDocxBytes(norm);
@@ -1793,12 +1859,23 @@ async function handleRawContentRequest(body: {
         .split(/\n\s*\n/)
         .map((p) => p.trim())
         .filter((p) => p && !isFurniture(p));
+      const greeting = content.match(/^Dear[^\n]*$/im)?.[0];
+      const signOff = content.match(/^(?:sincerely|yours sincerely|yours faithfully|kind regards|best regards|regards)[^\n]*$/im)?.[0];
+      const headerLines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const headerRole = headerLines[1] && !headerLines[1].includes("@") && !headerLines[1].includes("|") && !/^Dear\b/i.test(headerLines[1]) ? headerLines[1] : "";
+      const letterRole = shortTitle(headerRole || jobTitle || "");
 
       docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
-        jobTitle: jobTitle || "",
+        jobTitle: letterRole,
         paragraphs,
+        style: letterStyle,
+        greeting,
+        signOff,
       });
+      const { pdfDoc, fonts } = await setupPdf(`${norm.personalInfo.name} Cover Letter`, norm.personalInfo.name);
+      await renderCoverLetter(pdfDoc, fonts, { personalInfo: norm.personalInfo, jobTitle: letterRole, paragraphs, style: letterStyle, greeting, signOff });
+      letterPdf = await pdfDoc.save();
     }
 
     const base64Docx = bytesToBase64(docxBytes);
@@ -1827,7 +1904,7 @@ async function handleRawContentRequest(body: {
 
     return new Response(
       JSON.stringify({
-        pdf: base64Docx,
+        pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx,
         docx: base64Docx,
         fileName: finalFileName,
         location: tailoredLocation || "",
@@ -2185,11 +2262,20 @@ async function buildCoverLetterDocxBytes(data: {
   personalInfo: { name: string; contact: ContactInfo };
   jobTitle: string;
   paragraphs: string[];
+  style?: CoverLetterStyle;
+  greeting?: string;
+  signOff?: string;
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  // The letter already carries "Re: <role>" below the date, so the header stays
-  // name and contact only - printing the role twice looked like a template bug.
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+  const style = data.style || parseCoverLetterStyle(null);
+  const block = style.template === "block";
+  if (block) {
+    children.push(new Paragraph({ spacing: { after: 80 }, children: [TR({ text: data.personalInfo.name.toUpperCase(), font: DOCX_FONT, size: 44, bold: true, color: style.accent })] }));
+    for (const text of [data.jobTitle, data.personalInfo.contact.location, data.personalInfo.contact.phone, data.personalInfo.contact.email].filter(Boolean)) {
+      children.push(new Paragraph({ spacing: { after: 60 }, children: [TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY })] }));
+    }
+    children.push(new Paragraph({ spacing: { after: 120 } }));
+  } else children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
 
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
@@ -2197,7 +2283,7 @@ async function buildCoverLetterDocxBytes(data: {
     children: [TR({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
   }));
 
-  if (data.jobTitle) {
+  if (data.jobTitle && !block) {
     children.push(new Paragraph({
       spacing: { after: 200 },
       children: [
@@ -2209,7 +2295,7 @@ async function buildCoverLetterDocxBytes(data: {
 
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [TR({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: data.greeting || "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
 
   for (const p of data.paragraphs) {
@@ -2224,8 +2310,18 @@ async function buildCoverLetterDocxBytes(data: {
 
   children.push(new Paragraph({
     spacing: { before: 200, after: 60 },
-    children: [TR({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: data.signOff || "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
+  if (style.signature) {
+    const sig = style.signature;
+    const dimensions = signatureDimensions(sig);
+    const bytes = Uint8Array.from(atob(sig.png), (c) => c.charCodeAt(0));
+    children.push(new Paragraph({
+      alignment: sig.align === "right" ? AlignmentType.RIGHT : sig.align === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
+      spacing: { after: 60 },
+      children: [new ImageRun({ data: bytes, transformation: { width: dimensions.width * 96, height: dimensions.height * 96 } })],
+    }));
+  }
   children.push(new Paragraph({
     children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
   }));
