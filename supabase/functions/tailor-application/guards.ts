@@ -674,6 +674,28 @@ export function restoreRoleHeadings(resume: string, roles: OriginalRole[]): { te
 
 const BULLET_RE = /^(\s*)([•\-*▪·])\s+(.*)$/;
 
+/** Plain parallel-work wording, preserving the original object and verb tense. */
+export function plainParallelWording(text: string): string {
+  return String(text || "").replace(
+    /\bparalleli[sz](e|es|ed|ing)\s+((?:[\w'-]+\s+){0,3}(?:calls|requests|jobs|tasks|queries|tests|workloads|steps|builds|reads|writes|lookups|fetches|processes|stages))\b/gi,
+    (match, tense: string, object: string) => {
+      const verbs: Record<string, string> = { e: "run", es: "runs", ed: "ran", ing: "running" };
+      const verb = verbs[tense.toLowerCase()];
+      if (!verb) return match;
+      const cased = /^[A-Z]/.test(match) ? verb[0].toUpperCase() + verb.slice(1) : verb;
+      return `${cased} ${object} in parallel`;
+    },
+  );
+}
+
+/** Apply only to CV bullet lines, never headings, titles or skills. */
+export function plainCvBullets(resume: string): string {
+  return String(resume || "").split("\n").map((line) => {
+    const bullet = line.match(BULLET_RE);
+    return bullet ? `${bullet[1]}${bullet[2]} ${plainParallelWording(bullet[3])}` : line;
+  }).join("\n");
+}
+
 export function bulletLengthOk(len: number): boolean {
   return (len >= 60 && len <= 105) || (len >= 175 && len <= 210);
 }
