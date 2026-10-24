@@ -234,10 +234,52 @@ describe('letter date', () => {
   });
 });
 
-import { assembleLetter, buildSlotLetter, checkAgainstBullet, checkResult, checkCompanyFact, checkWhy, composeResult, copiesRun, isStoryLine, parseReply, profileBullets, orderResults, unsupportedClaims, bannedIn, letterBody, LETTER_WORD_FLOOR, COPY_RUN } from '../supabase/functions/tailor-application/letterSlots';
+import { assembleLetter, buildSlotLetter, checkAgainstBullet, checkResult, checkCompanyFact, checkWhy, composeResult, copiesRun, isStoryLine, parseReply, profileBullets, orderResults, unsupportedClaims, bannedIn, letterBody, LETTER_WORD_FLOOR, COPY_RUN, shortTitle, isStandInCompany, wordingFails, slotPrompt } from '../supabase/functions/tailor-application/letterSlots';
 import { letterRightToWorkSentence } from '../supabase/functions/tailor-application/guards';
 
 describe('cover letter slots', () => {
+  for (const [title, expected] of [
+    ['Cloud Platform Product Manager - UK Security Clearance eligibility required', 'Cloud Platform Product Manager'],
+    ['Senior Data Analyst, People Analytics', 'Senior Data Analyst'],
+    ['(Senior) Kotlin / Java Software Engineer - Clearing & Settlement', 'Kotlin / Java Software Engineer'],
+    ['Full-stack Engineer (Data)', 'Full-stack Engineer'],
+  ]) it(`shortens ${title}`, () => expect(shortTitle(title)).toBe(expected));
+  it('keeps a title when shortening leaves fewer than two words', () => expect(shortTitle('Engineer - Data')).toBe('Engineer - Data'));
+  it('recognises recruiter descriptions and generic company labels', () => {
+    expect(isStandInCompany('An innovative consumer intelligence business')).toBe(true);
+    expect(isStandInCompany('FinTech')).toBe(true);
+    for (const name of ['Confidential', 'Stealth', 'Startup', 'Client', 'Our client', 'Company', 'Undisclosed', 'Anonymous']) expect(isStandInCompany(name.toUpperCase())).toBe(true);
+    expect(isStandInCompany('The Trade Desk')).toBe(false);
+  });
+  for (const [text, reason] of [
+    ['My engineering background includes analysis.', 'engineering wording'],
+    ['I hold an AWS certification.', 'certification not requested'],
+    ['The company name was not provided.', 'placeholder'],
+    ["I'm applying for the role.", 'contraction'],
+    ['The open role stood out to me.', 'vague reason'],
+  ]) it(`rejects ${reason} in every slot`, () => {
+    expect(wordingFails(text, 'Senior Data Analyst', '').join()).toContain(reason);
+    expect(checkCompanyFact(text, { experience: [], bullets: [], cvText: '', description: '', tools: [], profileText: '', company: 'Acme', story: '', role: 'Senior Data Analyst' }).join()).toContain(reason);
+  });
+  it('allows requested certifications and relevant engineering wording', () => {
+    expect(wordingFails('My engineering background includes an AWS certification.', 'Software Engineer', 'AWS certification')).toEqual([]);
+  });
+  it('opens plainly without a story, names the role in closing and carries the title in the header', () => {
+    const parts = { name: 'Candidate', contact: 'Dublin | phone | email', greeting: 'Dear Hiring Team,', story: '', role: 'Full-stack Engineer (Data)', company: 'Acme', results: [], rightToWork: '', notice: '', signOff: 'Kind regards,' };
+    const short = { ...parts, role: shortTitle(parts.role) };
+    expect(letterBody(short)[0]).toBe('I am applying for the Full-stack Engineer role at Acme.');
+    expect(letterBody(short).at(-1)).toBe('I am available for a call about the Full-stack Engineer role whenever suits you.');
+    expect(assembleLetter(parts).split('\n').slice(0, 3)).toEqual(['Candidate', 'Full-stack Engineer', 'Dublin | phone | email']);
+    expect(letterBody({ ...short, company: 'FinTech', companyFact: 'FinTech builds tools for retail customers.' })).toEqual(['I am applying for the Full-stack Engineer role.', 'I am available for a call about the Full-stack Engineer role whenever suits you.']);
+  });
+  it('does not request company facts for recruiter stand-ins', async () => {
+    const prompts: string[] = [];
+    const base = { name: 'Candidate', contact: '', greeting: 'Dear Hiring Team,', role: 'Data Analyst', company: 'FinTech', story: '', rightToWork: '', notice: '', signOff: 'Kind regards,' };
+    const out = await buildSlotLetter(base, { experience: [], bullets: [], cvText: '', description: '', tools: [], profileText: '', company: 'FinTech', story: '', requirements: [] }, async (prompt) => { prompts.push(prompt); return '{}'; });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).not.toContain('"companyFact":');
+    expect(out?.parts.companyFact).toBeUndefined();
+  });
   const experience = [
     { company: 'Meta', title: 'Software Engineer', bullets: ['Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services'] },
     { company: 'Accenture', title: 'Security Consultant', bullets: ['Led the ISO 27001 pre-audit for a regulated bank client and closed all but 3 control gaps before the external audit'] },
