@@ -3,6 +3,7 @@ import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from ".
 import { normaliseLocation } from "../_shared/location.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseCoverLetterStyle, signatureDimensions, type CoverLetterStyle } from "./coverLetterStyle.ts";
+import { shortTitle } from "../tailor-application/letterSlots.ts";
 import {
   PDFDocument,
   rgb,
@@ -605,6 +606,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     jobTitle: string;
     paragraphs: string[];
     signatureName: string;
+    style?: CoverLetterStyle;
   }) => {
     const dateStr = new Date().toLocaleDateString("en-GB", {
       year: "numeric",
@@ -657,11 +659,32 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     });
   };
 
+  const drawBlockHeader = (name: string, role: string, contact: ContactInfo, accent: string) => {
+    const colour = rgb(parseInt(accent.slice(0, 2), 16) / 255, parseInt(accent.slice(2, 4), 16) / 255, parseInt(accent.slice(4, 6), 16) / 255);
+    drawWrapped(name.toUpperCase(), MARGIN, 22, fonts.bold, colour);
+    for (const text of [role, contact.location, contact.phone, contact.email].filter(Boolean)) drawWrapped(text, MARGIN, 10.5, fonts.regular);
+    y -= 12;
+  };
+
+  const drawSignature = async (style: CoverLetterStyle) => {
+    if (!style.signature) return;
+    const sig = style.signature;
+    const image = await pdfDoc.embedPng(Uint8Array.from(atob(sig.png), (c) => c.charCodeAt(0)));
+    const dimensions = signatureDimensions({ ...sig, w: image.width, h: image.height });
+    const width = dimensions.width * 72, height = dimensions.height * 72;
+    ensureSpace(height + 35);
+    const x = sig.align === "right" ? PAGE_W - MARGIN - width : sig.align === "center" ? MARGIN + (CONTENT_W - width) / 2 : MARGIN;
+    page.drawImage(image, { x, y: y - height, width, height });
+    y -= height + 8;
+  };
+
   return {
     get pages() {
       return pages;
     },
     drawTopHeader,
+    drawBlockHeader,
+    drawSignature,
     drawSectionHeader,
     drawSummary,
     drawExperienceEntry,
