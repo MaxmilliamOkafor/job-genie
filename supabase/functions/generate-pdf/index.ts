@@ -607,6 +607,8 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     paragraphs: string[];
     signatureName: string;
     style?: CoverLetterStyle;
+    greeting?: string;
+    signOff?: string;
   }) => {
     const dateStr = new Date().toLocaleDateString("en-GB", {
       year: "numeric",
@@ -625,7 +627,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
 
     ensureSpace(20);
-    page.drawText("Dear Hiring Manager,", {
+    page.drawText(opts.greeting || "Dear Hiring Manager,", {
       x: MARGIN,
       y,
       size: 10.5,
@@ -642,7 +644,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 6;
     ensureSpace(40);
-    page.drawText("Sincerely,", {
+    page.drawText(opts.signOff || "Sincerely,", {
       x: MARGIN,
       y,
       size: 10.5,
@@ -829,6 +831,8 @@ async function renderCoverLetter(
     jobTitle: string;
     paragraphs: string[];
     style?: CoverLetterStyle;
+    greeting?: string;
+    signOff?: string;
   },
 ): Promise<PDFPage[]> {
   const r = makeRenderer(pdfDoc, fonts);
@@ -840,6 +844,8 @@ async function renderCoverLetter(
     paragraphs: data.paragraphs,
     signatureName: data.personalInfo.name,
     style,
+    greeting: data.greeting,
+    signOff: data.signOff,
   });
   return r.pages;
 }
@@ -1848,15 +1854,22 @@ async function handleRawContentRequest(body: {
         .split(/\n\s*\n/)
         .map((p) => p.trim())
         .filter((p) => p && !isFurniture(p));
+      const greeting = content.match(/^Dear[^\n]*$/im)?.[0];
+      const signOff = content.match(/^(?:sincerely|yours sincerely|yours faithfully|kind regards|best regards|regards)[^\n]*$/im)?.[0];
+      const headerLines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const headerRole = headerLines[1] && !headerLines[1].includes("@") && !headerLines[1].includes("|") && !/^Dear\b/i.test(headerLines[1]) ? headerLines[1] : "";
+      const letterRole = shortTitle(headerRole || jobTitle || "");
 
       docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
-        jobTitle: shortTitle(jobTitle || ""),
+        jobTitle: letterRole,
         paragraphs,
         style: letterStyle,
+        greeting,
+        signOff,
       });
       const { pdfDoc, fonts } = await setupPdf(`${norm.personalInfo.name} Cover Letter`, norm.personalInfo.name);
-      await renderCoverLetter(pdfDoc, fonts, { personalInfo: norm.personalInfo, jobTitle: shortTitle(jobTitle || ""), paragraphs, style: letterStyle });
+      await renderCoverLetter(pdfDoc, fonts, { personalInfo: norm.personalInfo, jobTitle: letterRole, paragraphs, style: letterStyle, greeting, signOff });
       letterPdf = await pdfDoc.save();
     }
 
@@ -2245,6 +2258,8 @@ async function buildCoverLetterDocxBytes(data: {
   jobTitle: string;
   paragraphs: string[];
   style?: CoverLetterStyle;
+  greeting?: string;
+  signOff?: string;
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
   const style = data.style || parseCoverLetterStyle(null);
@@ -2275,7 +2290,7 @@ async function buildCoverLetterDocxBytes(data: {
 
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [TR({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: data.greeting || "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
 
   for (const p of data.paragraphs) {
@@ -2290,7 +2305,7 @@ async function buildCoverLetterDocxBytes(data: {
 
   children.push(new Paragraph({
     spacing: { before: 200, after: 60 },
-    children: [TR({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: data.signOff || "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
   if (style.signature) {
     const sig = style.signature;
