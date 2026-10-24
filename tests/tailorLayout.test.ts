@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
-  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection, coverLetterShapeBlock, rightToWorkStatement, enforceLetterRightToWork, employerToolSentences, dropSentences, stripLetterBanned, isFragment, findFragments, letterSignOff, applySignOff, letterToolList, isToolName, protectedSentences,
+  acceptRewrite, applyLetterDate, bulletLengthOk, bulletTarget, acceptLetterRewording, copiesBullet, dropClaimSentences, findCopiedSentences, findBadBullets, shapeCoverLetter, formatLetterDate, formatSkillsSection, coverLetterShapeBlock, rightToWorkStatement, enforceLetterRightToWork, employerToolSentences, dropSentences, stripLetterBanned, isFragment, findFragments, letterSignOff, applySignOff, letterToolList, isToolName, protectedSentences, plainParallelWording, plainCvBullets,
 } from '../supabase/functions/tailor-application/guards';
 
 const one = 'Cut month-end close from nine days to three by moving reconciliations into Python and SQL jobs.'; // 95
@@ -27,6 +27,28 @@ describe('bullet length', () => {
     expect(bulletTarget(174)).toBe('one line, 85 to 105 characters');
     expect(bulletTarget(211)).toBe('two lines, 175 to 210 characters');
     expect(acceptRewrite('Cut costs 30% using Python across teams', one, [])).toBe(false);
+  });
+});
+
+describe('candidate plain wording', () => {
+  it('rejects technical parallel, production and operation verbs in slots', () => {
+    for (const word of ['parallelising', 'parallelizing', 'parallelised', 'parallelises', 'parallelise', 'productionising', 'operationalizing']) {
+      expect(bannedIn(`Improved delivery by ${word} downstream calls.`)).toContain(word);
+    }
+  });
+  it('keeps the object, result and numbers when using plain parallel wording', () => {
+    expect(plainParallelWording('Cut p99 latency by 38% by parallelising downstream calls.')).toBe('Cut p99 latency by 38% by running downstream calls in parallel.');
+  });
+  it('keeps each tense and initial capital for up to four object words', () => {
+    for (const [before, after] of [['Parallelise', 'Run'], ['Parallelises', 'Runs'], ['Parallelised', 'Ran'], ['Parallelising', 'Running']]) {
+      expect(plainParallelWording(`${before} the downstream client requests.`)).toBe(`${after} the downstream client requests in parallel.`);
+    }
+    expect(plainParallelWording('parallelising the very slow downstream client calls')).toBe('parallelising the very slow downstream client calls');
+    expect(plainParallelWording('parallelising delivery')).toBe('parallelising delivery');
+  });
+  it('cleans bullets without changing headings, skills or other text', () => {
+    const cv = 'PROFESSIONAL EXPERIENCE\nEngineer\n• Cut latency 38% by parallelising downstream calls.\nTECHNICAL SKILLS\nparallelising downstream calls';
+    expect(plainCvBullets(cv)).toBe('PROFESSIONAL EXPERIENCE\nEngineer\n• Cut latency 38% by running downstream calls in parallel.\nTECHNICAL SKILLS\nparallelising downstream calls');
   });
 });
 
@@ -299,7 +321,7 @@ describe('cover letter slots', () => {
 
   it('copy limit is 12 words in a row, so a close retelling of the line passes', () => {
     expect(COPY_RUN).toBe(12);
-    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, parallelising downstream Go calls across twelve services', 'Meta');
+    const t = composeResult('cut p99 latency by 38% for the ads delivery platform, running downstream Go calls in parallel across twelve services', 'Meta');
     expect(copiesRun(t, ctx.cvText.split('\n'))).toBe(false);
     expect(checkResult(t, bullets[0], ctx)).toEqual([]);
     expect(copiesRun('At Meta, I cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services.', ctx.cvText.split('\n'))).toBe(true);

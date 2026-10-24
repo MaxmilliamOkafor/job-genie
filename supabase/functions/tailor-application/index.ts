@@ -38,6 +38,7 @@ import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkS
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
+import { plainCvBullets } from "./guards.ts";
 
 
 
@@ -2757,6 +2758,7 @@ SECTION ORDER AND HEADINGS: Output sections in exactly this order with these exa
 ROLE BLOCK SHAPE: Every role is exactly: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line.
 
 BULLET STYLE: Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice ("was replaced by"). Keep every number from the profile's bullets (money, percentages, counts, timelines) exactly as written. Where the profile gives scope (team size, budget, users served), include it. Never append a tool or technology to a bullet unless that profile bullet already names it.
+Keep the candidate's own wording for what they did. Never replace a plain phrase with a technical verb or noun. Write 'running downstream calls in parallel', never 'parallelising downstream calls'. The same applies to productionising, operationalising, leveraging, utilising and spearheading: use the plain words the profile uses.
 
 NAME THE PRACTICE THE BULLET ALREADY DESCRIBES: When the posting asks for a practice and one of the candidate's own bullets already describes exactly that practice, name the practice inside that bullet in natural English, changing nothing else. A bullet that provisions cloud environments with Terraform IS infrastructure as code, so it may read "Provisioned AWS environments as code with Terraform, ..." - the tool, the scope, the numbers and the outcome all stay exactly as recorded. The same applies to declarative pipelines, containerised deployment, automated testing, and other practices the bullet plainly performs. This is wording, never a new claim: never name a practice a bullet does not perform, never add a tool, never change a figure, and never rename the employer, the dates or the scope.
 
@@ -4884,6 +4886,8 @@ ${
       }
     }
 
+    if (result.tailoredResume) result.tailoredResume = plainCvBullets(result.tailoredResume);
+
     // COVER LETTER FROM CHECKED SLOTS. The model writes short slots; code checks
     // each against the profile, the CV and the posting, then assembles the letter.
     let slotLetterBuilt = false;
@@ -5124,7 +5128,7 @@ ${
           heldTitles: ((userProfile as any).workExperience || (userProfile as any).professionalExperience || []).map((e: any) => String(e?.title || "")).filter(Boolean),
         },
         (doc, text) => doc === "cv"
-          ? stripInvisible(stripDashes(text))
+          ? plainCvBullets(stripInvisible(stripDashes(text)))
           : stripInvisible(withProtected(stripLetterBanned(text, story), story, stripDashes)),
       );
       if (screened.screener) {
