@@ -828,6 +828,7 @@ export type Database = {
           city: string | null
           country: string | null
           cover_letter: string | null
+          cover_letter_style: Json | null
           created_at: string | null
           criminal_record: boolean | null
           current_salary: string | null
@@ -894,6 +895,7 @@ export type Database = {
           city?: string | null
           country?: string | null
           cover_letter?: string | null
+          cover_letter_style?: Json | null
           created_at?: string | null
           criminal_record?: boolean | null
           current_salary?: string | null
@@ -960,6 +962,7 @@ export type Database = {
           city?: string | null
           country?: string | null
           cover_letter?: string | null
+          cover_letter_style?: Json | null
           created_at?: string | null
           criminal_record?: boolean | null
           current_salary?: string | null
