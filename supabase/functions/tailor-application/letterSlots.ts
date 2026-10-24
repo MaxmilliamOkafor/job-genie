@@ -807,12 +807,14 @@ export async function buildSlotLetter(
 
   const clean = (x?: string) => x ? stripGrand(stripBoast(restorePunctuation(shortForms(x), ctx.description))) : "";
   let companyFact = "";
+  let factAttempts = standIn ? 2 : 1;
+  let whyAttempts = 0;
   const f0 = standIn ? "" : clean(reply.companyFact);
   if (f0) { const f = factFails(f0); if (!f.length) companyFact = f0; else log(`companyFact failed: ${f.join("; ")}`); }
   const evidence = () => [opening?.text, ...chosen.map((c) => c.text)].filter(Boolean) as string[];
   const whyFails = (w: string) => [...checkWhy(w, companyFact, evidence(), ctx), ...(hasTripleList(w) && lists() >= 1 ? ["uses a list of three"] : [])];
   let why = "";
-  if (reply.why && companyFact) { const f = whyFails(reply.why); if (!f.length) why = reply.why; else log(`why failed: ${f.join("; ")}`); }
+  if (reply.why && companyFact) { whyAttempts++; const f = whyFails(reply.why); if (!f.length) why = reply.why; else log(`why failed: ${f.join("; ")}`); }
 
   // Replacement rounds: the same line once more, then the next best line from an unused employer.
   for (let round = 0; round < 5; round++) {
@@ -825,16 +827,20 @@ export async function buildSlotLetter(
     void short;
     if (!needOpening && !resultLines.length && (standIn || companyFact && why)) break;
     if (!needOpening && chosen.length >= 3 && (standIn || companyFact && why)) break;
-    const wantWhy = companyFact && !why ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
-    const r2 = await ask(replacementPrompt(resultLines, [...new Set(notes)].slice(0, 6), !standIn && !companyFact, wantWhy, ctx.company, needOpening ? openingLine : undefined));
+    const wantWhy = companyFact && !why && whyAttempts < 2 ? `one sentence linking "${companyFact}" to ${ctx.story ? "this story: " + ctx.story : "one of these results: " + evidence().join(" ")} by naming the same problem. Never a generic link.` : "";
+    const wantFact = !standIn && !companyFact && factAttempts < 2;
+    if (!needOpening && !resultLines.length && !wantFact && !wantWhy) break;
+    const r2 = await ask(replacementPrompt(resultLines, [...new Set(notes)].slice(0, 6), wantFact, wantWhy, ctx.company, needOpening ? openingLine : undefined));
     if (r2 == null) break;
     let o2: any = {};
     try { const t = r2.replace(/```[a-z]*\s*/gi, ""); o2 = JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); } catch { /* ignore */ }
     const rep = parseReply(r2);
     if (needOpening) tryOpening(toOpening(o2?.opening));
     for (const p of rep.results) tryResult(p, new Set(resultLines.map((b) => b.n)));
-    if (!standIn && !companyFact && rep.companyFact) { const c = clean(rep.companyFact); const f = factFails(c); if (!f.length) companyFact = c; else log(`companyFact retry failed: ${f.join("; ")}`); }
-    if (companyFact && !why && rep.why) { const f = whyFails(rep.why); if (!f.length) why = rep.why; else log(`why retry failed: ${f.join("; ")}`); }
+    if (wantFact) factAttempts++;
+    if (wantFact && rep.companyFact) { const c = clean(rep.companyFact); const f = factFails(c); if (!f.length) companyFact = c; else log(`companyFact retry failed: ${f.join("; ")}`); }
+    if (wantWhy) whyAttempts++;
+    if (wantWhy && rep.why) { const f = whyFails(rep.why); if (!f.length) why = rep.why; else log(`why retry failed: ${f.join("; ")}`); }
   }
   if (!standIn && !companyFact) {
     let fb = stripGrand(stripBoast(factFromPosting(ctx.description, ctx.company)));
