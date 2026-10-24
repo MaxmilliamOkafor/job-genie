@@ -670,7 +670,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   const drawBlockHeader = (name: string, role: string, contact: ContactInfo, accent: string) => {
     const colour = rgb(parseInt(accent.slice(0, 2), 16) / 255, parseInt(accent.slice(2, 4), 16) / 255, parseInt(accent.slice(4, 6), 16) / 255);
     drawWrapped(name.toUpperCase(), MARGIN, 22, fonts.bold, colour);
-    for (const text of [role, contact.location, contact.phone, contact.email].filter(Boolean)) drawWrapped(text, MARGIN, 10.5, fonts.regular);
+    for (const text of [role, contact.location, contact.phone, contact.email]) if (text) drawWrapped(text, MARGIN, 10.5, fonts.regular);
     y -= 12;
   };
 
