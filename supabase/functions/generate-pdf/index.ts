@@ -3,7 +3,6 @@ import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from ".
 import { normaliseLocation } from "../_shared/location.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseCoverLetterStyle, signatureDimensions, type CoverLetterStyle } from "./coverLetterStyle.ts";
-import { shortTitle } from "../tailor-application/letterSlots.ts";
 import {
   PDFDocument,
   rgb,
@@ -107,6 +106,12 @@ const normaliseSkillGroups = (groups: Array<{ label: string; items: string[] }>)
     byLabel.set(key, current);
   }
   return [...byLabel.values()].filter((group) => group.items.length > 0);
+};
+
+const shortTitle = (title: string): string => {
+  const whole = String(title || "").trim();
+  const trimmed = whole.replace(/^\([^)]*\)\s+/, "").split(/ - | \u2013 | \| |: | \(|, /)[0].trim();
+  return trimmed.split(/\s+/).filter(Boolean).length >= 2 ? trimmed : whole;
 };
 
 // ============================================================
