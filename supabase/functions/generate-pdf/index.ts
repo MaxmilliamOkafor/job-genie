@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { parseCoverLetterStyle, signatureDimensions, type CoverLetterStyle } from "./coverLetterStyle.ts";
 import {
   PDFDocument,
   rgb,
@@ -16,6 +18,7 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  ImageRun,
   ExternalHyperlink,
   AlignmentType,
   TabStopType,
@@ -928,13 +931,27 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.json();
+    const requestType = String(requestBody.type || "").toLowerCase().replace(/[^a-z]/g, "");
+    let letterStyle: CoverLetterStyle | undefined;
+    if (["coverletter", "letter"].includes(requestType)) {
+      const authorization = req.headers.get("Authorization") || "";
+      const token = authorization.replace(/^Bearer\s+/i, "");
+      const client = createClient(Deno.env.get("SUPABASE_URL") || "", Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authorization } }, auth: { persistSession: false },
+      });
+      const { data: auth, error: authError } = await client.auth.getUser(token);
+      if (authError || !auth.user) return new Response(JSON.stringify({ error: "Sign in to export a cover letter." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: profile, error } = await client.from("profiles").select("cover_letter_style").eq("user_id", auth.user.id).maybeSingle();
+      if (error) throw new Error("The saved cover letter style could not be loaded.");
+      letterStyle = parseCoverLetterStyle(profile?.cover_letter_style);
+    }
 
     if (requestBody.content && typeof requestBody.content === "string") {
-      return handleRawContentRequest(requestBody);
+      return handleRawContentRequest(requestBody, letterStyle);
     }
 
     if (requestBody.structuredCv && requestBody.type) {
-      return handleStructuredCvRequest(requestBody);
+      return handleStructuredCvRequest(requestBody, letterStyle);
     }
 
     // ResumeData (or profileData → ResumeData)
@@ -1002,6 +1019,7 @@ serve(async (req) => {
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         jobTitle: sanitizedData.coverLetter.jobTitle,
         paragraphs: sanitizedData.coverLetter.paragraphs || [],
+        style: letterStyle,
       });
     } else {
       docxBytes = new Uint8Array();
@@ -1150,7 +1168,7 @@ function computeFileName(data: ResumeData): string {
 // STRUCTURED CV REQUEST HANDLER
 // ============================================================
 
-async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Response> {
+async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?: CoverLetterStyle): Promise<Response> {
   const { type, fileName, structuredCv, personalInfo, plainText } = body;
   console.log("[generate-pdf] StructuredCv request:", {
     type,
@@ -1213,6 +1231,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         personalInfo: { name: candidateName, contact },
         jobTitle: "",
         paragraphs,
+        style: letterStyle,
       });
     }
 
@@ -1248,7 +1267,7 @@ async function handleRawContentRequest(body: {
   firstName?: string;
   lastName?: string;
   summary?: string;
-}): Promise<Response> {
+}, letterStyle?: CoverLetterStyle): Promise<Response> {
   const {
     content,
     type: rawType = "cv",
@@ -1798,6 +1817,7 @@ async function handleRawContentRequest(body: {
         personalInfo: norm.personalInfo,
         jobTitle: jobTitle || "",
         paragraphs,
+        style: letterStyle,
       });
     }
 
@@ -2185,11 +2205,18 @@ async function buildCoverLetterDocxBytes(data: {
   personalInfo: { name: string; contact: ContactInfo };
   jobTitle: string;
   paragraphs: string[];
+  style?: CoverLetterStyle;
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  // The letter already carries "Re: <role>" below the date, so the header stays
-  // name and contact only - printing the role twice looked like a template bug.
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+  const style = data.style || parseCoverLetterStyle(null);
+  const block = style.template === "block";
+  if (block) {
+    children.push(new Paragraph({ spacing: { after: 80 }, children: [TR({ text: data.personalInfo.name.toUpperCase(), font: DOCX_FONT, size: 44, bold: true, color: style.accent })] }));
+    for (const text of [data.jobTitle, data.personalInfo.contact.location, data.personalInfo.contact.phone, data.personalInfo.contact.email].filter(Boolean)) {
+      children.push(new Paragraph({ spacing: { after: 60 }, children: [TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY })] }));
+    }
+    children.push(new Paragraph({ spacing: { after: 120 } }));
+  } else children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
 
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
@@ -2197,7 +2224,7 @@ async function buildCoverLetterDocxBytes(data: {
     children: [TR({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
   }));
 
-  if (data.jobTitle) {
+  if (data.jobTitle && !block) {
     children.push(new Paragraph({
       spacing: { after: 200 },
       children: [
@@ -2226,6 +2253,16 @@ async function buildCoverLetterDocxBytes(data: {
     spacing: { before: 200, after: 60 },
     children: [TR({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
+  if (style.signature) {
+    const sig = style.signature;
+    const dimensions = signatureDimensions(sig);
+    const bytes = Uint8Array.from(atob(sig.png), (c) => c.charCodeAt(0));
+    children.push(new Paragraph({
+      alignment: sig.align === "right" ? AlignmentType.RIGHT : sig.align === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
+      spacing: { after: 60 },
+      children: [new ImageRun({ data: bytes, transformation: { width: dimensions.width * 96, height: dimensions.height * 96 } })],
+    }));
+  }
   children.push(new Paragraph({
     children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
   }));
