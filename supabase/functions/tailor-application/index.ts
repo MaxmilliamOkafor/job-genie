@@ -40,6 +40,7 @@ import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreen
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets } from "./guards.ts";
+import { loadSavedProfile } from "./savedProfile.ts";
 
 
 
@@ -2231,63 +2232,14 @@ serve(async (req) => {
       rawData.jobId = rawData.jobUrl;
     }
 
-    // If userProfile not provided, fetch from database
-    if (!rawData.userProfile || Object.keys(rawData.userProfile).length === 0) {
-      console.log(`[User ${userId}] Fetching profile from database...`);
-
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
-
-      if (profileError || !profileData) {
-        console.error("Failed to fetch user profile:", profileError);
-        return new Response(
-          JSON.stringify({
-            error: "Profile not found. Please complete your profile in settings.",
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
-      }
-
-      // Map database profile to expected userProfile format
-      // Canonical: use professional_experience (DB column), fallback to work_experience for legacy
-      const dbExperience = Array.isArray(profileData.professional_experience) ? profileData.professional_experience :
-                           Array.isArray(profileData.work_experience) ? profileData.work_experience : [];
-      
-      rawData.userProfile = {
-        firstName: profileData.first_name || "",
-        lastName: profileData.last_name || "",
-        email: profileData.email || "",
-        phone: profileData.phone || "",
-        linkedin: profileData.linkedin || "",
-        github: profileData.github || "",
-        portfolio: profileData.portfolio || "",
-        coverLetter: profileData.cover_letter || "",
-        professionalExperience: dbExperience,
-        education: profileData.education || [],
-        skills: profileData.skills || [],
-        certificationsHidden: Boolean(profileData.certifications_hidden),
-        certifications: profileData.certifications_hidden ? [] : profileData.certifications || [],
-        achievements: profileData.achievements || [],
-        atsStrategy: profileData.ats_strategy || "",
-        city: profileData.city || "",
-        country: profileData.country || "",
-        address: profileData.address || "",
-        state: profileData.state || "",
-        zipCode: profileData.zip_code || "",
-        relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
-        languages: Array.isArray(profileData.languages) ? profileData.languages : [],
-        citizenship: profileData.citizenship || "",
-        workAuthorizedCountries: Array.isArray(profileData.work_authorized_countries) ? profileData.work_authorized_countries : [],
-        noticePeriod: profileData.notice_period || "",
-      };
-
-      console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
+    // Always replace caller snapshots, even non-empty ones, with saved evidence.
+    try {
+      rawData.userProfile = await loadSavedProfile(supabase, userId);
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Your saved profile could not be loaded." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const {
