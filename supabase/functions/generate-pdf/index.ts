@@ -365,9 +365,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   // ---- Section header ----
   const drawSectionHeader = (title: string) => {
     y -= 6;
-    const closing = coverLetterClosingSpacing();
-    const signatureHeight = opts.style?.signature ? signatureDimensions(opts.style.signature).height * 72 : 0;
-    ensureSpace(closing.nameOffset + closing.signatureGap + signatureHeight + 35);
+    ensureSpace(40);
     page.drawText(title.toUpperCase(), {
       x: MARGIN,
       y,
@@ -650,7 +648,9 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
 
     y -= 6;
-    ensureSpace(40);
+    const closing = coverLetterClosingSpacing();
+    const signatureHeight = opts.style?.signature ? signatureDimensions(opts.style.signature).height * 72 : 0;
+    ensureSpace(closing.nameOffset + closing.signatureGap + signatureHeight + 35);
     page.drawText(opts.signOff || "Sincerely,", {
       x: MARGIN,
       y,
