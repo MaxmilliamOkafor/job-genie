@@ -23,3 +23,10 @@ export function signatureDimensions(signature: NonNullable<CoverLetterStyle["sig
   const width = Math.min(2.8, requested * signature.w / signature.h);
   return { width, height: width * signature.h / signature.w };
 }
+
+/** Shared closing spacing in points, with Word's equivalent twips. */
+export function coverLetterClosingSpacing() {
+  const line = 15;
+  const signatureGap = 9;
+  return { nameOffset: line * 2, blankLineTwips: line * 20, signatureGap, signatureGapTwips: signatureGap * 20 };
+}

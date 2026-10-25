@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { parseCoverLetterStyle, signatureDimensions, type CoverLetterStyle } from "./coverLetterStyle.ts";
+import { parseCoverLetterStyle, signatureDimensions, coverLetterClosingSpacing, type CoverLetterStyle } from "./coverLetterStyle.ts";
 import {
   PDFDocument,
   rgb,
@@ -648,7 +648,9 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
 
     y -= 6;
-    ensureSpace(40);
+    const closing = coverLetterClosingSpacing();
+    const signatureHeight = opts.style?.signature ? signatureDimensions(opts.style.signature).height * 72 : 0;
+    ensureSpace(closing.nameOffset + closing.signatureGap + signatureHeight + 35);
     page.drawText(opts.signOff || "Sincerely,", {
       x: MARGIN,
       y,
@@ -656,8 +658,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       font: fonts.regular,
       color: BODY,
     });
-    y -= 10.5 * 2.2;
-    if (opts.style) await drawSignature(opts.style);
+    y -= closing.nameOffset;
     page.drawText(sanitizeText(opts.signatureName), {
       x: MARGIN,
       y,
@@ -665,6 +666,10 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       font: fonts.bold,
       color: NAVY,
     });
+    if (opts.style?.signature) {
+      y -= closing.signatureGap;
+      await drawSignature(opts.style);
+    }
   };
 
   const drawBlockHeader = (name: string, role: string, contact: ContactInfo, accent: string) => {
@@ -2308,9 +2313,16 @@ async function buildCoverLetterDocxBytes(data: {
     }));
   }
 
+  const closing = coverLetterClosingSpacing();
   children.push(new Paragraph({
-    spacing: { before: 200, after: 60 },
+    keepNext: true,
+    spacing: { before: 200, after: closing.blankLineTwips },
     children: [TR({ text: data.signOff || "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+  }));
+  children.push(new Paragraph({
+    keepNext: Boolean(style.signature),
+    spacing: { after: style.signature ? closing.signatureGapTwips : 0 },
+    children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
   }));
   if (style.signature) {
     const sig = style.signature;
@@ -2322,10 +2334,6 @@ async function buildCoverLetterDocxBytes(data: {
       children: [new ImageRun({ data: bytes, transformation: { width: dimensions.width * 96, height: dimensions.height * 96 } })],
     }));
   }
-  children.push(new Paragraph({
-    children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
-  }));
-
   const doc = new DocxDocument({
     ...candidateDocumentProperties(data.personalInfo.name, "cover_letter"),
     styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
