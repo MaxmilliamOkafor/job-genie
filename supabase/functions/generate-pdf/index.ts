@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
+import { removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseCoverLetterStyle, signatureDimensions, coverLetterClosingSpacing, type CoverLetterStyle } from "./coverLetterStyle.ts";
 import {
@@ -974,7 +975,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const requestBody = await req.json();
+    const requestBody = removeMonetaryClaimsFromPayload(await req.json());
     const requestType = String(requestBody.type || "").toLowerCase().replace(/[^a-z]/g, "");
     let letterStyle: CoverLetterStyle | undefined;
     if (["coverletter", "letter"].includes(requestType)) {

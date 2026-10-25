@@ -33,6 +33,7 @@ import {
 } from "../_shared/skillsPlacement.ts";
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
+import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
@@ -2431,6 +2432,8 @@ serve(async (req) => {
     console.log(`Cover letter tone: ${coverLetterTone}`);
 
 const systemPrompt = `You are an elite ATS (Applicant Tracking System) optimisation specialist with deep expertise in how Jobscan, Greenhouse, Workday, and Lever score resumes. Your ONLY goal is to rewrite the provided CV to score 95% or higher on a Jobscan match report against the provided job description, while keeping every claim 100% truthful and grounded in the candidate's actual experience.
+
+MONETARY EXCLUSION: Never include monetary amounts, portfolio values or deal values in the CV or cover letter, even if the profile records them. Keep the work and non-monetary outcomes. This overrides instructions to preserve financial figures.
 
 CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
 ALL output MUST use British English spelling. This is NON-NEGOTIABLE and applies to every word.
@@ -4886,7 +4889,7 @@ ${
       }
     }
 
-    if (result.tailoredResume) result.tailoredResume = plainCvBullets(result.tailoredResume);
+    if (result.tailoredResume) result.tailoredResume = removeMonetaryClaims(plainCvBullets(result.tailoredResume));
 
     // COVER LETTER FROM CHECKED SLOTS. The model writes short slots; code checks
     // each against the profile, the CV and the posting, then assembles the letter.
@@ -5141,6 +5144,12 @@ ${
         console.log(`[AI SCREENER] ${metMust}/${mustGrades.length} must-haves met, applied ${screened.screener.applied}, rejected ${screened.screener.rejected.length}, gaps ${screened.screener.gaps.length}, passes ${screened.screener.passes}`);
       }
     }
+
+    // Last content gate: review edits, restored profile bullets and protected
+    // stories cannot bypass the monetary exclusion. Export repeats this gate.
+    result.tailoredResume = removeMonetaryClaims(result.tailoredResume || "");
+    result.tailoredCoverLetter = removeMonetaryClaims(result.tailoredCoverLetter || "");
+    if (result.resumeStructured) result.resumeStructured = removeMonetaryClaimsFromPayload(result.resumeStructured);
 
     result.truthfulness = {
       removedYearsClaims,
