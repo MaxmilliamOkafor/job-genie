@@ -9,7 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useApplications, type Application } from '@/hooks/useApplications';
 import { useProfile } from '@/hooks/useProfile';
 
-import { Copy, Download, Eye, FileText, Loader2, Search } from 'lucide-react';
+import { Copy, Download, Eye, FileText, Loader2, Search, RefreshCw } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { refreshDocuments } from '@/lib/refreshDocuments';
 import { toast } from 'sonner';
 import {
   documentSlug as slug,
@@ -21,12 +24,30 @@ import {
 } from '@/lib/documentExport';
 
 export default function Documents() {
-  const { applications, isLoading } = useApplications();
+  const { applications, isLoading, fetchApplications } = useApplications();
+  const { user } = useAuth();
   const { profile } = useProfile();
 
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Application | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async () => {
+    if (!open || !user || refreshing) return;
+    setRefreshing(true);
+    try {
+      const updated = await refreshDocuments(supabase, open.id, user.id);
+      setOpen({ ...open, ...updated, job: open.job });
+      setExported({});
+      await fetchApplications();
+      toast.success('CV and cover letter updated from your latest saved profile');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Your documents could not be refreshed.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
   /** Fingerprint of the text behind each downloaded file, so stale saves are flagged. */
   const [exported, setExported] = useState<Record<string, string>>({});
 
@@ -115,13 +136,17 @@ export default function Documents() {
         )}
       </div>
 
-      <Dialog open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
+      <Dialog open={!!open} onOpenChange={(v) => !v && !refreshing && setOpen(null)}>
         <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               {open?.job?.title} — {open?.job?.company}
             </DialogTitle>
           </DialogHeader>
+          <Button variant="secondary" disabled={refreshing || !!exporting || !user} onClick={refresh}>
+            {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {refreshing ? 'Updating documents...' : 'Update from latest profile'}
+          </Button>
           <Tabs defaultValue="cv">
             <TabsList>
               <TabsTrigger value="cv">CV</TabsTrigger>
@@ -145,7 +170,7 @@ export default function Documents() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
-                      disabled={!text}
+                      disabled={!text || refreshing}
                       onClick={() => {
                         navigator.clipboard.writeText(text);
                         toast.success('Copied');
@@ -154,7 +179,7 @@ export default function Documents() {
                       <Copy className="mr-2 h-4 w-4" /> Copy
                     </Button>
                     <Button
-                      disabled={!text || busy}
+                      disabled={!text || busy || refreshing}
                       onClick={async () => {
                         setExporting(`${open?.id}:${kind}`);
                         try {
@@ -196,7 +221,7 @@ export default function Documents() {
                     </Button>
                     <Button
                       variant="outline"
-                      disabled={!text}
+                      disabled={!text || refreshing}
                       onClick={() => downloadText(`${base}.txt`, text)}
                     >
                       Download text
