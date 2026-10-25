@@ -5,6 +5,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
+- [ ] Use the latest authenticated saved Settings profile for generation and provide regeneration of existing saved documents; test, deploy and verify.
 - [x] Exclude monetary amounts from generated CVs and letters and older-draft exports; 381 application tests passed, both functions deployed, signed-in CV and letter Word downloads verified.
 - [x] Apply the five uploaded changes only: verify existing changes 1-4, add candidate plain-wording rules and safeguards, test and deploy.
 - [x] Apply the four uploaded changes: prompt figures, saved cover letter layout/signature, latest documents, and checked letter wording; test and deploy.
