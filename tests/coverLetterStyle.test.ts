@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'bun:test';
-import { parseCoverLetterStyle, signatureDimensions } from '../supabase/functions/generate-pdf/coverLetterStyle.ts';
+import { parseCoverLetterStyle, signatureDimensions, coverLetterClosingSpacing } from '../supabase/functions/generate-pdf/coverLetterStyle.ts';
 
 describe('saved cover letter style', () => {
+  it('leaves one blank line between sign-off and typed name', () => {
+    expect(coverLetterClosingSpacing().nameOffset).toBe(30);
+    expect(coverLetterClosingSpacing().blankLineTwips).toBe(300);
+  });
+  it('leaves a 9pt gap below the typed name before the signature', () => {
+    expect(coverLetterClosingSpacing().signatureGap).toBe(9);
+    expect(coverLetterClosingSpacing().signatureGapTwips).toBe(180);
+  });
   it('defaults null to Block without a signature', () => {
     expect(parseCoverLetterStyle(null).template).toBe('block');
     expect(parseCoverLetterStyle(null).signature).toBeNull();
