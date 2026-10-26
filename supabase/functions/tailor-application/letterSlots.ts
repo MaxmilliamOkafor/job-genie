@@ -25,6 +25,8 @@ export const SLOT_BANNED_PATTERNS: RegExp[] = [
   /\bparalleli[sz](?:e|es|ed|ing)\b/i,
   /\bproductioni[sz](?:e|es|ed|ing)\b/i,
   /\boperationali[sz](?:e|es|ed|ing)\b/i,
+  /\bshowing (?:familiarity|proficiency|expertise) with\b/i,
+  /^Demonstrated (?:initiative|the ability)\b/i,
 ];
 
 /** Words a result may only use when its bullet already has them. */
@@ -574,7 +576,7 @@ export function stripBoast(s: string): string {
 
 const CLAUSE_RULES = `Each "clause" retells ONE numbered line in your own word order as what the candidate did, starting with a past-tense verb, without "I" and without the employer's name (code adds "At {Employer}, I"). 18 to 30 words.
 - Keep every number from the line exactly as written ("all but three gaps", never "nearly all gaps").
-- Keep the candidate's own wording for what they did. Never replace a plain phrase with a technical verb or noun. Write 'running downstream calls in parallel', never 'parallelising downstream calls'. The same applies to productionising, operationalising, leveraging, utilising and spearheading: use the plain words the profile uses.
+- Keep the candidate's own wording for what they did. Never replace a plain phrase with a technical verb or noun. Write 'running downstream calls in parallel', never 'parallelising downstream calls'. The same applies to productionising, operationalising, leveraging, utilising and spearheading: use the plain words the profile uses. Never add a quality the work does not show, such as 'showing familiarity with ...', 'demonstrated initiative and the ability to work independently by ...' or 'enhancing ... capabilities'.
 - Keep the line's own words and facts: at least 60% of the clause's words must come from that line. Add no number, tool or claim the line does not have. Never add: ${NO_ADD_WORDS.join(", ")}, unless the line has the word.
 - Never copy ${COPY_RUN} or more words in a row from the line: reorder it or split it after a comma.
 - Write "AI" and "NLP", never "artificial intelligence" or "natural language processing".
@@ -750,6 +752,7 @@ export async function buildSlotLetter(
       log(`result line ${p.line} failed: ${f.join("; ")}`);
       notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`));
       if ((attempts.get(p.line) || 0) < 2) return;
+      if (bannedIn(text).length || wordingFails(text, base.role, ctx.description).length) return;
       // Failed twice: the line itself, every number kept. The copy limit does not apply.
       text = composeResult(lineAsClause(b.text), b.company);
       if (hasTripleList(text) && lists() >= 1) { log(`result line ${p.line} fallback skipped: second list of three`); return; }
@@ -772,7 +775,10 @@ export async function buildSlotLetter(
     if (f.length) {
       log(`opening line ${o.line} failed: ${f.join("; ")}`);
       notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`));
-      if ((attempts.get(o.line) || 0) >= 2) setOpening(b, "");
+      if ((attempts.get(o.line) || 0) >= 2) {
+        if (bannedIn(o.problem).length || wordingFails(o.problem, base.role, ctx.description).length) openingLine = undefined;
+        else setOpening(b, "");
+      }
       return;
     }
     setOpening(b, o.problem);
