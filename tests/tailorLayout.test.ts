@@ -311,6 +311,30 @@ describe('cover letter slots', () => {
     expect(prompts[0]).not.toContain('"companyFact":');
     expect(out?.parts.companyFact).toBeUndefined();
   });
+  it('drops a wording-invalid result after one retry without restoring its source', async () => {
+    const experience = [{ company: 'Acme', title: 'Engineer', bullets: ['Built downstream calls in Go and cut latency by 38%.'] }];
+    const base = { name: 'Candidate', contact: '', greeting: 'Dear Hiring Team,', role: 'Software Engineer', company: 'FinTech', story: 'A separate opening story.', rightToWork: '', notice: '' };
+    let calls = 0;
+    const out = await buildSlotLetter(base, { experience, bullets: profileBullets(experience), cvText: '', description: '', tools: ['Go'], profileText: '', company: 'FinTech', story: base.story, requirements: ['Go'] }, async () => {
+      calls++;
+      return JSON.stringify({ results: [{ line: 1, clause: 'Built downstream calls in Go and cut latency by 38%, showing familiarity with distributed systems.' }] });
+    });
+    expect(calls).toBe(2);
+    expect(out?.parts.results).toEqual([]);
+    expect(out?.letter).not.toContain('38%');
+  });
+  it('drops a wording-invalid opening after one retry without restoring its source', async () => {
+    const experience = [{ company: 'Acme', title: 'Engineer', bullets: ['Cleared a backlog of requests with Go and cut latency by 38%.'] }];
+    const base = { name: 'Candidate', contact: '', greeting: 'Dear Hiring Team,', role: 'Software Engineer', company: 'FinTech', story: '', rightToWork: '', notice: '' };
+    let calls = 0;
+    const out = await buildSlotLetter(base, { experience, bullets: profileBullets(experience), cvText: '', description: '', tools: ['Go'], profileText: '', company: 'FinTech', story: '', requirements: ['Go'] }, async () => {
+      calls++;
+      return JSON.stringify({ opening: { line: 1, problem: 'The open role stood out to me.' }, results: [] });
+    });
+    expect(calls).toBe(2);
+    expect(out?.parts.opening).toBeUndefined();
+    expect(out?.letter).not.toContain('38%');
+  });
   const experience = [
     { company: 'Meta', title: 'Software Engineer', bullets: ['Cut p99 latency by 38% for the ads delivery platform by parallelising downstream calls in Go across twelve services'] },
     { company: 'Accenture', title: 'Security Consultant', bullets: ['Led the ISO 27001 pre-audit for a regulated bank client and closed all but 3 control gaps before the external audit'] },

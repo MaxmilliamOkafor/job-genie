@@ -752,6 +752,7 @@ export async function buildSlotLetter(
       log(`result line ${p.line} failed: ${f.join("; ")}`);
       notes.push(...f.slice(0, 2).map((x) => `line ${p.line} ${x}`));
       if ((attempts.get(p.line) || 0) < 2) return;
+      if (bannedIn(text).length || wordingFails(text, base.role, ctx.description).length) return;
       // Failed twice: the line itself, every number kept. The copy limit does not apply.
       text = composeResult(lineAsClause(b.text), b.company);
       if (hasTripleList(text) && lists() >= 1) { log(`result line ${p.line} fallback skipped: second list of three`); return; }
@@ -774,7 +775,10 @@ export async function buildSlotLetter(
     if (f.length) {
       log(`opening line ${o.line} failed: ${f.join("; ")}`);
       notes.push(...f.slice(0, 2).map((x) => `line ${o.line} ${x}`));
-      if ((attempts.get(o.line) || 0) >= 2) setOpening(b, "");
+      if ((attempts.get(o.line) || 0) >= 2) {
+        if (bannedIn(o.problem).length || wordingFails(o.problem, base.role, ctx.description).length) openingLine = undefined;
+        else setOpening(b, "");
+      }
       return;
     }
     setOpening(b, o.problem);
