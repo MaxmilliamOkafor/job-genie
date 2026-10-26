@@ -1,6 +1,7 @@
 # Job Genie alignment roadmap
 
 ## Done
+- [ ] Recheck the five reuploaded changes and add only missing plain-wording safeguards; run all tests and deploy affected functions.
 - [x] 1. Four views (Apply / Documents / Follow-up / Settings) with navy + violet nav + teal actions, 15px body, 44px controls, legacy route redirects.
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 

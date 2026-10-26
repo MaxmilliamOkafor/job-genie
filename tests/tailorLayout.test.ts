@@ -31,6 +31,15 @@ describe('bullet length', () => {
 });
 
 describe('candidate plain wording', () => {
+  it('rejects added familiarity, proficiency or expertise claims in slots', () => {
+    for (const quality of ['familiarity', 'proficiency', 'expertise']) {
+      expect(bannedIn(`Built downstream calls, showing ${quality} with distributed systems.`)).toContain(`showing ${quality} with`);
+    }
+  });
+  it('rejects demonstrated initiative or ability openers in slots', () => {
+    expect(bannedIn('Demonstrated initiative by running downstream calls in parallel.')).toContain('Demonstrated initiative');
+    expect(bannedIn('Demonstrated the ability to work independently by running downstream calls in parallel.')).toContain('Demonstrated the ability');
+  });
   it('rejects technical parallel, production and operation verbs in slots', () => {
     for (const word of ['parallelising', 'parallelizing', 'parallelised', 'parallelises', 'parallelise', 'productionising', 'operationalizing']) {
       expect(bannedIn(`Improved delivery by ${word} downstream calls.`)).toContain(word);
