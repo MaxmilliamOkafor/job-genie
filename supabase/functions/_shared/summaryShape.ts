@@ -250,6 +250,12 @@ export function deriveField(heldTitles: string[], targetTitle = "", currentTitle
  * A term that lives only in the skills section is a word on a page, so only
  * bullet text counts here.
  */
+// A trait or a quality is not a strength to lead with: "Background in
+// software engineering, with strengths in ISO 27001 and accuracy"
+// (AlphaSense, 2 Nov). The posting's soft skills stay in the bullets
+// that show them.
+const NOT_A_STRENGTH = /^(?:accuracy|accurate|quality|efficiency|reliability|consistency|speed|detail|attention to detail|detail[- ]oriented|accountability|ownership|integrity|excellence|impact|results?|results[- ]oriented|performance|success|growth|initiative|proactive|self[- ]starter|independent|adaptability|flexibility|creativity|innovation|empathy|communication|communication skills|collaboration|teamwork|problem[- ]solving|critical thinking|time management|prioriti[sz]ation|multitasking|policy|policies|standards|process|processes)$/i;
+
 export function evidencedRequirements(requirements: string[], experienceBullets: string[], limit = 3): string[] {
   const body = experienceBullets.map(stripBullet).join("\n").toLowerCase();
   const out: string[] = [];
@@ -258,6 +264,7 @@ export function evidencedRequirements(requirements: string[], experienceBullets:
     const term = (raw || "").trim();
     // Under three letters a "term" is a verb or abbreviation (go, do), not a scope.
     if (!term || term.length < 3 || term.length > 40) continue;
+    if (NOT_A_STRENGTH.test(term)) continue;
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
     if (!hasWord(body, term)) continue;
