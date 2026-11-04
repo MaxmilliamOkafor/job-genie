@@ -77,12 +77,12 @@ describe('rule 3: unbacked skills items are dropped', () => {
     '• Resolved incident management tickets for 200 staff using ServiceNow.',
     '',
     'TECHNICAL SKILLS',
-    'Professional: Major Incident Management, Intune, Equipment Lifecycle, Device Management',
+    'Professional: Major Incident Management, ServiceNow, Ticketing, Intune, Equipment Lifecycle, Device Management',
     'Languages: English (fluent)',
   ].join('\n');
   it('drops items the profile and CV never show, keeps backed ones with modifiers', () => {
     const out = dropUnbackedSkills(cv, 'ServiceNow ticketing and incident management');
-    expect(out).toContain('Professional: Major Incident Management');
+    expect(out).toContain('Professional: Major Incident Management, ServiceNow, Ticketing');
     expect(out).not.toContain('Intune');
     expect(out).not.toContain('Equipment Lifecycle');
     expect(out).not.toContain('Device Management');

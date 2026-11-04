@@ -1184,7 +1184,7 @@ export function unstitchBullet(text: string): string {
   let t = String(text || "");
   t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, "and ");
   const m = t.match(/^([^,]{10,}?),\s*([a-z][\w-]*ing)\s+([\s\S]+)$/);
-  if (m && !opensWithPastVerb(m[1])) {
+  if (m) {
     const past = pastTenseOf(m[2]);
     t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${m[3]}`;
   }
