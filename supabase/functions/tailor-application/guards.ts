@@ -1166,15 +1166,6 @@ function pastTenseOf(ing: string): string {
   return `${w.slice(0, -3)}ed`;
 }
 
-const PAST_OPENER = /^[a-z]+ed$/i;
-const PAST_IRREGULAR_OPENERS = new Set(["built", "led", "ran", "cut", "made", "sold", "kept", "won", "grew", "drove", "held", "set", "met", "spent", "brought", "taught", "wrote", "spoke", "chose", "broke", "took", "shook", "began", "drew", "stood", "saw", "sent", "left", "lost", "put", "read", "said", "paid", "laid", "fell", "felt", "found", "gave", "got", "heard", "hit", "hurt"]);
-
-/** True when the bullet already opens with what was done (a past-tense verb). */
-function opensWithPastVerb(text: string): boolean {
-  const first = (String(text || "").trim().match(/^[\p{L}'-]+/u) || [""])[0];
-  return PAST_OPENER.test(first) || PAST_IRREGULAR_OPENERS.has(first.toLowerCase());
-}
-
 /**
  * Rule 1: a posting duty stitched in front of a real bullet comes off, only
  * when the stitched part is followed by an -ing verb, which becomes its past
