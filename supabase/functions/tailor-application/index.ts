@@ -39,7 +39,7 @@ import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkS
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
-import { plainCvBullets } from "./guards.ts";
+import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
 
@@ -5102,6 +5102,15 @@ ${
     result.tailoredResume = removeMonetaryClaims(result.tailoredResume || "");
     result.tailoredCoverLetter = removeMonetaryClaims(result.tailoredCoverLetter || "");
     if (result.resumeStructured) result.resumeStructured = removeMonetaryClaimsFromPayload(result.resumeStructured);
+
+    // Final clean-up rules, after every guard and before the documents are saved or returned.
+    const polished = polishTailoredDocuments(
+      result.tailoredResume || "",
+      result.tailoredCoverLetter || "",
+      `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+    );
+    result.tailoredResume = polished.cv;
+    result.tailoredCoverLetter = polished.letter;
 
     result.truthfulness = {
       removedYearsClaims,
