@@ -1173,7 +1173,7 @@ function pastTenseOf(ing: string): string {
  */
 export function unstitchBullet(text: string): string {
   let t = String(text || "");
-  t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, "and ");
+  t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
   const m = t.match(/^([^,]{10,}?),\s*([a-z][\w-]*ing)\s+([\s\S]+)$/);
   if (m) {
     const past = pastTenseOf(m[2]);
@@ -1197,7 +1197,10 @@ function skillLines(lines: string[]): { range: [number, number]; entries: { inde
   return { range, entries };
 }
 
-const sameSkill = (a: string, b: string) => stemPhrase(a) === stemPhrase(b);
+// "Data Pipeline" and "Data Pipelines" are the same skill; a plain trailing-s
+// drop per word, never the shared stemmer's "es" rule ("pipelines" to "pipelin").
+const skillKey = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9+#. ]/g, " ").split(/\s+/).filter(Boolean).map((w) => w.replace(/s$/, "")).join(" ");
+const sameSkill = (a: string, b: string) => skillKey(a) === skillKey(b);
 
 /** Tools named by the CV's own bullets and projects, never the bullet's opening verb. */
 function toolsNamedInCv(lines: string[], skillsRange: [number, number]): string[] {
