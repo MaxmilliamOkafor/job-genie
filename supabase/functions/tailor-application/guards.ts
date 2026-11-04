@@ -1181,13 +1181,16 @@ export function unstitchBullet(text: string): string {
   const comma = t.lastIndexOf(",");
   if (comma >= 10 && !/\d/.test(t.slice(0, comma))) {
     const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)].filter((m) => m.index !== undefined && m.index > comma);
-    for (let k = 0; k < ings.length; k++) {
-      const cur = ings[k];
-      const next = ings[k + 1];
-      if (next && /\b(by|through|via|while)\s*$/.test(t.slice(cur.index! + cur[1].length, next.index))) continue;
-      const past = pastTenseOf(cur[1]);
-      t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(cur.index! + cur[1].length)}`;
-      break;
+    const first = ings[0];
+    if (first) {
+      // "..., ensuring efficient processing by replacing X" starts at "replacing".
+      const rest = t.slice(first.index! + first[1].length);
+      const hand = rest.match(/\b(?:by|through|via|while)\s+([a-z][\w-]*ing)\b/);
+      const verb = hand && hand.index !== undefined
+        ? { word: hand[1], at: first.index! + first[1].length + hand.index + hand[0].length - hand[1].length }
+        : { word: first[1], at: first.index! };
+      const past = pastTenseOf(verb.word);
+      t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(verb.at + verb.word.length)}`;
     }
   }
   return t.replace(/ {2,}/g, " ").trim();
