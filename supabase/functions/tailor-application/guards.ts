@@ -1248,7 +1248,7 @@ export function mergeNamedToolsIntoSkills(resume: string): string {
   }
   const existing = skills.entries.flatMap((e) => e.items);
   const has = (tool: string) => existing.some((x) =>
-    sameSkill(x, tool) || stemPhrase(tool).startsWith(`${stemPhrase(x)} `) || stemPhrase(x).startsWith(`${stemPhrase(tool)} `));
+    sameSkill(x, tool) || skillKey(tool).startsWith(`${skillKey(x)} `) || skillKey(x).startsWith(`${skillKey(tool)} `));
   for (const tool of toolsNamedInCv(lines, skills.range)) {
     if (has(tool)) continue;
     const group = GROUP_TESTS.find(([, re]) => re.test(tool))?.[0] || null;
@@ -1274,7 +1274,8 @@ export function dropUnbackedSkills(resume: string, profileText: string): string 
   const skills = skillLines(lines);
   if (!skills || !skills.entries.length) return resume;
   const outside = lines.filter((_, i) => i < skills.range[0] || i >= skills.range[1]).join("\n");
-  const evidence = `${outside}\n${profileText || ""}`;
+  // Punctuation off, so a term before a full stop still matches.
+  const evidence = `${outside}\n${profileText || ""}`.replace(/[.,;:()]/g, " ");
   let total = 0;
   let wouldDrop = 0;
   const keep = new Map<number, string[]>();
@@ -1314,7 +1315,7 @@ export function trimHeadline(resume: string, profileText: string): string {
   if (hi < 1) return resume;
   const headline = lines[hi].trim();
   const summaryRange = sectionRange(lines, /^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/i);
-  const evidence = lines.filter((_, i) => i !== hi && (!summaryRange || i < summaryRange[0] || i >= summaryRange[1])).join("\n") + `\n${profileText || ""}`;
+  const evidence = (lines.filter((_, i) => i !== hi && (!summaryRange || i < summaryRange[0] || i >= summaryRange[1])).join("\n") + `\n${profileText || ""}`).replace(/[.,;:()]/g, " ");
   const words = headline.split(/\s+/);
   for (let w = 1; w < words.length; w++) {
     const word = words[w].replace(/^[(&]+|[),.&;:]+$/g, "");
