@@ -1147,3 +1147,241 @@ export function shapeCoverLetter(letter: string, bullets: string[], header: { na
   }
   return { text: out.join("\n\n"), notes };
 }
+
+// ---------------------------------------------------------------------------
+// Final clean-up of the tailored CV and cover letter. No model call.
+
+const IRREGULAR_PAST: Record<string, string> = {
+  leading: "led", rebuilding: "rebuilt", building: "built", running: "ran", cutting: "cut",
+  making: "made", keeping: "kept", selling: "sold", growing: "grew", driving: "drove",
+  writing: "wrote", teaching: "taught", bringing: "brought", choosing: "chose", breaking: "broke",
+  taking: "took", holding: "held", setting: "set", meeting: "met", spending: "spent",
+  winning: "won", beginning: "began", speaking: "spoke", drawing: "drew", standing: "stood",
+};
+
+/** Past tense of an -ing verb: closing to closed, leading to led. */
+function pastTenseOf(ing: string): string {
+  const w = ing.toLowerCase();
+  if (IRREGULAR_PAST[w]) return IRREGULAR_PAST[w];
+  return `${w.slice(0, -3)}ed`;
+}
+
+/**
+ * Rule 1: a posting duty stitched in front of a real bullet comes off, only
+ * when the stitched part is followed by an -ing verb, which becomes its past
+ * tense. A mid-bullet ", wording findings effectively and " becomes " and ".
+ */
+export function unstitchBullet(text: string): string {
+  let t = String(text || "");
+  t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
+  // The stitched duty ends at the first -ing verb after the last comma, when
+  // the prefix carries no number; a clause ending in "by" or "through" hands
+  // over to the next -ing verb ("..., ensuring efficient processing by
+  // replacing X" starts at "replacing").
+  const comma = t.lastIndexOf(",");
+  if (comma >= 10 && !/\d/.test(t.slice(0, comma))) {
+    const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)].filter((m) => m.index !== undefined && m.index > comma);
+    const first = ings[0];
+    if (first) {
+      // "..., ensuring efficient processing by replacing X" starts at "replacing".
+      const rest = t.slice(first.index! + first[1].length);
+      const hand = rest.match(/\b(?:by|through|via|while)\s+([a-z][\w-]*ing)\b/);
+      const verb = hand && hand.index !== undefined
+        ? { word: hand[1], at: first.index! + first[1].length + hand.index + hand[0].length - hand[1].length }
+        : { word: first[1], at: first.index! };
+      const past = pastTenseOf(verb.word);
+      t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(verb.at + verb.word.length)}`;
+    }
+  }
+  return t.replace(/ {2,}/g, " ").trim();
+}
+
+// Plain prose words that are never added to a skills line.
+const NOT_A_SKILL_TOOL = /^(risk|analytics|excel|statistics|data|management|communication|leadership|reporting|analysis|governance|compliance|testing|design|research|support|training|strategy|operations|finance|security)$/i;
+
+/** Skills lines of the CV: label, items and line index. */
+function skillLines(lines: string[]): { range: [number, number]; entries: { index: number; label: string; items: string[] }[] } | null {
+  const range = sectionRange(lines, /^(TECHNICAL SKILLS|SKILLS|CORE SKILLS|KEY SKILLS)$/i);
+  if (!range) return null;
+  const entries: { index: number; label: string; items: string[] }[] = [];
+  for (let i = range[0] + 1; i < range[1]; i++) {
+    const m = lines[i].trim().match(/^([^:]{2,40}):\s*(.+)$/);
+    if (m) entries.push({ index: i, label: m[1].trim(), items: m[2].split(/\s*[,;|]\s*/).map((x) => x.trim()).filter(Boolean) });
+  }
+  return { range, entries };
+}
+
+// "Data Pipeline" and "Data Pipelines" are the same skill; a plain trailing-s
+// drop per word, never the shared stemmer's "es" rule ("pipelines" to "pipelin").
+const skillKey = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9+#. ]/g, " ").split(/\s+/).filter(Boolean).map((w) => w.replace(/s$/, "")).join(" ");
+const sameSkill = (a: string, b: string) => skillKey(a) === skillKey(b);
+
+/** Tools named by the CV's own bullets and projects, never the bullet's opening verb. */
+function toolsNamedInCv(lines: string[], skillsRange: [number, number]): string[] {
+  const out: string[] = [];
+  const push = (t: string) => {
+    const c = String(t || "").replace(/[.,;]+$/, "").trim();
+    if (c.length >= 2 && c.length <= 40 && isToolName(c) && !NOT_A_SKILL_TOOL.test(c) && !out.some((x) => sameSkill(x, c))) out.push(c);
+  };
+  for (let i = 0; i < lines.length; i++) {
+    if (i >= skillsRange[0] && i < skillsRange[1]) continue;
+    const line = lines[i];
+    const bullet = line.match(BULLET_RE);
+    const toolLine = line.match(/^\s*(?:tools?|technologies|tech stack|stack|built with)\s*:\s*(.+)$/i);
+    if (toolLine) toolLine[1].split(/\s*[,;|]\s*/).forEach(push);
+    if (!bullet) continue;
+    const body = bullet[3];
+    const closing = body.match(/\(([^()]{2,80})\)\s*\.?\s*$/);
+    if (closing) closing[1].split(/\s*[,;|]\s*/).forEach(push);
+    // Capitalised tool names inside the sentence, never the opening verb.
+    const inner = body.replace(/^[\p{L}'-]+/u, "");
+    for (const m of inner.matchAll(/(?:^|[^[\]\w/#.])([A-Z][\w.#+]*(?:[ ][A-Z][\w.#+]*){0,2})/g)) push(m[1]);
+  }
+  return out;
+}
+
+/**
+ * Rule 2: tools the CV's own bullets and projects name join the matching
+ * skills line, when the CV already has that line. Never a new line, never a
+ * duplicate in any form.
+ */
+export function mergeNamedToolsIntoSkills(resume: string): string {
+  const lines = String(resume || "").split("\n");
+  const skills = skillLines(lines);
+  if (!skills || !skills.entries.length) return resume;
+  // "Data Pipeline (Data Pipelines)" becomes "Data Pipeline".
+  for (const e of skills.entries) {
+    const cleaned = e.items.map((it) => {
+      const m = it.match(/^(.+?)\s*\(([^()]+)\)$/);
+      return m && sameSkill(m[1], m[2]) ? m[1].trim() : it;
+    });
+    if (cleaned.join(", ") !== e.items.join(", ")) {
+      e.items = cleaned;
+      lines[e.index] = `${e.label}: ${cleaned.join(", ")}`;
+    }
+  }
+  const existing = skills.entries.flatMap((e) => e.items);
+  const has = (tool: string) => existing.some((x) =>
+    sameSkill(x, tool) || skillKey(tool).startsWith(`${skillKey(x)} `) || skillKey(x).startsWith(`${skillKey(tool)} `));
+  for (const tool of toolsNamedInCv(lines, skills.range)) {
+    if (has(tool)) continue;
+    const group = GROUP_TESTS.find(([, re]) => re.test(tool))?.[0] || null;
+    if (!group) continue;
+    const target = skills.entries.find((e) => labelGroup(e.label) === group);
+    if (!target) continue; // never create a new skills line
+    target.items.push(tool);
+    existing.push(tool);
+    lines[target.index] = `${target.label}: ${target.items.join(", ")}`;
+  }
+  return lines.join("\n");
+}
+
+const SKILL_MODIFIER = /^(?:major|advanced|senior|enterprise|strategic|end-to-end|modern|hands-on|applied|core)\s+/i;
+
+/**
+ * Rule 3: skills items that neither the profile nor the CV outside the
+ * skills section shows are dropped. Languages lines are never touched, and
+ * when more than 60% would go, nothing changes.
+ */
+export function dropUnbackedSkills(resume: string, profileText: string): string {
+  const lines = String(resume || "").split("\n");
+  const skills = skillLines(lines);
+  if (!skills || !skills.entries.length) return resume;
+  const outside = lines.filter((_, i) => i < skills.range[0] || i >= skills.range[1]).join("\n");
+  // Punctuation off, so a term before a full stop still matches.
+  const evidence = `${outside}\n${profileText || ""}`.replace(/[.,;:()]/g, " ");
+  let total = 0;
+  let wouldDrop = 0;
+  const keep = new Map<number, string[]>();
+  for (const e of skills.entries) {
+    if (/^(languages?|spoken)\b/i.test(e.label)) { keep.set(e.index, e.items); continue; }
+    const kept: string[] = [];
+    for (const item of e.items) {
+      total++;
+      const bare = item.replace(SKILL_MODIFIER, "").trim();
+      if (containsTerm(evidence, bare) || containsTerm(evidence, item)) kept.push(item);
+      else wouldDrop++;
+    }
+    keep.set(e.index, kept);
+  }
+  if (!total || wouldDrop / total > 0.6) return resume;
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const e = skills.entries.find((x) => x.index === i);
+    if (!e) { out.push(lines[i]); continue; }
+    const kept = keep.get(i) || [];
+    if (kept.length) out.push(`${e.label}: ${kept.join(", ")}`);
+  }
+  return out.join("\n");
+}
+
+const ROLE_WORDS = new Set("data engineer engineering software developer development analyst analytics manager management designer design consultant consulting architect architecture scientist science lead senior junior product project program programme business systems system solutions solution cloud security network infrastructure support specialist administrator coordinator officer director head full stack front frontend back backend qa test testing devops ml ai etl bi reporting platform platforms analyst engineer scientist".split(" "));
+
+/**
+ * Rule 4: the headline under the name keeps the role and drops a trailing
+ * part that names a platform or tool the bullets, skills lines and profile
+ * never show. The summary is ignored for this check.
+ */
+export function trimHeadline(resume: string, profileText: string): string {
+  const lines = String(resume || "").split("\n");
+  if (lines.length < 2) return resume;
+  const hi = lines.findIndex((l, i) => i > 0 && i < 4 && l.trim() && !/@|https?:|www\.|\d{5,}/.test(l) && !/^[A-Z][A-Z &/]+$/.test(l.trim()));
+  if (hi < 1) return resume;
+  const headline = lines[hi].trim();
+  const summaryRange = sectionRange(lines, /^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/i);
+  const evidence = (lines.filter((_, i) => i !== hi && (!summaryRange || i < summaryRange[0] || i >= summaryRange[1])).join("\n") + `\n${profileText || ""}`).replace(/[.,;:()]/g, " ");
+  const words = headline.split(/\s+/);
+  for (let w = 1; w < words.length; w++) {
+    const word = words[w].replace(/^[(&]+|[),.&;:]+$/g, "");
+    if (!word || word.length < 3) continue;
+    if (ROLE_WORDS.has(word.toLowerCase())) continue;
+    if (!/^[A-Z]/.test(word)) continue;
+    const rest = words.slice(w).join(" ").replace(/[(),.&;:]/g, " ");
+    if (containsTerm(evidence, word) || containsTerm(evidence, rest)) continue;
+    const kept = words.slice(0, w).join(" ").replace(/[\s|&,-]+$/, "").trim();
+    if (kept.split(/\s+/).length >= 1 && kept.length >= 3) { lines[hi] = kept; return lines.join("\n"); }
+    return resume;
+  }
+  return resume;
+}
+
+/** Rule 5: the same letter header line twice is written once; URLs compare without https://, www. and a trailing slash. */
+export function dedupeLetterHeader(letter: string): string {
+  const lines = String(letter || "").split("\n");
+  const end = lines.findIndex((l) => /^\s*(dear|hello|hi|to whom|re\s*:)/i.test(l) || DATE_LINE.test(l));
+  const stop = end < 0 ? Math.min(lines.length, 10) : end;
+  const key = (s: string) => s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "").replace(/\s+/g, " ");
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0 && i < stop) {
+      const k = key(lines[i]);
+      if (k && seen.has(k)) continue;
+      if (k) seen.add(k);
+    }
+    out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+/** Rule 6: "solutions of financial services" reads "solutions for financial services". */
+export function fixIndustryPhrasing(letter: string): string {
+  return String(letter || "").replace(/\b(solutions|services|products|platforms) of\b/gi, "$1 for");
+}
+
+/**
+ * The six clean-up rules, run after the existing guards and before the
+ * documents are saved or returned.
+ */
+export function polishTailoredDocuments(cv: string, letter: string, profileText: string): { cv: string; letter: string } {
+  let out = String(cv || "");
+  out = out.split("\n").map((line) => {
+    const m = line.match(BULLET_RE);
+    return m ? `${m[1]}${m[2]} ${unstitchBullet(m[3])}` : line;
+  }).join("\n");
+  out = mergeNamedToolsIntoSkills(out);
+  out = dropUnbackedSkills(out, profileText);
+  out = trimHeadline(out, profileText);
+  const fixedLetter = fixIndustryPhrasing(dedupeLetterHeader(letter || ""));
+  return { cv: out, letter: fixedLetter };
+}
