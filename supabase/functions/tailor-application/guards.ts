@@ -1174,22 +1174,21 @@ function pastTenseOf(ing: string): string {
 export function unstitchBullet(text: string): string {
   let t = String(text || "");
   t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
-  // The stitched duty ends at the first -ing verb after a comma whose lead-in
-  // and prefix carry no number; a clause ending in "by" or "through" hands
+  // The stitched duty ends at the first -ing verb after the last comma, when
+  // the prefix carries no number; a clause ending in "by" or "through" hands
   // over to the next -ing verb ("..., ensuring efficient processing by
   // replacing X" starts at "replacing").
-  const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)];
-  for (let k = 0; k < ings.length; k++) {
-    const cur = ings[k];
-    if (cur.index === undefined) continue;
-    const comma = t.lastIndexOf(",", cur.index);
-    if (comma < 10) continue;
-    if (/\d/.test(t.slice(0, cur.index))) continue;
-    const next = ings[k + 1];
-    if (next && next.index !== undefined && /\b(by|through|via|while)\s*$/.test(t.slice(cur.index + cur[1].length, next.index))) continue;
-    const past = pastTenseOf(cur[1]);
-    t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(cur.index + cur[1].length)}`;
-    break;
+  const comma = t.lastIndexOf(",");
+  if (comma >= 10 && !/\d/.test(t.slice(0, comma))) {
+    const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)].filter((m) => m.index !== undefined && m.index > comma);
+    for (let k = 0; k < ings.length; k++) {
+      const cur = ings[k];
+      const next = ings[k + 1];
+      if (next && /\b(by|through|via|while)\s*$/.test(t.slice(cur.index! + cur[1].length, next.index))) continue;
+      const past = pastTenseOf(cur[1]);
+      t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(cur.index! + cur[1].length)}`;
+      break;
+    }
   }
   return t.replace(/ {2,}/g, " ").trim();
 }
