@@ -1174,11 +1174,19 @@ function pastTenseOf(ing: string): string {
 export function unstitchBullet(text: string): string {
   let t = String(text || "");
   t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
-  // The last comma before an -ing verb marks the end of the stitched duty.
-  const m = t.match(/^([\s\S]{10,}),\s*([a-z][\w-]*ing)\s+([\s\S]+)$/);
-  if (m) {
-    const past = pastTenseOf(m[2]);
-    t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${m[3]}`;
+  // The stitched duty ends at the last -ing verb whose lead-in (from the
+  // comma before it) carries no number and no list of its own.
+  const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)];
+  const last = ings[ings.length - 1];
+  if (last && last.index !== undefined) {
+    const comma = t.lastIndexOf(",", last.index);
+    if (comma >= 10) {
+      const leadIn = t.slice(comma + 1, last.index);
+      if (!/\d/.test(leadIn)) {
+        const past = pastTenseOf(last[1]);
+        t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(last.index + last[1].length)}`;
+      }
+    }
   }
   return t.replace(/ {2,}/g, " ").trim();
 }
