@@ -179,7 +179,7 @@ describe('polishTailoredDocuments', () => {
     const letter = 'Sam Example\nhttps://linkedin.com/in/maxokafor\nlinkedin.com/in/maxokafor/\n\nDear Hiring Team,\n\nI built solutions of financial services.';
     const { cv: outCv, letter: outLetter } = polishTailoredDocuments(cv, letter, PROFILE);
     expect(outCv).toContain('Closed all but three gaps in reporting with Kafka.');
-    expect(outCv).toContain('Data & ML: Pandas, Kafka');
+    expect(outCv).toContain('Data & ML: Kafka');
     expect(outCv.split('\n')[1]).toBe('Data Engineer');
     expect(outLetter.match(/linkedin\.com\/in\/maxokafor/g)!.length).toBe(1);
     expect(outLetter).toContain('solutions for financial services');

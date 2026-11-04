@@ -1174,7 +1174,8 @@ function pastTenseOf(ing: string): string {
 export function unstitchBullet(text: string): string {
   let t = String(text || "");
   t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
-  const m = t.match(/^([^,]{10,}?),\s*([a-z][\w-]*ing)\s+([\s\S]+)$/);
+  // The last comma before an -ing verb marks the end of the stitched duty.
+  const m = t.match(/^([\s\S]{10,}),\s*([a-z][\w-]*ing)\s+([\s\S]+)$/);
   if (m) {
     const past = pastTenseOf(m[2]);
     t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${m[3]}`;
