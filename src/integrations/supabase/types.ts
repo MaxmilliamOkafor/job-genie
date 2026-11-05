@@ -305,36 +305,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ingest_state: {
-        Row: {
-          job_name: string
-          last_error: string | null
-          last_run_at: string | null
-          lease_until: string | null
-          stats: Json
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          job_name: string
-          last_error?: string | null
-          last_run_at?: string | null
-          lease_until?: string | null
-          stats?: Json
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          job_name?: string
-          last_error?: string | null
-          last_run_at?: string | null
-          lease_until?: string | null
-          stats?: Json
-          status?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       ett_postings: {
         Row: {
           company: string | null
@@ -386,6 +356,36 @@ export type Database = {
           user_id?: string
           visa?: string | null
           workplace?: string | null
+        }
+        Relationships: []
+      }
+      ingest_state: {
+        Row: {
+          job_name: string
+          last_error: string | null
+          last_run_at: string | null
+          lease_until: string | null
+          stats: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          job_name: string
+          last_error?: string | null
+          last_run_at?: string | null
+          lease_until?: string | null
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          job_name?: string
+          last_error?: string | null
+          last_run_at?: string | null
+          lease_until?: string | null
+          stats?: Json
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1222,6 +1222,7 @@ export type Database = {
         Returns: string
       }
       jp_seniority: { Args: { v: string }; Returns: string }
+      prune_old_ett_postings: { Args: never; Returns: number }
       prune_old_job_postings: { Args: never; Returns: number }
       search_job_pool: {
         Args: {
