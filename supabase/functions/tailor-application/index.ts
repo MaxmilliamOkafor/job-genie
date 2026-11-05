@@ -2314,6 +2314,8 @@ serve(async (req) => {
     // so coverage is measured against what the posting actually asks for.
     const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
     atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description);
+    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), description));
+    atsStrategy.evidence = Object.fromEntries(Object.entries(atsStrategy.evidence).filter(([term]) => strategyTerms.has(term)));
     const mergedRequirements = filterJobKeywords(Array.from(
       new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
     ), description);
@@ -5111,7 +5113,7 @@ ${
     const polished = polishTailoredDocuments(
       result.tailoredResume || "",
       result.tailoredCoverLetter || "",
-      `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+      profileTextOf(userProfile),
       profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
       description,
       jdKeywords.allKeywords,

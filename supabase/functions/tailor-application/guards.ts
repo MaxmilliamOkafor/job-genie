@@ -1401,7 +1401,9 @@ export function removeUnrecordedBulletTools(text: string, profileText: string): 
   const join = (items: string[]) => items.length <= 1 ? (items[0] || "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
   let out = text.replace(/\(([^()]+)\)/g, (whole, inside: string) => {
     if (!inside.split(/,\s*|\s+and\s+/).some((t) => isToolName(t.trim()))) return whole;
-    const kept = join(clean(inside));
+    const items = clean(inside);
+    if (items.length === inside.split(/,\s*|\s+and\s+/).length) return whole;
+    const kept = join(items);
     return kept ? `(${kept})` : "";
   });
   const tool = '(?:[A-Z][A-Za-z0-9.#+-]*[A-Za-z0-9+#]|[A-Z]|iOS|macOS|jQuery)(?: (?:Native|BI|Cloud|Actions))?';
@@ -1409,7 +1411,8 @@ export function removeUnrecordedBulletTools(text: string, profileText: string): 
   out = out.replace(list, (whole: string) => {
     const items = whole.split(/,\s*|\s+and\s+/);
     if (!items.every((t) => isToolName(t.trim()))) return whole;
-    return join(clean(whole));
+    const kept = clean(whole);
+    return kept.length === items.length ? whole : join(kept);
   });
   return out.replace(/\s+([.,])/g, "$1").replace(/ {2,}/g, " ").trim();
 }

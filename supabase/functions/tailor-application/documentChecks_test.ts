@@ -1,5 +1,5 @@
 import { acceptRewrite, preserveProfileBullet, unstitchBullet, fixParallelPast, removeUnrecordedBulletTools, moveDomainSkills, normaliseHeaderPhones, toolChronologyNotes, polishTailoredDocuments } from './guards.ts';
-import { copiesRun, COPY_RUN, composeResult, profileBullets, pickResultLines, rankLines, checkAgainstBullet, letterBody, sentenceSubjects, checkResult, slotPrompt } from './letterSlots.ts';
+import { copiesRun, COPY_RUN, composeResult, profileBullets, profileTextOf, pickResultLines, rankLines, checkAgainstBullet, letterBody, sentenceSubjects, checkResult, slotPrompt } from './letterSlots.ts';
 import { pickOutcomes } from '../_shared/summaryShape.ts';
 import { classifyTerm } from '../_shared/evidence.ts';
 import { excludedKeyword, filterJobKeywords, filterJobKeywordLists } from '../_shared/keywordChecks.ts';
@@ -153,7 +153,13 @@ test('number-word loss is rejected even when all rewrite words were in source', 
 });
 test('comma-only tool lists are scrubbed and recorded lists stay unchanged', () => {
  equal(removeUnrecordedBulletTools('Built services in Python, Node.js, iOS.','Python Node.js'),'Built services in Python and Node.js.');
- const good='Built services in Python, Node.js, iOS.'; equal(removeUnrecordedBulletTools(good,'Python Node.js iOS'), 'Built services in Python, Node.js and iOS.');
+ const good='Built services in Python, Node.js, iOS.'; equal(removeUnrecordedBulletTools(good,'Python Node.js iOS'),good);
+});
+
+test('posting strategy never backs a tool in candidate bullets', () => {
+ const profile={professionalExperience:[{company:'Acme',bullets:['Built services using Python and Node.js']}],skills:['Python','Node.js'],atsStrategy:{requirements:['iOS']}};
+ equal(removeUnrecordedBulletTools('Built services (Python, Node.js, iOS).',profileTextOf(profile)),'Built services (Python and Node.js).');
+ const good='Built services (Python and Node.js).'; equal(removeUnrecordedBulletTools(good,profileTextOf(profile)),good);
 });
 test('every specified tool release is flagged only on an earlier completed role', () => {
  for(const [tool,year] of [['FLUX Kontext',2025],['ChatGPT',2022],['GPT-4',2023],['Claude',2023],['LangChain',2022],['Llama',2023]] as const) {
