@@ -464,6 +464,12 @@ export function shortenClause(clause: string, maxLen: number): string {
  * number on the CV: a coaching posting is better served by "trained 24 analysts
  * across two offices" than by a batch job going from six hours to one.
  */
+/** Posting responsibilities for summary ranking only, not the ATS denominator. */
+export function summaryRequirements(requirements: string[], posting: string): string[] {
+  const responsibilities = ["client", "pre-sales", "workshop", "handover", "stakeholder", "delivery", "presentation", "consulting"];
+  return [...new Set([...requirements, ...responsibilities.filter((term) => evidencePhraseAppears(posting, term))])];
+}
+
 export function pickOutcomes(experienceBullets: string[], requirements: string[] = [], roles: { title: string; bullets: string[] }[] = [], targetTitle = ""): string[] {
   const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
   const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r)).length;

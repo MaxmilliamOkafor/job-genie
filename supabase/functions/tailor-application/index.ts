@@ -31,7 +31,7 @@ import {
   normaliseSkillsSection,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
-import { buildSummary, enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+import { buildSummary, enforceSummaryShape, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
@@ -4707,7 +4707,7 @@ ${
       currentTitle: String(currentRole?.title || "").trim(),
       field: String(userProfile.field || userProfile.profession || userProfile.discipline || "").trim(),
       targetTitle: jobTitle || "",
-      requirements: jdKeywords.allKeywords,
+      requirements: summaryRequirements(jdKeywords.allKeywords, description),
       experienceBullets: experienceBulletsOf(result.tailoredResume || ""),
       outcomeBullets: profileRoles.flatMap((role: any) =>
         Array.isArray(role?.bullets)

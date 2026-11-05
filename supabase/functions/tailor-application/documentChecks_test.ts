@@ -1,6 +1,6 @@
 import { acceptRewrite, preserveProfileBullet, unstitchBullet, fixParallelPast, removeUnrecordedBulletTools, moveDomainSkills, normaliseHeaderPhones, toolChronologyNotes, polishTailoredDocuments } from './guards.ts';
 import { copiesRun, COPY_RUN, composeResult, profileBullets, profileTextOf, pickResultLines, rankLines, checkAgainstBullet, letterBody, sentenceSubjects, checkResult, slotPrompt } from './letterSlots.ts';
-import { pickOutcomes } from '../_shared/summaryShape.ts';
+import { pickOutcomes, summaryRequirements } from '../_shared/summaryShape.ts';
 import { classifyTerm } from '../_shared/evidence.ts';
 import { excludedKeyword, filterJobKeywords, filterJobKeywordLists } from '../_shared/keywordChecks.ts';
 import { termAppearsIn } from '../_shared/coverage.ts';
@@ -148,6 +148,11 @@ test('summary ties prefer closest held role then most recent role before figure'
  const unrelated='Led client workshops for 99000 users';
  const roles=[{title:'Solutions Consultant',bullets:[recent]},{title:'Data Analyst',bullets:[unrelated]},{title:'Solutions Consultant',bullets:[older]}];
  equal(pickOutcomes([older,unrelated,recent],['client workshops'],roles,'Solutions Consultant')[0],recent);
+});
+test('summary includes posting responsibilities without changing ATS terms', () => {
+ const terms=['SQL','Power BI'];
+ equal(summaryRequirements(terms,'Client workshops, pre-sales delivery and handovers'),['SQL','Power BI','client','pre-sales','workshop','handover','delivery']);
+ equal(terms,['SQL','Power BI']); equal(summaryRequirements(terms,'SQL and Power BI'),terms);
 });
 test('number-word loss is rejected even when all rewrite words were in source', () => {
  const source='Reduced runs from six hours to under one with Python after three late submissions across four teams and SQL reporting.';
