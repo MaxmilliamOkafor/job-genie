@@ -26,9 +26,10 @@ export function buildTermPattern(term: string): RegExp | null {
   // Trailing +, # and . are part of the term (C++, C#, .NET) and must not
   // be followed by more word characters.
   const prefix = startsAlnum ? "(?<![A-Za-z0-9+#])" : "";
+  const goSuffix = /^go$/i.test(t) ? "(?!\\s*[-/]?\\s*(?:live\\b|to\\b|market\\b|forward\\b|ahead\\b))" : "";
   const suffix = endsAlnum ? "(?![A-Za-z0-9+#])" : "(?![A-Za-z0-9])";
   try {
-    return new RegExp(prefix + core + suffix, "i");
+    return new RegExp(prefix + core + suffix + goSuffix, "i");
   } catch {
     return null;
   }

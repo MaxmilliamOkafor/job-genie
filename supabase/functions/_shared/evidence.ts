@@ -19,6 +19,8 @@
  */
 
 import { termAppearsIn } from "./coverage.ts";
+import { evidencePhraseAppears, isGoLanguageMention } from "./documentChecks.ts";
+import { excludedKeyword } from "./keywordChecks.ts";
 
 export type EvidenceTier = "explicit" | "demonstrated" | "unsupported";
 
@@ -298,7 +300,8 @@ export function classifyTerm(
   if (supplied) return { tier: "explicit", evidence: supplied, source: "confirmed profile evidence" };
 
   for (const src of sources) {
-    if (!termAppearsIn(src.text, t)) continue;
+    if (t.toLowerCase() === "go" && !isGoLanguageMention(src.text)) continue;
+    if (!termAppearsIn(src.text, t) && !evidencePhraseAppears(src.text, t)) continue;
     if (mentionIsNegated(src.text, t)) continue;
     return {
       tier: src.kind === "record" ? "explicit" : "demonstrated",
@@ -759,6 +762,7 @@ export function buildRequirementList(
     // has to spare them.
     if (key.length < 2 && !SINGLE_LETTER_SKILLS.has(key)) { removed.push(term); continue; }
 
+    if (excludedKeyword(term)) { removed.push(term); continue; }
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
     if (isFurniture(key)) { removed.push(term); continue; }
