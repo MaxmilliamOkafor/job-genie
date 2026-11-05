@@ -477,7 +477,7 @@ export function pickOutcomes(experienceBullets: string[], requirements: string[]
     .map((line, index) => ({
       clause: outcomeClause(line.replace(/\s*\([^)]*\)\s*$/, "")),
       rank: rankOutcome(line),
-      relevant: relevance(line),
+      relevant: relevance(line) + (clientRole ? (line.match(/\b(?:clients?|pre-sales|workshops?|handovers?|CTOs?|bids?|presented)\b/gi) || []).length * 10 : 0),
       index,
       role: roleRank(line),
     }))

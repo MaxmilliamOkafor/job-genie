@@ -31,7 +31,7 @@ import {
   normaliseSkillsSection,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
-import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+import { buildSummary, enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
@@ -5116,6 +5116,14 @@ ${
       jdKeywords.allKeywords,
     );
     result.tailoredResume = removeMonetaryClaims(polished.cv);
+    const finalSummary = buildSummary(summaryContext);
+    const finalSummarySection = summarySectionOf(result.tailoredResume);
+    if (finalSummary && finalSummarySection && /consult|client|pre-sales|customer success/i.test(jobTitle)) {
+      const lines = result.tailoredResume.split("\n");
+      lines.splice(finalSummarySection.start + 1, finalSummarySection.end - finalSummarySection.start - 1, removeMonetaryClaims(finalSummary), "");
+      result.tailoredResume = lines.join("\n");
+      if (result.resumeStructured) result.resumeStructured.summary = removeMonetaryClaims(finalSummary);
+    }
     result.tailoredCoverLetter = removeMonetaryClaims(finalLetterChecks(polished.letter, shortTitle(jobTitle), profileBullets(userProfile.professionalExperience || []).map((b) => b.text), result.tailoredResume));
     const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
     result.reviewNotes = chronologyNotes;
