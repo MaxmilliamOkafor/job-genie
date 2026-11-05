@@ -1181,7 +1181,7 @@ export function unstitchBullet(text: string): string {
   let t = String(text || "");
   t = t.replace(/,\s*(?:communicating|wording)\s+findings\s+effectively\s+and\s*/gi, " and ");
   const emptyBy = t.match(/^(?:Integrated|Leveraged|Used|Utilised|Implemented|Delivered|Built|Optimised|Optimized)\b[^,.;]*?\b(?:tools|technologies|solutions|capabilities|practices)\s+by\s+([a-z]+ing)\s+([\s\S]+)$/i);
-  const cross = t.match(/^Worked with cross-functional teams to design, implement, test and support[\s\S]*?,\s*([a-z]+ing)\s+([\s\S]+)$/i);
+  const cross = t.match(/^Worked with (?:cross-functional )?teams[^.;]*?\b(?:solutions|tools|technologies|capabilities|practices),\s*([a-z]+ing)\s+([\s\S]+)$/i);
   const workflows = t.match(/^Built and optimi[sz]ed[^.;]*workflows,\s*ensuring[^.;]*?by\s+([a-z]+ing)\s+([\s\S]+)$/i);
   const match = emptyBy || cross || workflows;
   if (match) {
