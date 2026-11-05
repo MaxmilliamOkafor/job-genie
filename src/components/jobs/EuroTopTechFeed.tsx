@@ -17,6 +17,7 @@ import {
   lastSeenKey,
   lastSyncKey,
   needsRefresh,
+  postingsCsv,
   savedJobOf,
   type EttCard,
   type EttRow,
