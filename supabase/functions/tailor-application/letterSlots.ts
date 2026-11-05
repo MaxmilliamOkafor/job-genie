@@ -7,7 +7,7 @@ import { evidencePhraseAppears } from "../_shared/documentChecks.ts";
 import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
 
 
-/** Below this many words the optional third result is added. Never padded beyond the slots. */
+/** Word floor for checked slots. Never pad or add a third result. */
 export const LETTER_WORD_FLOOR = 150;
 
 export const SLOT_BANNED = [
@@ -723,7 +723,7 @@ export function composeOpening(o: { problem?: string; line: string }, employer: 
 /**
  * Picks lines by fit for the role, asks for them to be retold, checks every
  * part, replaces failed results with the next best line from an unused
- * employer, and assembles the letter. Up to three results.
+ * employer, and assembles the letter. At most two results.
  */
 export async function buildSlotLetter(
   base: Omit<LetterParts, "results" | "opening" | "companyFact" | "why">,
@@ -796,7 +796,7 @@ export async function buildSlotLetter(
     log(problem ? `opening: line ${b.n} with its problem sentence` : `opening: line ${b.n} alone`);
     // The opening wins a list of three; a result that also uses one is replaced.
     if (hasTripleList(text) || ctx.story && hasTripleList(ctx.story)) {
-      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); { const c = byN.get(chosen[i].n)!.company; resultEmployers.set(c, (resultEmployers.get(c) || 1) - 1); } chosen.splice(i, 1); }
+      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); const source = byN.get(chosen[i].n); if (source) resultEmployers.set(source.company, (resultEmployers.get(source.company) || 1) - 1); chosen.splice(i, 1); }
     }
   };
 
@@ -807,7 +807,7 @@ export async function buildSlotLetter(
     return f;
   };
 
-  // First request: the opening line (no story) and the three best lines from other employers.
+  // First request: the opening line (no story) and two lines from other employers.
   const resultEmployers = new Map<string, number>();
   if (openingLine && !statesProblem(openingLine.text)) setOpening(openingLine, "");
   const fit = (b: ProfileBullet) => lineScore(b, ctx.requirements, ctx.description, base.role);
