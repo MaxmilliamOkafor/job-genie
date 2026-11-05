@@ -214,6 +214,7 @@ export function EuroTopTechFeed({ preferences }: Props) {
     try {
       const d = await call('apply', { jobId: r.job_id });
       if (!d?.url) throw new Error('Euro Top Tech gave no apply link for this posting.');
+      setLinks((m) => { const n = { ...m, [r.job_id]: d.url }; if (linksKey) localStorage.setItem(linksKey, JSON.stringify(n)); return n; });
       if (tab) tab.location.href = d.url; else window.open(d.url, '_blank', 'noopener');
       const card: EttCard = {
         jobId: r.job_id, title: r.title ?? '', company: r.company ?? '', location: r.location ?? '', workplace: r.workplace ?? '',
