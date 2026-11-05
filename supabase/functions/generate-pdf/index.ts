@@ -295,7 +295,6 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       size: 22,
       font: fonts.bold,
       color: NAVY,
-      characterSpacing: 0.3,
     });
     y -= 22 + 8;
 
@@ -373,7 +372,6 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       size: 11,
       font: fonts.bold,
       color: NAVY,
-      characterSpacing: 1.2,
     });
     y -= 11 + 5;
     page.drawLine({

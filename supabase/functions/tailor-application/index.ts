@@ -2366,7 +2366,7 @@ serve(async (req) => {
     );
 
     // Categorise keywords by priority (JobOwl-inspired weighted system)
-    const weightedKeywords = filterJobKeywordLists(categoriseKeywordsByPriority(
+    const weightedKeywords = filterJobKeywordLists(<any>categoriseKeywordsByPriority(
       jdKeywords.hardSkills,
       jdKeywords.tools,
       jdKeywords.softSkills,
@@ -4705,7 +4705,7 @@ ${
     const summaryContext: SummaryContext = {
       heldTitles: profileRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean),
       currentTitle: String(currentRole?.title || "").trim(),
-      field: String(userProfile.field || userProfile.profession || userProfile.discipline || "").trim(),
+      field: String((userProfile as any).field || (userProfile as any).profession || (userProfile as any).discipline || "").trim(),
       targetTitle: jobTitle || "",
       requirements: summaryRequirements(jdKeywords.allKeywords, description),
       experienceBullets: experienceBulletsOf(result.tailoredResume || ""),
