@@ -12,6 +12,8 @@ const story = 'At Meta, sales engineers raised tickets because the campaign diag
 test('1: copied result is rejected; fresh grounded story is not copied', () => {
  equal(COPY_RUN, 7); ok(copiesRun('At Meta, I ' + campaign.toLowerCase(), [campaign])); equal(copiesRun(story, [campaign]), false);
  const b = {n:1, company:'Meta', text:campaign}; equal(checkAgainstBullet(story,b,['React','TypeScript','GraphQL']), []);
+ const requestedStory='At Meta, sales engineers had stopped using our campaign diagnostics tool and raised tickets instead, because it was too slow. I rebuilt it in React, TypeScript and GraphQL, and most of that queue went away.';
+ equal(copiesRun(requestedStory,[campaign]),false); equal(checkAgainstBullet(requestedStory,b,['React','TypeScript','GraphQL']),[]);
 });
 test('2: responsibility ranking, two distinct employers and one figure', () => {
  const bullets = profileBullets([{company:'Meta',bullets:['Scaled systems for 900000 requests daily']},{company:'Accenture',bullets:['Led client pre-sales workshops and delivery handovers with stakeholders','Managed client delivery workshops']},{company:'Citi',bullets:['Led client pre-sales workshops']}]);
@@ -91,6 +93,7 @@ test('16: trunk zeros removed in both headers, Italy keeps zero', () => {
  equal(normaliseHeaderPhones('Sam\n+353 087 426 1508\nSUMMARY'), 'Sam\n+353 87 426 1508\nSUMMARY');
  equal(normaliseHeaderPhones('Sam\n+44 (0)20 7946 0958\nDear Hiring Team,'), 'Sam\n+44 20 7946 0958\nDear Hiring Team,');
  equal(normaliseHeaderPhones('Sam\n+39 06 123456\nSUMMARY'), 'Sam\n+39 06 123456\nSUMMARY');
+ const good='Sam\n+353 87 426 1508\nSUMMARY\nRecorded +353 087 426 1508'; equal(normaliseHeaderPhones(good),good);
 });
 test('17: geography and plural people phrases are not job keywords', () => {
  for(const word of ['Ontario Provinces','Quebec','California','Ireland','EMEA','UTC','Ontario','engineering managers','stakeholders','clients']) equal(excludedKeyword(word),true);
