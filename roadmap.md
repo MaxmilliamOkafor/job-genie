@@ -6,6 +6,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
+- [ ] Apply uploaded final CV and letter checks, add Deno regression tests, run existing tests and redeploy tailor-application.
 - [x] Use the latest authenticated saved Settings profile for generation and provide regeneration of existing saved documents; deployed and verified signed-in regeneration of both documents and saved read-back.
 - [x] Exclude monetary amounts from generated CVs and letters and older-draft exports; 381 application tests passed, both functions deployed, signed-in CV and letter Word downloads verified.
 - [x] Apply the five uploaded changes only: verify existing changes 1-4, add candidate plain-wording rules and safeguards, test and deploy.
