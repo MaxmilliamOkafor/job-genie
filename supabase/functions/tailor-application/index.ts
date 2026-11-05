@@ -31,15 +31,17 @@ import {
   normaliseSkillsSection,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
-import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+import { buildSummary, enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
+import { finalLetterChecks, bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
+import { filterJobKeywords } from "../_shared/keywordChecks.ts";
+import { toolChronologyNotes } from "./guards.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
 
@@ -2327,7 +2329,7 @@ serve(async (req) => {
     // replaces the raw extraction immediately. Incidental employer names,
     // boilerplate and overlapping title phrases are dropped rather than being
     // counted as requirements the candidate has to satisfy.
-    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company], jobTitle);
+    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, description), [company], jobTitle);
     console.log(
       `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
     );
@@ -4711,6 +4713,7 @@ ${
             ? role.description.split("\n").map((bullet: string) => bullet.trim()).filter(Boolean)
             : [],
       ),
+      outcomeRoles: profileRoles.map((role: any) => ({ title: String(role.title || ""), bullets: profileBullets([role]).map((b) => b.text) })),
       employers: profileRoles.map((r: any) => String(r?.company || "").trim()).filter(Boolean),
       places: [
         userProfile.city,
@@ -4858,7 +4861,7 @@ ${
         description: String(description || ""),
         tools: letterToolList(userProfile.skills || [], jdKeywords.allKeywords),
         profileText: profileTextOf(userProfile),
-        requirements: topRequirements,
+        requirements: jdKeywords.allKeywords,
       };
       const askSlots = async (prompt: string): Promise<string | null> => {
         try {
@@ -5108,9 +5111,23 @@ ${
       result.tailoredResume || "",
       result.tailoredCoverLetter || "",
       `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+      profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
+      description,
+      jdKeywords.allKeywords,
     );
-    result.tailoredResume = polished.cv;
-    result.tailoredCoverLetter = polished.letter;
+    result.tailoredResume = removeMonetaryClaims(polished.cv);
+    const finalSummary = buildSummary(summaryContext);
+    const finalSummarySection = summarySectionOf(result.tailoredResume);
+    if (finalSummary && finalSummarySection && /consult|client|pre-sales|customer success/i.test(jobTitle)) {
+      const lines = result.tailoredResume.split("\n");
+      lines.splice(finalSummarySection.start + 1, finalSummarySection.end - finalSummarySection.start - 1, removeMonetaryClaims(finalSummary), "");
+      result.tailoredResume = lines.join("\n");
+      if (result.resumeStructured) result.resumeStructured.summary = removeMonetaryClaims(finalSummary);
+    }
+    result.tailoredCoverLetter = removeMonetaryClaims(finalLetterChecks(polished.letter, shortTitle(jobTitle), profileBullets(userProfile.professionalExperience || []).map((b) => b.text), result.tailoredResume));
+    const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
+    result.reviewNotes = chronologyNotes;
+    if (chronologyNotes.length) result.review = { ...(result.review || { applied: 0, rejected: [], gaps: [] }), notes: chronologyNotes };
 
     result.truthfulness = {
       removedYearsClaims,
@@ -5396,13 +5413,13 @@ ${
         personalInfo: {
           name: candidateName,
           email: userProfile.email,
-          phone: userProfile.phone,
+          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
           location: smartLocation,
           linkedin: userProfile.linkedin,
           github: userProfile.github,
           portfolio: userProfile.portfolio,
         },
-        summary: extractProfessionalSummary(result.tailoredResume || "", result.resumeStructured?.summary),
+        summary: extractProfessionalSummary(result.tailoredResume || ""),
         coreCompetencies: Array.isArray(result.resumeStructured?.coreCompetencies) ? result.resumeStructured.coreCompetencies : [],
         experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
@@ -5488,7 +5505,7 @@ ${
         personalInfo: {
           name: candidateName,
           email: userProfile.email,
-          phone: userProfile.phone,
+          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
           location: smartLocation,
           linkedin: userProfile.linkedin,
           github: userProfile.github,

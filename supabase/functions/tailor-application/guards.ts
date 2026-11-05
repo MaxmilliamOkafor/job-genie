@@ -1,3 +1,5 @@
+import { numericTokens, evidenceStem, isGoLanguageMention } from "../_shared/documentChecks.ts";
+import { termAppearsIn } from "../_shared/coverage.ts";
 /**
  * Guards around the tailoring call: refuse non-job pages, protect ATS
  * keywords the candidate already has, check the cover letter answers the
@@ -85,7 +87,7 @@ function norm(s: string): string {
 }
 
 function stem(word: string): string {
-  return word.replace(/(?:ies)$/, "y").replace(/(?:es|s)$/, "");
+  return evidenceStem(word).replace(/(?:es)$/, "");
 }
 
 function stemPhrase(s: string): string {
@@ -98,6 +100,7 @@ function escapeRe(s: string): string {
 
 /** True when the phrase appears in text, case-insensitive, allowing simple word forms. */
 export function containsTerm(text: string, term: string): boolean {
+  if (term.trim().toLowerCase() === "go" && !isGoLanguageMention(text)) return false;
   const t = stemPhrase(term);
   if (!t) return false;
   const hay = " " + norm(text).split(/[^a-z0-9+#.]+/).map(stem).join(" ") + " ";
@@ -511,7 +514,7 @@ export function enforceLetterRightToWork(letter: string, statement: string, prot
 
 // Never tools, even when a job keyword or a skill.
 const NOT_A_TOOL = /^(audit(s|ing)?|security|compliance|fraud|identity verification|healthcare|leadership|risk|governance|privacy|data protection|communication|stakeholder management|management|strategy|operations|finance|accounting|testing|analytics|reporting|design|research|sales|marketing|customer service|support|training|mentoring|teamwork|problem solving|ownership|onboarding|regulation|regulatory|kyc|aml|fintech|saas|banking|payments|insurance|cybersecurity|information security|incident management|root cause analysis|project management|agile|scrum|data|engineering|software|cloud|devops|machine learning|ai)$/i;
-const KNOWN_TOOL = /^(go|golang|python|java|javascript|typescript|c|c\+\+|c#|\.net|ruby|rust|scala|kotlin|swift|php|r|sql|bash|perl|matlab|react|react native|angular|vue|next\.js|node\.js|node|express|django|flask|fastapi|spring|spring boot|rails|laravel|svelte|tailwind|pandas|numpy|pytorch|tensorflow|scikit-learn|spark|kafka|airflow|dbt|hadoop|snowflake|databricks|bigquery|redshift|postgresql|postgres|mysql|mongodb|redis|elasticsearch|dynamodb|cassandra|sqlite|oracle|aws|azure|gcp|google cloud|docker|kubernetes|terraform|ansible|jenkins|github actions|gitlab|git|linux|helm|prometheus|grafana|datadog|splunk|tableau|power bi|looker|excel|salesforce|hubspot|sap|servicenow|jira|confluence|figma|okta|workday|zendesk|stripe|shopify|graphql|rest|grpc)$/i;
+const KNOWN_TOOL = /^(go|golang|python|java|javascript|typescript|c|c\+\+|c#|\.net|ruby|rust|scala|kotlin|swift|php|r|sql|bash|perl|matlab|react|react native|angular|vue|next\.js|node\.js|node|express|django|flask|fastapi|spring|spring boot|rails|laravel|svelte|tailwind|pandas|numpy|pytorch|tensorflow|scikit-learn|spark|kafka|airflow|dbt|hadoop|snowflake|databricks|bigquery|redshift|postgresql|postgres|mysql|mongodb|redis|elasticsearch|dynamodb|cassandra|sqlite|oracle|aws|azure|gcp|google cloud|docker|kubernetes|terraform|ansible|jenkins|github actions|gitlab|git|linux|helm|prometheus|grafana|datadog|splunk|tableau|power bi|looker|excel|salesforce|hubspot|sap|servicenow|jira|confluence|figma|okta|workday|zendesk|stripe|shopify|graphql|rest|grpc|ios|macos|jquery)$/i;
 
 /** True for software, languages, frameworks, platforms and products; never audit, security, fraud and the like. */
 export function isToolName(term: string): boolean {
@@ -743,7 +746,7 @@ export function acceptRewrite(original: string, rewritten: string, keywords: str
   if (r.length > String(original || "").trim().length) return false;
   const have = new Set(contentWords(original));
   if (contentWords(r).some((w) => !have.has(w))) return false;
-  if (!numbersIn(original).every((n) => r.includes(n))) return false;
+  if (!numericTokens(original).every((n) => numericTokens(r).includes(n))) return false;
   return keywords.filter((k) => containsTerm(original, k)).every((k) => containsTerm(r, k));
 }
 
@@ -1092,7 +1095,7 @@ ${sentences.map((x, i) => `${i + 1}. ${x}`).join("\n")}`;
 export function acceptLetterRewording(original: string, reworded: string, cvText: string): boolean {
   const r = String(reworded || "").trim();
   if (!r || r.split(/\s+/).length > 35) return false;
-  if (!numbersIn(original).every((n) => r.includes(n))) return false;
+  if (!numericTokens(original).every((n) => numericTokens(r).includes(n))) return false;
   const known = new Set([...contentWords(cvText), ...contentWords(original)]);
   return contentWords(r).every((w) => known.has(w));
 }
@@ -1163,7 +1166,10 @@ const IRREGULAR_PAST: Record<string, string> = {
 function pastTenseOf(ing: string): string {
   const w = ing.toLowerCase();
   if (IRREGULAR_PAST[w]) return IRREGULAR_PAST[w];
-  return `${w.slice(0, -3)}ed`;
+  const root = w.slice(0, -3);
+  if (/(?:clos|replac|includ|migrat|integrat|leverag|us|optimis|optimiz|reduc)$/.test(root)) return `${root}ed`;
+  if (/([b-df-hj-np-tv-z])\1$/.test(root)) return `${root.slice(0, -1)}ed`;
+  return `${root}ed`;
 }
 
 /**
@@ -1173,25 +1179,14 @@ function pastTenseOf(ing: string): string {
  */
 export function unstitchBullet(text: string): string {
   let t = String(text || "");
-  t = t.replace(/,\s*[a-z][\w-]*ing\b[^,.;]*?\band\b\s*/gi, " and ");
-  // The stitched duty ends at the first -ing verb after the last comma, when
-  // the prefix carries no number; a clause ending in "by" or "through" hands
-  // over to the next -ing verb ("..., ensuring efficient processing by
-  // replacing X" starts at "replacing").
-  const comma = t.lastIndexOf(",");
-  if (comma >= 10 && !/\d/.test(t.slice(0, comma))) {
-    const ings = [...t.matchAll(/\b([a-z][\w-]*ing)\b/g)].filter((m) => m.index !== undefined && m.index > comma);
-    const first = ings[0];
-    if (first) {
-      // "..., ensuring efficient processing by replacing X" starts at "replacing".
-      const rest = t.slice(first.index! + first[1].length);
-      const hand = rest.match(/\b(?:by|through|via|while)\s+([a-z][\w-]*ing)\b/);
-      const verb = hand && hand.index !== undefined
-        ? { word: hand[1], at: first.index! + first[1].length + hand.index + hand[0].length - hand[1].length }
-        : { word: first[1], at: first.index! };
-      const past = pastTenseOf(verb.word);
-      t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${t.slice(verb.at + verb.word.length)}`;
-    }
+  t = t.replace(/,\s*(?:communicating|wording)\s+findings\s+effectively\s+and\s*/gi, " and ");
+  const emptyBy = t.match(/^(?:Integrated|Leveraged|Used|Utilised|Implemented|Delivered|Built|Optimised|Optimized)\b[^,.;]*?\b(?:tools|technologies|solutions|capabilities|practices)\s+by\s+([a-z]+ing)\s+([\s\S]+)$/i);
+  const cross = t.match(/^Worked with (?:cross-functional )?teams[^.;]*?\b(?:solutions|tools|technologies|capabilities|practices),\s*([a-z]+ing)\s+([\s\S]+)$/i);
+  const workflows = t.match(/^Built and optimi[sz]ed[^.;]*workflows,\s*ensuring[^.;]*?by\s+([a-z]+ing)\s+([\s\S]+)$/i);
+  const match = emptyBy || cross || workflows;
+  if (match) {
+    const past = pastTenseOf(match[1]);
+    t = `${past.charAt(0).toUpperCase()}${past.slice(1)} ${match[2]}`;
   }
   return t.replace(/ {2,}/g, " ").trim();
 }
@@ -1369,19 +1364,117 @@ export function fixIndustryPhrasing(letter: string): string {
   return String(letter || "").replace(/\b(solutions|services|products|platforms) of\b/gi, "$1 for");
 }
 
-/**
- * The six clean-up rules, run after the existing guards and before the
- * documents are saved or returned.
- */
-export function polishTailoredDocuments(cv: string, letter: string, profileText: string): { cv: string; letter: string } {
+const bulletWords = (s: string) => (s.toLowerCase().match(/[a-z0-9+#.]+/g) || []).map((w) => w.replace(/\.$/, ""));
+const firstVerb = (s: string) => (s.match(/^[a-z]+/i) || [""])[0].toLowerCase();
+const PAST_OPEN = /^(?:[a-z]+ed|built|rebuilt|led|ran|cut|made|wrote|drove|grew|set|took|held|won)\b/i;
+
+/** Restore a source line only for the narrowly specified damage patterns. */
+export function preserveProfileBullet(text: string, sources: string[], posting = "", keywords: string[] = []): string {
+  const words = bulletWords(text);
+  const source = sources.map((line) => ({ line, words: bulletWords(line) }))
+    .sort((a, b) => b.words.filter((w) => words.includes(w)).length / b.words.length - a.words.filter((w) => words.includes(w)).length / a.words.length)[0];
+  if (!source || !source.words.length || !words.length) return text;
+  const old = source.line, oldWords = source.words;
+  const laterVerbs = [...old.matchAll(/\b([a-z]+ing)\b/gi)].filter((m) => (m.index ?? 0) > 0).map((m) => pastTenseOf(m[1]));
+  const equivalent = (w: string) => oldWords.includes(w) || [...old.matchAll(/\b([a-z]+ing)\b/gi)].some((m) => pastTenseOf(m[1]) === w);
+  if (words.length < oldWords.length * 0.8 && firstVerb(text) !== firstVerb(old) && laterVerbs.includes(firstVerb(text)) && words.every(equivalent)) return old;
+  const added = words.filter((w) => !oldWords.includes(w));
+  if (oldWords.filter((w) => words.includes(w)).length / oldWords.length >= 0.85 && added.length >= 4 && added.filter((w) => bulletWords(posting).includes(w)).length / added.length >= 0.6) return old;
+  const sameNumbers = numericTokens(old).slice().sort().join("|") === numericTokens(text).slice().sort().join("|");
+  const newKeyword = keywords.some((k) => termAppearsIn(text, k) && !termAppearsIn(old, k));
+  // A genuinely shorter rewrite is retained; similar-length paraphrases are not.
+  if (sameNumbers && !newKeyword && words.length >= oldWords.length && words.length <= oldWords.length * 1.2 && words.filter((w) => oldWords.includes(w)).length / words.length >= 0.6) return old;
+  return text;
+}
+
+export function fixParallelPast(text: string): string {
+  if (!PAST_OPEN.test(text)) return text;
+  const match = text.match(/\band\s+([a-z]+ing)\b/i);
+  if (!match || match.index === undefined || /\b[a-z]+ing\b/i.test(text.slice(0, match.index))) return text;
+  return text.slice(0, match.index) + text.slice(match.index).replace(/^and\s+([a-z]+ing)\b/i, (_m, w: string) => `and ${pastTenseOf(w)}`);
+}
+
+/** Scrub named tool lists, without removing ordinary prose nouns. */
+export function removeUnrecordedBulletTools(text: string, profileText: string): string {
+  const backed = (t: string) => termAppearsIn(profileText, t);
+  const clean = (list: string) => list.split(/,\s*|\s+and\s+/).filter((t) => !isToolName(t.trim()) || backed(t.trim()));
+  const join = (items: string[]) => items.length <= 1 ? (items[0] || "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  let out = text.replace(/\(([^()]+)\)/g, (whole, inside: string) => {
+    if (!inside.split(/,\s*|\s+and\s+/).some((t) => isToolName(t.trim()))) return whole;
+    const kept = join(clean(inside));
+    return kept ? `(${kept})` : "";
+  });
+  const tool = '(?:[A-Z][A-Za-z0-9.#+-]*[A-Za-z0-9+#]|[A-Z]|iOS|macOS|jQuery)(?: (?:Native|BI|Cloud|Actions))?';
+  const list = new RegExp(`(${tool}(?:,\\s*${tool})*(?:,?\\s+and\\s+${tool}))`, 'g');
+  out = out.replace(list, (whole: string) => {
+    const items = whole.split(/,\s*|\s+and\s+/);
+    if (!items.every((t) => isToolName(t.trim()))) return whole;
+    return join(clean(whole));
+  });
+  return out.replace(/\s+([.,])/g, "$1").replace(/ {2,}/g, " ").trim();
+}
+
+export function moveDomainSkills(cv: string): string {
+  const lines = cv.split("\n"), skills = skillLines(lines);
+  if (!skills) return cv;
+  const domainTerms: string[] = [];
+  const outside = lines.filter((_, i) => i <= skills.range[0] || i >= skills.range[1]).join("\n");
+  for (const e of skills.entries) {
+    if (!/program|framework|cloud|data/i.test(e.label)) continue;
+    const kept = e.items.filter((item) => {
+      if (!/^(?:Front End|Back End|Full Stack|Web Development|Software Development)$/i.test(item)) return true;
+      if (!termAppearsIn(outside, item) && !skills.entries.some((other) => other.index !== e.index && !/program|framework|cloud|data/i.test(other.label) && other.items.some((x) => sameSkill(x, item)))) domainTerms.push(item);
+      return false;
+    });
+    lines[e.index] = kept.length ? `${e.label}: ${kept.join(", ")}` : "";
+  }
+  const unique = [...new Set(domainTerms)];
+  if (unique.length) {
+    const domain = skills.entries.find((e) => /^domain$/i.test(e.label));
+    if (domain) lines[domain.index] = `${domain.label}: ${[...domain.items, ...unique.filter((x) => !domain.items.some((y) => sameSkill(x, y)))].join(", ")}`;
+    else lines.splice(skills.range[1], 0, `Domain: ${unique.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
+/** Only contact headers are normalised, never body figures. */
+export function normaliseHeaderPhones(document: string): string {
+  const lines = document.split("\n");
+  const end = lines.findIndex((l) => /^(?:SUMMARY|PROFESSIONAL SUMMARY|PROFILE|PROFESSIONAL EXPERIENCE|Dear|Hello|Re:)/i.test(l.trim()));
+  return lines.map((l, i) => i < (end < 0 ? Math.min(lines.length, 10) : end)
+    ? l.replace(/\+(\d{1,3})\s+(?:\(0\)|0)(?=\d|\s*\d)\s*/g, (whole, code: string) => code === "39" ? whole : `+${code} `) : l).join("\n");
+}
+
+const TOOL_RELEASES: [string, number][] = [["FLUX Kontext", 2025], ["ChatGPT", 2022], ["GPT-4", 2023], ["Claude", 2023], ["LangChain", 2022], ["Llama", 2023]];
+export function toolChronologyNotes(experience: any[]): string[] {
+  const notes: string[] = [];
+  for (const role of experience || []) {
+    const date = String(role?.endDate || role?.end_date || "");
+    if (/present|current/i.test(date)) continue;
+    const end = date.match(/(?:19|20)\d{2}/);
+    if (!end) continue;
+    const text = entryText(role);
+    for (const [tool, year] of TOOL_RELEASES) if (Number(end[0]) < year && new RegExp(`(?<![A-Za-z0-9])${escapeRe(tool)}(?![A-Za-z0-9])`).test(text)) {
+      notes.push(`${tool} first came out in ${year}, but your ${role.company || role.employer || "previous"} role ended in ${end[0]}. Correct it in your profile.`);
+    }
+  }
+  return [...new Set(notes)];
+}
+
+/** Final checks after review, with source restoration before monetary exclusion. */
+export function polishTailoredDocuments(cv: string, letter: string, profileText: string, sources: string[] = [], posting = "", keywords: string[] = []): { cv: string; letter: string } {
   let out = String(cv || "");
   out = out.split("\n").map((line) => {
     const m = line.match(BULLET_RE);
-    return m ? `${m[1]}${m[2]} ${unstitchBullet(m[3])}` : line;
+    if (!m) return line;
+    const restored = preserveProfileBullet(m[3], sources, posting, keywords);
+    const bullet = preserveProfileBullet(unstitchBullet(restored), sources, posting, keywords);
+    return `${m[1]}${m[2]} ${removeUnrecordedBulletTools(fixParallelPast(bullet), profileText)}`;
   }).join("\n");
+  out = moveDomainSkills(out);
   out = mergeNamedToolsIntoSkills(out);
   out = dropUnbackedSkills(out, profileText);
-  out = trimHeadline(out, profileText);
-  const fixedLetter = fixIndustryPhrasing(dedupeLetterHeader(letter || ""));
-  return { cv: out, letter: fixedLetter };
+  out = normaliseHeaderPhones(trimHeadline(out, profileText));
+  const fixedLetter = normaliseHeaderPhones(fixIndustryPhrasing(dedupeLetterHeader(letter || "")));
+  return { cv: stripDashes(out), letter: stripDashes(fixedLetter) };
 }

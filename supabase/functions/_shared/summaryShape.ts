@@ -1,3 +1,4 @@
+import { evidencePhraseAppears } from "./documentChecks.ts";
 /**
  * THE SUMMARY IS THE LINE THAT DECIDES WHETHER THE REST IS READ.
  *
@@ -43,6 +44,7 @@ export interface SummaryContext {
   experienceBullets: string[];
   /** Original profile bullets, preferred for outcome prose and verbatim figures. */
   outcomeBullets?: string[];
+  outcomeRoles?: { title: string; bullets: string[] }[];
   /** Employer names, so they can never appear. */
   employers?: string[];
   /** Place names (city, country, role locations), so they can never appear. */
@@ -267,7 +269,7 @@ export function evidencedRequirements(requirements: string[], experienceBullets:
     if (NOT_A_STRENGTH.test(term)) continue;
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
-    if (!hasWord(body, term)) continue;
+    if (!hasWord(body, term) && !evidencePhraseAppears(body, term)) continue;
     seen.add(key);
     out.push(term.length > 3 && term === term.toUpperCase() ? term : term.toLowerCase());
     if (out.length >= limit) break;
@@ -325,7 +327,7 @@ export function outcomeClause(line: string): string {
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
 
-const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced|trained|coached|mentored|presented|negotiated|standardised|consolidated|grew|expanded|recovered|halved|doubled|tripled)\b/i;
+const ACTION_OPENING = /^(?:served|authored|gave|brought|ended|enabled|achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced|trained|coached|mentored|presented|negotiated|standardised|consolidated|grew|expanded|recovered|halved|doubled|tripled)\b/i;
 const FRAGMENT_OPENING = /^[^,.;]{2,50},\s+(?:cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i;
 const FINITE_PARTICIPLE: Record<string, string> = {
   cutting: "Cut",
@@ -352,7 +354,11 @@ export function isGrammaticalOutcome(clause: string): boolean {
 
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
-  let text = clause.trim();
+  let text = clause.trim().replace(/\s*\([^)]*\)\s*$/, "");
+  if (!rankOutcome(text) && text.length > maxLen) {
+    const prefix = text.split(/,\s+/)[0];
+    if (isGrammaticalOutcome(prefix)) return prefix;
+  }
   if (text.length <= maxLen) return text;
   // An explanatory tail states why the change mattered; the figure states what
   // changed. When the clause is over budget the tail goes first, and only if the
@@ -458,18 +464,29 @@ export function shortenClause(clause: string, maxLen: number): string {
  * number on the CV: a coaching posting is better served by "trained 24 analysts
  * across two offices" than by a batch job going from six hours to one.
  */
-export function pickOutcomes(experienceBullets: string[], requirements: string[] = []): string[] {
-  const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
-  const relevance = (line: string) => (wanted.some((r) => hasWord(line, r)) ? 1 : 0);
+export function pickOutcomes(experienceBullets: string[], requirements: string[] = [], roles: { title: string; bullets: string[] }[] = [], targetTitle = ""): string[] {
+  const allWanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
+  // Consulting summaries compare the responsibilities, not incidental stack names.
+  const clientRole = /consult|client|pre-sales|customer success/i.test(targetTitle);
+  const responsibilities = allWanted.filter((r) => /client|customer|stakeholder|pre-sales|workshop|handover|delivery|present|consult|solution/i.test(r));
+  const wanted = clientRole && responsibilities.length ? responsibilities : allWanted;
+  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r) || tokens(r).some((w) => w.length > 3 && evidencePhraseAppears(line, w))).length;
+  const roleRank = (line: string) => {
+    const index = roles.findIndex((r) => r.bullets.some((b) => stripBullet(b) === stripBullet(line)));
+    if (index < 0) return { fit: 0, recent: roles.length };
+    const words = new Set(tokens(targetTitle));
+    return { fit: tokens(roles[index].title).filter((w) => words.has(w) || (/consult|architect/.test(w) && [...words].some((x) => /consult|solution|architect/.test(x)))).length, recent: index };
+  };
   const scored = experienceBullets
     .map((line, index) => ({
-      clause: outcomeClause(line),
+      clause: outcomeClause(line.replace(/\s*\([^)]*\)\s*$/, "")),
       rank: rankOutcome(line),
-      relevant: relevance(line),
+      relevant: relevance(line) + (clientRole ? (line.match(/\b(?:clients?|pre-sales|workshops?|handovers?|CTOs?|bids?|presented)\b/gi) || []).length * 10 : 0),
       index,
+      role: roleRank(line),
     }))
-    .filter((c) => c.rank > 0 && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
-    .sort((a, b) => (b.relevant - a.relevant) || (b.rank - a.rank) || (a.index - b.index));
+    .filter((c) => (c.rank > 0 || c.relevant > 0 || c.role.fit > 0) && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
+    .sort((a, b) => (b.relevant - a.relevant) || (b.role.fit - a.role.fit) || (a.role.recent - b.role.recent) || (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {
     if (out.some((o) => o.toLowerCase() === candidate.clause.toLowerCase())) continue;
@@ -527,7 +544,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   const outcomeSentence = sentences[sentences.length - 1] || "";
   if (!outcomeSentence.includes(";")) problems.push("outcomes not joined with a semicolon");
   const halves = outcomeSentence.split(";").map((h) => h.trim()).filter(Boolean);
-  if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0)) problems.push("fewer than two figures");
+  if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0 && !ctx.experienceBullets.some((b) => evidencePhraseAppears(b, h)))) problems.push("fewer than two figures");
   if (halves.some((h) => !isGrammaticalOutcome(h))) problems.push("ungrammatical outcome clause");
   if (sentences.length > 2) problems.push("more than two sentences");
 
@@ -544,6 +561,8 @@ export function buildSummary(ctx: SummaryContext): string {
   const outcomes = pickOutcomes(
     ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets,
     ctx.requirements,
+    ctx.outcomeRoles,
+    ctx.targetTitle,
   );
   if (!field || outcomes.length === 0) return "";
 
