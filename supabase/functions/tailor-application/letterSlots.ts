@@ -400,7 +400,8 @@ export function lineScore(b: ProfileBullet, requirements: string[], description:
   const req = set(requirements.join(" ")), roleSet = new Set(roleTerms(role).map(whole)), desc = set(description);
   const w = [...set(b.text)];
   const responsibilityCount = requirements.filter((r) => evidencePhraseAppears(b.text, r)).length;
-  return responsibilityCount * 20 + w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
+  const clientFit = /consult|customer success|client|pre-sales/i.test(role) ? (b.text.match(/\b(?:clients?|pre-sales|workshops?|handovers?|stakeholders?|CTOs?|bids?|presented)\b/gi) || []).length * 30 : 0;
+  return clientFit + responsibilityCount * 20 + w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
 }
 
 /** Lines ranked by fit for the role. The story line is never offered. */

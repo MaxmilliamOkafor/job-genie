@@ -116,3 +116,8 @@ test('existing six cleanups remain and output contains no long dashes', () => {
  const letter='Sam\nhttps://example.com\nexample.com/\nDear Hiring Team,\nI built solutions of healthcare.';
  const out=polishTailoredDocuments(cv,letter,'Python Engineer'); equal(out.cv.includes('UnsupportedTool'),false); equal(out.letter.includes('solutions for healthcare'),true); equal(/[\u2013\u2014]/.test(out.cv+out.letter),false);
 });
+
+test('live regression: unsupported contractual result is rejected', () => {
+ const b={n:1,company:'Accenture',text:'Led five pre-sales bids, authored architecture sections and presented to CTOs.'};
+ ok(checkAgainstBullet('At Accenture, I led five bids. I secured contracts and strengthened client relationships.',b,[]).length > 0);
+});
