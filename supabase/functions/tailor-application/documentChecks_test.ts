@@ -121,3 +121,9 @@ test('live regression: unsupported contractual result is rejected', () => {
  const b={n:1,company:'Accenture',text:'Led five pre-sales bids, authored architecture sections and presented to CTOs.'};
  ok(checkAgainstBullet('At Accenture, I led five bids. I secured contracts and strengthened client relationships.',b,[]).length > 0);
 });
+
+test('live regression: invented problem and subjectless result are never accepted', () => {
+ const b={n:1,company:'Meta',text:'Increased ad revenue with ranking model features derived from advertiser bid history, a gain that held across a four-week live test.'};
+ ok(checkAgainstBullet('At Meta, ad revenue was stagnating due to outdated ranking models.',b,[]).length > 0);
+ equal(composeResult('ad revenue was slow','Meta'),'At Meta, ad revenue was slow.');
+});

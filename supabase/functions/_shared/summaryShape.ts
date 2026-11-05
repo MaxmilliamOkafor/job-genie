@@ -327,7 +327,7 @@ export function outcomeClause(line: string): string {
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
 
-const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced|trained|coached|mentored|presented|negotiated|standardised|consolidated|grew|expanded|recovered|halved|doubled|tripled)\b/i;
+const ACTION_OPENING = /^(?:served|authored|gave|brought|ended|enabled|achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced|trained|coached|mentored|presented|negotiated|standardised|consolidated|grew|expanded|recovered|halved|doubled|tripled)\b/i;
 const FRAGMENT_OPENING = /^[^,.;]{2,50},\s+(?:cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i;
 const FINITE_PARTICIPLE: Record<string, string> = {
   cutting: "Cut",
@@ -354,7 +354,11 @@ export function isGrammaticalOutcome(clause: string): boolean {
 
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
-  let text = clause.trim();
+  let text = clause.trim().replace(/\s*\([^)]*\)\s*$/, "");
+  if (!rankOutcome(text) && text.length > maxLen) {
+    const prefix = text.split(/,\s+/)[0];
+    if (isGrammaticalOutcome(prefix)) return prefix;
+  }
   if (text.length <= maxLen) return text;
   // An explanatory tail states why the change mattered; the figure states what
   // changed. When the clause is over budget the tail goes first, and only if the

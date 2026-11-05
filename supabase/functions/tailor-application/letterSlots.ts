@@ -155,7 +155,7 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   // cannot subsidise an invented second outcome.
   for (const part of splitSentences(text)) {
     const meaningful = contentWords(part, [bullet.company]);
-    if (meaningful.length >= 3 && meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6) fails.push("sentence adds claims not in its source line");
+    if (meaningful.length >= 3 && (meaningful.filter((w) => !src.has(stem(w))).length >= 2 || meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6)) fails.push("sentence adds claims not in its source line");
   }
   for (const phrase of ["strengthened client relationships", "secure contracts", "secured contracts", "won contracts", "increased adoption", "improved satisfaction"]) {
     if (flat(text).includes(phrase) && !flat(bullet.text).includes(phrase)) fails.push(`adds unsupported outcome ${phrase}`);
@@ -276,7 +276,7 @@ export function composeResult(clause: string, employer: string): string {
   c = c.replace(/^At\s+[^,]+,\s*/i, "");
   c = c.replace(new RegExp(`,?\\s+(?:at|for|with|while at|during my time at)\\s+${esc(employer)}$`, "i"), "");
   c = sentenceSubjects(c);
-  if (!/^(?:I|the|our|sales engineers|clients|clinicians|users|customers|[A-Z][\w]*\s+(?:had|were|was))\b/i.test(c)) c = `I ${c.charAt(0).toLowerCase()}${c.slice(1)}`;
+  if (/^(?:[a-z]+ed|built|rebuilt|led|ran|cut|made|wrote|drove|grew|set|took|held|won)\b/i.test(c)) c = `I ${c.charAt(0).toLowerCase()}${c.slice(1)}`;
   return `At ${plainCompany(employer)}, ${c}.`;
 }
 
