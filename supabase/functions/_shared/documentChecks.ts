@@ -1,6 +1,6 @@
 /** Pure checks; posting text is never candidate evidence. */
 export function numericTokens(text: string): string[] {
-  return (text.match(/\d+(?:[.,]\d+)*/g) || []).concat(text.match(/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|half|twice)\b/gi) || []).map((x) => x.toLowerCase());
+  return [...(text.match(/\d+(?:[.,]\d+)*/g) || []), ...(text.match(/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|half|twice)\b/gi) || [])].map((x) => x.toLowerCase());
 }
 export function evidenceStem(word: string): string {
   const w = word.toLowerCase();
