@@ -61,9 +61,22 @@ export function profileTextOf(profile: any): string {
   return allText([p.professionalExperience, p.skills, p.education, p.relevantProjects, p.certifications, p.achievements]).join("\n");
 }
 
+const ROLE_WORD = /\b(?:engineer|developer|analyst|manager|architect|scientist|designer|consultant|specialist|administrator|lead|director|officer|associate|intern|accountant|executive|coordinator|technician|advisor|adviser|owner|head|president|vp|founder|chef|nurse|teacher)\s*$/i;
+/**
+ * A saved role's employer and title. A role saved the wrong way round
+ * ("Software Engineer" as the company, "Meta" as the title) wrote "At
+ * Software Engineer, I cut..." into a letter (5 Nov): when the company reads
+ * as a job title and the title does not, the two are swapped back.
+ */
+export function employerAndTitle(e: any): { company: string; title: string } {
+  const company = String(e?.company || e?.employer || "").trim();
+  const title = String(e?.title || e?.position || e?.role || "").trim();
+  if (company && title && ROLE_WORD.test(company) && !ROLE_WORD.test(title)) return { company: title, title: company };
+  return { company, title };
+}
+
 const roleList = (experience: any[]) => (experience || []).map((e) => ({
-  company: String(e?.company || e?.employer || "").trim(),
-  title: String(e?.title || e?.position || e?.role || "").trim(),
+  ...employerAndTitle(e),
   text: allText(e).join("\n"),
 })).filter((r) => r.company);
 
@@ -71,7 +84,7 @@ const roleList = (experience: any[]) => (experience || []).map((e) => ({
 export function profileBullets(experience: any[]): ProfileBullet[] {
   const out: ProfileBullet[] = [];
   for (const e of experience || []) {
-    const company = String(e?.company || e?.employer || "").trim();
+    const { company } = employerAndTitle(e);
     if (!company) continue;
     const lines = [e?.bullets, e?.achievements, e?.responsibilities, e?.highlights, e?.description]
       .flatMap((v) => allText(v))
