@@ -264,7 +264,7 @@ export function chooseHeadline(input: {
   currentTitle?: string;
   heldTitles?: string[];
 }): { headline: string; usedFallback: boolean; reason: string } {
-  const company = normalise(input.company);
+  const company = normalise(input.company || "");
   const held = (input.heldTitles || []).map((t) => String(t || "").trim()).filter(Boolean);
   const fallback = (input.currentTitle || "").trim() || held[0] || "";
 
@@ -299,7 +299,7 @@ export function chooseHeadline(input: {
 
 /** True when the line is the employer's name and nothing else. */
 export function isEmployerNameLine(line: string, company?: string): boolean {
-  const c = normalise(company);
+  const c = normalise(company || "");
   if (!c) return false;
   return normalise(line) === c;
 }
