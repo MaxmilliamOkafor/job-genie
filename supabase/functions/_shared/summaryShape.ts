@@ -1,3 +1,4 @@
+import { evidencePhraseAppears } from "./documentChecks.ts";
 /**
  * THE SUMMARY IS THE LINE THAT DECIDES WHETHER THE REST IS READ.
  *
@@ -43,6 +44,7 @@ export interface SummaryContext {
   experienceBullets: string[];
   /** Original profile bullets, preferred for outcome prose and verbatim figures. */
   outcomeBullets?: string[];
+  outcomeRoles?: { title: string; bullets: string[] }[];
   /** Employer names, so they can never appear. */
   employers?: string[];
   /** Place names (city, country, role locations), so they can never appear. */
@@ -458,18 +460,25 @@ export function shortenClause(clause: string, maxLen: number): string {
  * number on the CV: a coaching posting is better served by "trained 24 analysts
  * across two offices" than by a batch job going from six hours to one.
  */
-export function pickOutcomes(experienceBullets: string[], requirements: string[] = []): string[] {
+export function pickOutcomes(experienceBullets: string[], requirements: string[] = [], roles: { title: string; bullets: string[] }[] = [], targetTitle = ""): string[] {
   const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
-  const relevance = (line: string) => (wanted.some((r) => hasWord(line, r)) ? 1 : 0);
+  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r)).length;
+  const roleRank = (line: string) => {
+    const index = roles.findIndex((r) => r.bullets.some((b) => stripBullet(b) === stripBullet(line)));
+    if (index < 0) return { fit: 0, recent: roles.length };
+    const words = new Set(tokens(targetTitle));
+    return { fit: tokens(roles[index].title).filter((w) => words.has(w) || (w === "consultant" && words.has("consulting"))).length, recent: index };
+  };
   const scored = experienceBullets
     .map((line, index) => ({
       clause: outcomeClause(line),
       rank: rankOutcome(line),
       relevant: relevance(line),
       index,
+      role: roleRank(line),
     }))
-    .filter((c) => c.rank > 0 && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
-    .sort((a, b) => (b.relevant - a.relevant) || (b.rank - a.rank) || (a.index - b.index));
+    .filter((c) => (c.rank > 0 || c.relevant > 0) && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
+    .sort((a, b) => (b.relevant - a.relevant) || (b.role.fit - a.role.fit) || (a.role.recent - b.role.recent) || (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {
     if (out.some((o) => o.toLowerCase() === candidate.clause.toLowerCase())) continue;
@@ -527,7 +536,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   const outcomeSentence = sentences[sentences.length - 1] || "";
   if (!outcomeSentence.includes(";")) problems.push("outcomes not joined with a semicolon");
   const halves = outcomeSentence.split(";").map((h) => h.trim()).filter(Boolean);
-  if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0)) problems.push("fewer than two figures");
+  if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0 && !ctx.experienceBullets.some((b) => evidencePhraseAppears(b, h)))) problems.push("fewer than two figures");
   if (halves.some((h) => !isGrammaticalOutcome(h))) problems.push("ungrammatical outcome clause");
   if (sentences.length > 2) problems.push("more than two sentences");
 
@@ -544,6 +553,8 @@ export function buildSummary(ctx: SummaryContext): string {
   const outcomes = pickOutcomes(
     ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets,
     ctx.requirements,
+    ctx.outcomeRoles,
+    ctx.targetTitle,
   );
   if (!field || outcomes.length === 0) return "";
 
