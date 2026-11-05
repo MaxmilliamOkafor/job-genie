@@ -40,6 +40,8 @@ import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreen
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
+import { filterJobKeywords } from "../_shared/keywordChecks.ts";
+import { toolChronologyNotes } from "./guards.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
 
@@ -2327,7 +2329,7 @@ serve(async (req) => {
     // replaces the raw extraction immediately. Incidental employer names,
     // boilerplate and overlapping title phrases are dropped rather than being
     // counted as requirements the candidate has to satisfy.
-    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company], jobTitle);
+    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, description), [company], jobTitle);
     console.log(
       `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
     );
@@ -4711,6 +4713,7 @@ ${
             ? role.description.split("\n").map((bullet: string) => bullet.trim()).filter(Boolean)
             : [],
       ),
+      outcomeRoles: profileRoles.map((role: any) => ({ title: String(role.title || ""), bullets: profileBullets([role]).map((b) => b.text) })),
       employers: profileRoles.map((r: any) => String(r?.company || "").trim()).filter(Boolean),
       places: [
         userProfile.city,
@@ -4858,7 +4861,7 @@ ${
         description: String(description || ""),
         tools: letterToolList(userProfile.skills || [], jdKeywords.allKeywords),
         profileText: profileTextOf(userProfile),
-        requirements: topRequirements,
+        requirements: jdKeywords.allKeywords,
       };
       const askSlots = async (prompt: string): Promise<string | null> => {
         try {
@@ -5108,9 +5111,15 @@ ${
       result.tailoredResume || "",
       result.tailoredCoverLetter || "",
       `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+      profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
+      description,
+      jdKeywords.allKeywords,
     );
-    result.tailoredResume = polished.cv;
-    result.tailoredCoverLetter = polished.letter;
+    result.tailoredResume = removeMonetaryClaims(polished.cv);
+    result.tailoredCoverLetter = removeMonetaryClaims(polished.letter);
+    const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
+    result.reviewNotes = chronologyNotes;
+    if (chronologyNotes.length) result.review = { ...(result.review || { applied: 0, rejected: [], gaps: [] }), notes: chronologyNotes };
 
     result.truthfulness = {
       removedYearsClaims,
