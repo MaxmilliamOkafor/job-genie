@@ -1,8 +1,8 @@
 import { acceptRewrite, preserveProfileBullet, unstitchBullet, fixParallelPast, removeUnrecordedBulletTools, moveDomainSkills, normaliseHeaderPhones, toolChronologyNotes, polishTailoredDocuments } from './guards.ts';
-import { copiesRun, COPY_RUN, composeResult, profileBullets, pickResultLines, rankLines, checkAgainstBullet, letterBody, sentenceSubjects, checkResult, slotPrompt } from './letterSlots.ts';
-import { pickOutcomes } from '../_shared/summaryShape.ts';
+import { copiesRun, COPY_RUN, composeResult, profileBullets, profileTextOf, pickResultLines, rankLines, checkAgainstBullet, letterBody, sentenceSubjects, checkResult, slotPrompt } from './letterSlots.ts';
+import { pickOutcomes, summaryRequirements } from '../_shared/summaryShape.ts';
 import { classifyTerm } from '../_shared/evidence.ts';
-import { excludedKeyword, filterJobKeywords } from '../_shared/keywordChecks.ts';
+import { excludedKeyword, filterJobKeywords, filterJobKeywordLists } from '../_shared/keywordChecks.ts';
 import { termAppearsIn } from '../_shared/coverage.ts';
 function equal(actual: unknown, expected: unknown) { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); }
 function ok(value: unknown) { if (!value) throw new Error('Expected a true condition'); }
@@ -12,6 +12,8 @@ const story = 'At Meta, sales engineers raised tickets because the campaign diag
 test('1: copied result is rejected; fresh grounded story is not copied', () => {
  equal(COPY_RUN, 7); ok(copiesRun('At Meta, I ' + campaign.toLowerCase(), [campaign])); equal(copiesRun(story, [campaign]), false);
  const b = {n:1, company:'Meta', text:campaign}; equal(checkAgainstBullet(story,b,['React','TypeScript','GraphQL']), []);
+ const requestedStory='At Meta, sales engineers had stopped using our campaign diagnostics tool and raised tickets instead, because it was too slow. I rebuilt it in React, TypeScript and GraphQL, and most of that queue went away.';
+ equal(copiesRun(requestedStory,[campaign]),false); equal(checkAgainstBullet(requestedStory,b,['React','TypeScript','GraphQL']),[]);
 });
 test('2: responsibility ranking, two distinct employers and one figure', () => {
  const bullets = profileBullets([{company:'Meta',bullets:['Scaled systems for 900000 requests daily']},{company:'Accenture',bullets:['Led client pre-sales workshops and delivery handovers with stakeholders','Managed client delivery workshops']},{company:'Citi',bullets:['Led client pre-sales workshops']}]);
@@ -91,6 +93,7 @@ test('16: trunk zeros removed in both headers, Italy keeps zero', () => {
  equal(normaliseHeaderPhones('Sam\n+353 087 426 1508\nSUMMARY'), 'Sam\n+353 87 426 1508\nSUMMARY');
  equal(normaliseHeaderPhones('Sam\n+44 (0)20 7946 0958\nDear Hiring Team,'), 'Sam\n+44 20 7946 0958\nDear Hiring Team,');
  equal(normaliseHeaderPhones('Sam\n+39 06 123456\nSUMMARY'), 'Sam\n+39 06 123456\nSUMMARY');
+ const good='Sam\n+353 87 426 1508\nSUMMARY\nRecorded +353 087 426 1508'; equal(normaliseHeaderPhones(good),good);
 });
 test('17: geography and plural people phrases are not job keywords', () => {
  for(const word of ['Ontario Provinces','Quebec','California','Ireland','EMEA','UTC','Ontario','engineering managers','stakeholders','clients']) equal(excludedKeyword(word),true);
@@ -126,4 +129,49 @@ test('live regression: invented problem and subjectless result are never accepte
  const b={n:1,company:'Meta',text:'Increased ad revenue with ranking model features derived from advertiser bid history, a gain that held across a four-week live test.'};
  ok(checkAgainstBullet('At Meta, ad revenue was stagnating due to outdated ranking models.',b,[]).length > 0);
  equal(composeResult('ad revenue was slow','Meta'),'At Meta, ad revenue was slow.');
+});
+
+test('all keyword categories are filtered before prompts and scores', () => {
+ const lists = {hardSkills:['Python','Ontario'],tools:['Go','React'],softSkills:['Communication','stakeholders'],titles:['Consulting','engineering managers'],certifications:['AWS','UTC'],responsibilities:['Project Management','clients'],allKeywords:['Python','Go','Ireland']};
+ equal(filterJobKeywordLists(lists,'Go-Live support'),{hardSkills:['Python'],tools:['React'],softSkills:['Communication'],titles:['Consulting'],certifications:['AWS'],responsibilities:['Project Management'],allKeywords:['Python']});
+ const good={tools:['Go','React'],hardSkills:['Python']}; equal(filterJobKeywordLists(good,'Services written in Go'),good);
+});
+test('summary counts complete requirements before role fit or large figures', () => {
+ const client='Led pre-sales client workshops and delivery handovers';
+ const stack='Built Python and SQL tools for 900000 daily requests';
+ equal(pickOutcomes([client,stack],['Python','SQL','client workshops'],[{title:'Solutions Consultant',bullets:[client]},{title:'Software Engineer',bullets:[stack]}],'Senior Solutions Consultant')[0],stack);
+ equal(pickOutcomes([client,stack],['pre-sales','client workshops','delivery handovers'],[{title:'Solutions Consultant',bullets:[client]},{title:'Software Engineer',bullets:[stack]}],'Senior Solutions Consultant')[0],client);
+});
+test('summary ties prefer closest held role then most recent role before figure', () => {
+ const older='Led client workshops for 9000 users';
+ const recent='Led client workshops for 4 users';
+ const unrelated='Led client workshops for 99000 users';
+ const roles=[{title:'Solutions Consultant',bullets:[recent]},{title:'Data Analyst',bullets:[unrelated]},{title:'Solutions Consultant',bullets:[older]}];
+ equal(pickOutcomes([older,unrelated,recent],['client workshops'],roles,'Solutions Consultant')[0],recent);
+});
+test('summary includes posting responsibilities without changing ATS terms', () => {
+ const terms=['SQL','Power BI'];
+ equal(summaryRequirements(terms,'Client workshops, pre-sales delivery and handovers'),['SQL','Power BI','client','pre-sales','workshop','handover','delivery']);
+ equal(terms,['SQL','Power BI']); equal(summaryRequirements(terms,'SQL and Power BI'),terms);
+});
+test('number-word loss is rejected even when all rewrite words were in source', () => {
+ const source='Reduced runs from six hours to under one with Python after three late submissions across four teams and SQL reporting.';
+ const shorter='Reduced runs with Python after late submissions across teams and SQL reporting.';
+ equal(acceptRewrite(source,shorter,[]),false);
+});
+test('comma-only tool lists are scrubbed and recorded lists stay unchanged', () => {
+ equal(removeUnrecordedBulletTools('Built services in Python, Node.js, iOS.','Python Node.js'),'Built services in Python and Node.js.');
+ const good='Built services in Python, Node.js, iOS.'; equal(removeUnrecordedBulletTools(good,'Python Node.js iOS'),good);
+});
+
+test('posting strategy never backs a tool in candidate bullets', () => {
+ const profile={professionalExperience:[{company:'Acme',bullets:['Built services using Python and Node.js']}],skills:['Python','Node.js'],atsStrategy:{requirements:['iOS']}};
+ equal(removeUnrecordedBulletTools('Built services (Python, Node.js, iOS).',profileTextOf(profile)),'Built services (Python and Node.js).');
+ const good='Built services (Python and Node.js).'; equal(removeUnrecordedBulletTools(good,profileTextOf(profile)),good);
+});
+test('every specified tool release is flagged only on an earlier completed role', () => {
+ for(const [tool,year] of [['FLUX Kontext',2025],['ChatGPT',2022],['GPT-4',2023],['Claude',2023],['LangChain',2022],['Llama',2023]] as const) {
+  equal(toolChronologyNotes([{company:'Acme',endDate:`12-${year-1}`,bullets:[`Built services using ${tool}`]}]),[`${tool} first came out in ${year}, but your Acme role ended in ${year-1}. Correct it in your profile.`]);
+  equal(toolChronologyNotes([{company:'Acme',endDate:`12-${year}`,bullets:[`Built services using ${tool}`]}]),[]);
+ }
 });

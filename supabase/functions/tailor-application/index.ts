@@ -31,7 +31,7 @@ import {
   normaliseSkillsSection,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
-import { buildSummary, enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+import { buildSummary, enforceSummaryShape, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
@@ -40,7 +40,7 @@ import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreen
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
-import { filterJobKeywords } from "../_shared/keywordChecks.ts";
+import { filterJobKeywords, filterJobKeywordLists } from "../_shared/keywordChecks.ts";
 import { toolChronologyNotes } from "./guards.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
@@ -2313,15 +2313,18 @@ serve(async (req) => {
     // evidence map. Requirements it names are merged into the keyword pool
     // so coverage is measured against what the posting actually asks for.
     const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
-    const mergedRequirements = Array.from(
+    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description);
+    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), description));
+    atsStrategy.evidence = Object.fromEntries(Object.entries(atsStrategy.evidence).filter(([term]) => strategyTerms.has(term)));
+    const mergedRequirements = filterJobKeywords(Array.from(
       new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
-    );
+    ), description);
     console.log(
       `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
     );
 
     // Jobscan keyword extraction
-    const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
+    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), description);
 
     // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
     // Initial, per-revision and final coverage are only comparable when they
@@ -2363,14 +2366,14 @@ serve(async (req) => {
     );
 
     // Categorise keywords by priority (JobOwl-inspired weighted system)
-    const weightedKeywords = categoriseKeywordsByPriority(
+    const weightedKeywords = filterJobKeywordLists(categoriseKeywordsByPriority(
       jdKeywords.hardSkills,
       jdKeywords.tools,
       jdKeywords.softSkills,
       jdKeywords.titles,
       jdKeywords.certifications,
       description,
-    );
+    ), description);
     console.log(`Keyword priorities - High: ${weightedKeywords.high.length}, Medium: ${weightedKeywords.medium.length}, Low: ${weightedKeywords.low.length}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();
@@ -4704,7 +4707,7 @@ ${
       currentTitle: String(currentRole?.title || "").trim(),
       field: String(userProfile.field || userProfile.profession || userProfile.discipline || "").trim(),
       targetTitle: jobTitle || "",
-      requirements: jdKeywords.allKeywords,
+      requirements: summaryRequirements(jdKeywords.allKeywords, description),
       experienceBullets: experienceBulletsOf(result.tailoredResume || ""),
       outcomeBullets: profileRoles.flatMap((role: any) =>
         Array.isArray(role?.bullets)
@@ -5110,7 +5113,7 @@ ${
     const polished = polishTailoredDocuments(
       result.tailoredResume || "",
       result.tailoredCoverLetter || "",
-      `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile)}`,
+      profileTextOf(userProfile),
       profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
       description,
       jdKeywords.allKeywords,

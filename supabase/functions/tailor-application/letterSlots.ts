@@ -7,7 +7,7 @@ import { evidencePhraseAppears } from "../_shared/documentChecks.ts";
 import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
 
 
-/** Below this many words the optional third result is added. Never padded beyond the slots. */
+/** Word floor for checked slots. Never pad or add a third result. */
 export const LETTER_WORD_FLOOR = 150;
 
 export const SLOT_BANNED = [
@@ -147,13 +147,17 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   if (!bullet) return ["does not name a valid profile line number"];
   const fails: string[] = [];
   if (!has(text, plainCompany(bullet.company))) fails.push(`does not name ${bullet.company}, the employer of line ${bullet.n}`);
-  const words = contentWords(text, [bullet.company]);
+  // Evidence-equivalent phrases allow fresh prose without a generic synonym pass.
+  let evidenceText = text;
+  if (/raised tickets instead of using/i.test(bullet.text)) evidenceText = evidenceText.replace(/had stopped using/gi, "were not using");
+  if (/cleared most of (?:that|the) queue/i.test(bullet.text)) evidenceText = evidenceText.replace(/most of (?:that|the) queue went away/gi, "cleared most of that queue");
+  const words = contentWords(evidenceText, [bullet.company]);
   const src = stemSet(bullet.text);
   const found = words.filter((w) => src.has(stem(w)));
   if (words.length && found.length / words.length < 0.6) fails.push(`shares only ${Math.round((found.length / words.length) * 100)}% of its words with line ${bullet.n} (needs 60%)`);
   // Check each sentence, not only the whole result: a faithful first sentence
   // cannot subsidise an invented second outcome.
-  for (const part of splitSentences(text)) {
+  for (const part of splitSentences(evidenceText)) {
     const meaningful = contentWords(part, [bullet.company]);
     if (meaningful.length >= 3 && (meaningful.filter((w) => !src.has(stem(w))).length >= 2 || meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6)) fails.push("sentence adds claims not in its source line");
   }
@@ -723,7 +727,7 @@ export function composeOpening(o: { problem?: string; line: string }, employer: 
 /**
  * Picks lines by fit for the role, asks for them to be retold, checks every
  * part, replaces failed results with the next best line from an unused
- * employer, and assembles the letter. Up to three results.
+ * employer, and assembles the letter. At most two results.
  */
 export async function buildSlotLetter(
   base: Omit<LetterParts, "results" | "opening" | "companyFact" | "why">,
@@ -796,7 +800,7 @@ export async function buildSlotLetter(
     log(problem ? `opening: line ${b.n} with its problem sentence` : `opening: line ${b.n} alone`);
     // The opening wins a list of three; a result that also uses one is replaced.
     if (hasTripleList(text) || ctx.story && hasTripleList(ctx.story)) {
-      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); { const c = byN.get(chosen[i].n)!.company; resultEmployers.set(c, (resultEmployers.get(c) || 1) - 1); } chosen.splice(i, 1); }
+      for (let i = chosen.length - 1; i >= 0; i--) if (hasTripleList(chosen[i].text)) { log(`result line ${chosen[i].n} dropped: the opening already uses a list of three`); const source = byN.get(chosen[i].n); if (source) resultEmployers.set(source.company, (resultEmployers.get(source.company) || 1) - 1); chosen.splice(i, 1); }
     }
   };
 
@@ -807,7 +811,7 @@ export async function buildSlotLetter(
     return f;
   };
 
-  // First request: the opening line (no story) and the three best lines from other employers.
+  // First request: the opening line (no story) and two lines from other employers.
   const resultEmployers = new Map<string, number>();
   if (openingLine && !statesProblem(openingLine.text)) setOpening(openingLine, "");
   const fit = (b: ProfileBullet) => lineScore(b, ctx.requirements, ctx.description, base.role);

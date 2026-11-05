@@ -10,3 +10,5 @@
 - Existing document refresh reads the caller's saved job and replaces both documents atomically only after both finish; exports remain unavailable during refresh to prevent stale downloads.
 - Final document checks share pure helpers and run after review, followed by monetary exclusion; source restoration cannot reintroduce financial claims.
 - Capability stem matching is separate from literal ATS coverage; only the explicit Go phrase disambiguation changes whole-term coverage.
+- Filter every extracted keyword category and strategy term before prompts or scores; final bullet-tool checks consume candidate evidence only, never posting strategy metadata.
+- Summary ranking counts posting responsibilities separately from the fixed ATS denominator, then uses held-role fit, recency and figures as tie-breakers.

@@ -18,3 +18,8 @@ export function excludedKeyword(term: string): boolean {
 export function filterJobKeywords(terms: string[], posting: string): string[] {
   return terms.filter((term) => !excludedKeyword(term) && (term.toLowerCase() !== 'go' || isGoLanguageMention(posting)));
 }
+
+/** Filter each extracted category before it can feed a prompt or score. */
+export function filterJobKeywordLists<T extends Record<string, string[]>>(lists: T, posting: string): T {
+  return Object.fromEntries(Object.entries(lists).map(([key, terms]) => [key, filterJobKeywords(terms, posting)])) as T;
+}
