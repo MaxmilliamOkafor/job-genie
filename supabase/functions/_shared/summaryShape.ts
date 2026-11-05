@@ -462,12 +462,12 @@ export function shortenClause(clause: string, maxLen: number): string {
  */
 export function pickOutcomes(experienceBullets: string[], requirements: string[] = [], roles: { title: string; bullets: string[] }[] = [], targetTitle = ""): string[] {
   const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
-  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r)).length;
+  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r) || tokens(r).some((w) => w.length > 3 && evidencePhraseAppears(line, w))).length;
   const roleRank = (line: string) => {
     const index = roles.findIndex((r) => r.bullets.some((b) => stripBullet(b) === stripBullet(line)));
     if (index < 0) return { fit: 0, recent: roles.length };
     const words = new Set(tokens(targetTitle));
-    return { fit: tokens(roles[index].title).filter((w) => words.has(w) || (w === "consultant" && words.has("consulting"))).length, recent: index };
+    return { fit: tokens(roles[index].title).filter((w) => words.has(w) || (/consult|architect/.test(w) && [...words].some((x) => /consult|solution|architect/.test(x)))).length, recent: index };
   };
   const scored = experienceBullets
     .map((line, index) => ({
@@ -477,7 +477,7 @@ export function pickOutcomes(experienceBullets: string[], requirements: string[]
       index,
       role: roleRank(line),
     }))
-    .filter((c) => (c.rank > 0 || c.relevant > 0) && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
+    .filter((c) => (c.rank > 0 || c.relevant > 0 || c.role.fit > 0) && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
     .sort((a, b) => (b.relevant - a.relevant) || (b.role.fit - a.role.fit) || (a.role.recent - b.role.recent) || (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {

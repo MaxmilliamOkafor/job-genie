@@ -151,6 +151,15 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   const src = stemSet(bullet.text);
   const found = words.filter((w) => src.has(stem(w)));
   if (words.length && found.length / words.length < 0.6) fails.push(`shares only ${Math.round((found.length / words.length) * 100)}% of its words with line ${bullet.n} (needs 60%)`);
+  // Check each sentence, not only the whole result: a faithful first sentence
+  // cannot subsidise an invented second outcome.
+  for (const part of splitSentences(text)) {
+    const meaningful = contentWords(part, [bullet.company]);
+    if (meaningful.length >= 3 && meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6) fails.push("sentence adds claims not in its source line");
+  }
+  for (const phrase of ["strengthened client relationships", "secure contracts", "secured contracts", "won contracts", "increased adoption", "improved satisfaction"]) {
+    if (flat(text).includes(phrase) && !flat(bullet.text).includes(phrase)) fails.push(`adds unsupported outcome ${phrase}`);
+  }
   const bFlat = flat(bullet.text);
   for (const n of numbersIn(text)) if (!bFlat.includes(n.toLowerCase())) fails.push(`adds the number ${n}, which line ${bullet.n} does not have`);
   const kept = new Set(numberValues(text));
