@@ -59,3 +59,6 @@ verify_jwt = true
 
 [functions.add-board-company]
 verify_jwt = true
+
+[functions.eurotoptech-jobs]
+verify_jwt = true

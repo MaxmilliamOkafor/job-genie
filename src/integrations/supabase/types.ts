@@ -335,6 +335,60 @@ export type Database = {
         }
         Relationships: []
       }
+      ett_postings: {
+        Row: {
+          company: string | null
+          country: string | null
+          first_seen_at: string
+          id: string
+          job_id: number
+          job_page: string | null
+          location: string | null
+          pay: string | null
+          posted_date: string | null
+          relocation: string | null
+          seniority: string | null
+          title: string | null
+          user_id: string
+          visa: string | null
+          workplace: string | null
+        }
+        Insert: {
+          company?: string | null
+          country?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id: number
+          job_page?: string | null
+          location?: string | null
+          pay?: string | null
+          posted_date?: string | null
+          relocation?: string | null
+          seniority?: string | null
+          title?: string | null
+          user_id: string
+          visa?: string | null
+          workplace?: string | null
+        }
+        Update: {
+          company?: string | null
+          country?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id?: number
+          job_page?: string | null
+          location?: string | null
+          pay?: string | null
+          posted_date?: string | null
+          relocation?: string | null
+          seniority?: string | null
+          title?: string | null
+          user_id?: string
+          visa?: string | null
+          workplace?: string | null
+        }
+        Relationships: []
+      }
       job_companies: {
         Row: {
           board: string
