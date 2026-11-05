@@ -10,7 +10,7 @@ const test = Deno.test;
 const campaign = 'Rebuilt the internal campaign diagnostics tool in React, TypeScript and GraphQL. The old tool was slow enough that sales engineers raised tickets instead of using it and the rewrite cleared most of that queue.';
 const story = 'At Meta, sales engineers raised tickets because the campaign diagnostics tool was too slow. I rebuilt it with GraphQL, React and TypeScript, clearing most of the queue.';
 test('1: copied result is rejected; fresh grounded story is not copied', () => {
- equal(COPY_RUN, 7); ok(copiesRun('At Meta, I ' + campaign.toLowerCase(), [campaign])); equal(copiesRun(story, [campaign]), false);
+ equal(COPY_RUN, 9); ok(copiesRun('At Meta, I ' + campaign.toLowerCase(), [campaign])); equal(copiesRun(story, [campaign]), false);
  const b = {n:1, company:'Meta', text:campaign}; equal(checkAgainstBullet(story,b,['React','TypeScript','GraphQL']), []);
  const requestedStory='At Meta, sales engineers had stopped using our campaign diagnostics tool and raised tickets instead, because it was too slow. I rebuilt it in React, TypeScript and GraphQL, and most of that queue went away.';
  equal(copiesRun(requestedStory,[campaign]),false); equal(checkAgainstBullet(requestedStory,b,['React','TypeScript','GraphQL']),[]);

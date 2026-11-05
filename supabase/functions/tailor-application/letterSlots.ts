@@ -142,6 +142,17 @@ export function numberEntries(text: string): [string, string][] {
 }
 const numberValues = (text: string) => numberEntries(text).map(([v]) => v);
 
+/** Words a story is told with: they add no fact, figure, tool or outcome. */
+export const STORY_WORDS = new Set(("had have having was were been needed need wanted want used using stopped stop kept keep before after then "
+  + "because since when while until once again still instead already only just also even mostly most much more less "
+  + "slow slower fast faster quick quickly hard harder easy easier late early long longer short every each daily weekly "
+  + "they them their theirs our ours we us people team teams colleagues users clients customers staff someone anyone everyone "
+  + "work worked working job jobs day days week weeks month months year years time times problem problems issue issues "
+  + "wrong right changed change changes went gone away back open able could would should might help helped make made "
+  + "gave give took take came come got get own owned myself first new old real whole part side way ways thing things "
+  + "something nothing everything rather than whether enough worth point started start finished finish asked ask "
+  + "trust trusted rely relied depend depended waiting waited wait meant mean knew know see saw").split(/\s+/));
+
 /** Checks a result slot against the numbered profile line it says it used. */
 export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefined, tools: string[]): string[] {
   if (!bullet) return ["does not name a valid profile line number"];
@@ -151,15 +162,33 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   let evidenceText = text;
   if (/raised tickets instead of using/i.test(bullet.text)) evidenceText = evidenceText.replace(/had stopped using/gi, "were not using");
   if (/cleared most of (?:that|the) queue/i.test(bullet.text)) evidenceText = evidenceText.replace(/most of (?:that|the) queue went away/gi, "cleared most of that queue");
-  const words = contentWords(evidenceText, [bullet.company]);
+  // The words a story is told with ("had stopped using", "too slow",
+  // "the team", "went away") claim nothing, so they do not count as
+  // additions. Every other word must come from the line. Before this, a
+  // result had to reuse 60% of its line's words, add at most one other
+  // word per sentence, and never repeat seven in a row: almost no story
+  // passed, the letter came back as one sentence, and CV bullets were
+  // pasted in to fill it (5 Nov).
+  const claimWords = (t: string) => contentWords(t, [bullet.company]).filter((w) => !STORY_WORDS.has(w) && !STORY_WORDS.has(stem(w)));
+  const words = claimWords(evidenceText);
   const src = stemSet(bullet.text);
   const found = words.filter((w) => src.has(stem(w)));
   if (words.length && found.length / words.length < 0.6) fails.push(`shares only ${Math.round((found.length / words.length) * 100)}% of its words with line ${bullet.n} (needs 60%)`);
+  // A PASTE, REORDERED, IS STILL A PASTE. Most of the line's facts said
+  // again with almost nothing of a story around them ("presented the IFRS
+  // 9 staging review to executives and the risk committee, which adopted
+  // it into policy") is the bullet, whatever the order.
+  const lineWords = [...new Set(contentWords(bullet.text, [bullet.company]).map(stem))];
+  const told = new Set(contentWords(evidenceText, [bullet.company]).map(stem));
+  const storyWords = (evidenceText.toLowerCase().match(/[a-z]+/g) || []).filter((w) => STORY_WORDS.has(w));
+  if (lineWords.length >= 6 && lineWords.filter((w) => told.has(w)).length / lineWords.length >= 0.8 && storyWords.length < 3) {
+    fails.push(`retells line ${bullet.n} as it stands; tell who it was for and what changed`);
+  }
   // Check each sentence, not only the whole result: a faithful first sentence
   // cannot subsidise an invented second outcome.
   for (const part of splitSentences(evidenceText)) {
-    const meaningful = contentWords(part, [bullet.company]);
-    if (meaningful.length >= 3 && (meaningful.filter((w) => !src.has(stem(w))).length >= 2 || meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6)) fails.push("sentence adds claims not in its source line");
+    const meaningful = claimWords(part);
+    if (meaningful.length >= 3 && (meaningful.filter((w) => !src.has(stem(w))).length >= 3 || meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.5)) fails.push("sentence adds claims not in its source line");
   }
   for (const phrase of ["strengthened client relationships", "secure contracts", "secured contracts", "won contracts", "increased adoption", "improved satisfaction"]) {
     if (flat(text).includes(phrase) && !flat(bullet.text).includes(phrase)) fails.push(`adds unsupported outcome ${phrase}`);
@@ -180,7 +209,7 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
 }
 
 /** Results must be fresh prose, not copied CV lines. */
-export const COPY_RUN = 7;
+export const COPY_RUN = 9;
 
 const squash = (s: string) => flat(s).replace(/[^a-z0-9%£$€]+/g, " ").trim();
 
@@ -790,11 +819,19 @@ export async function buildSlotLetter(
       }
       return;
     }
-    setOpening(b, o.problem);
+    // The story the model told for the line, when it passes the same
+    // checks as a result; the line itself only when it does not (5 Nov:
+    // the opening was always the CV bullet, word for word).
+    const told = o.clause ? composeResult(o.clause, b.company) : "";
+    // Checked with its problem sentence: the opening's figure is often there.
+    const toldOk = told && !checkAgainstBullet(`${o.problem || ""} ${told}`.trim(), b, ctx.tools).length && !copiesRun(told, [b.text]);
+    setOpening(b, o.problem, toldOk ? o.clause : "");
   };
 
-  const setOpening = (b: ProfileBullet, problem: string) => {
-    const text = composeOpening({ problem, line: b.text }, b.company);
+  const setOpening = (b: ProfileBullet, problem: string, clause = "") => {
+    const text = clause
+      ? `${problem ? sentence(shortForms(problem)).replace(/^./, (c) => c.toUpperCase()) + " " : ""}${composeResult(clause, b.company)}`
+      : composeOpening({ problem, line: b.text }, b.company);
     if (commonFails(text, ctx).length) { failedLines.add(b.n); openingLine = undefined; return; }
     opening = { n: b.n, text };
     log(problem ? `opening: line ${b.n} with its problem sentence` : `opening: line ${b.n} alone`);

@@ -1,5 +1,6 @@
 import { numericTokens, evidenceStem, isGoLanguageMention } from "../_shared/documentChecks.ts";
 import { termAppearsIn } from "../_shared/coverage.ts";
+import { classifyTerm } from "../_shared/evidence.ts";
 /**
  * Guards around the tailoring call: refuse non-job pages, protect ATS
  * keywords the candidate already has, check the cover letter answers the
@@ -1278,6 +1279,14 @@ const SKILL_MODIFIER = /^(?:major|advanced|senior|enterprise|strategic|end-to-en
  * skills section shows are dropped. Languages lines are never touched, and
  * when more than 60% would go, nothing changes.
  */
+/**
+ * Soft skills are never a tool claim, so they always stay ("soft and hard
+ * skills both stay"). The exact-word rule deleted a whole Professional line
+ * (Communication, Leadership, Collaboration, Decision Making) on 5 Nov.
+ */
+const SOFT_SKILL = /^(?:communication(?: skills)?|written communication|verbal communication|leadership|collaboration|cross[- ]functional collaboration|teamwork|team ?work|decision[- ]making|problem[- ]solving|critical thinking|innovation|creativity|adaptability|flexibility|time management|prioriti[sz]ation|stakeholder management|stakeholder engagement|attention to detail|mentoring|coaching|negotiation|presentation(?: skills)?|interpersonal skills|ownership|initiative|accountability|emotional intelligence|conflict resolution|relationship building|customer focus|organi[sz]ation(?:al skills)?)$/i;
+export const isSoftSkill = (term: string) => SOFT_SKILL.test(String(term || "").trim());
+
 export function dropUnbackedSkills(resume: string, profileText: string): string {
   const lines = String(resume || "").split("\n");
   const skills = skillLines(lines);
@@ -1285,6 +1294,14 @@ export function dropUnbackedSkills(resume: string, profileText: string): string 
   const outside = lines.filter((_, i) => i < skills.range[0] || i >= skills.range[1]).join("\n");
   // Punctuation off, so a term before a full stop still matches.
   const evidence = `${outside}\n${profileText || ""}`.replace(/[.,;:()]/g, " ");
+  // Work that shows a skill backs it: "Led the incident review" backs
+  // Leadership, HIPAA and ISO 27001 work backs Compliance. The shared
+  // evidence classifier decides, as everywhere else in tailoring.
+  const sources = [
+    { label: "profile", text: String(profileText || ""), kind: "achievement" as const },
+    { label: "cv", text: outside, kind: "achievement" as const },
+  ];
+  const demonstrated = (term: string) => classifyTerm(term, sources).tier !== "unsupported";
   let total = 0;
   let wouldDrop = 0;
   const keep = new Map<number, string[]>();
@@ -1294,7 +1311,7 @@ export function dropUnbackedSkills(resume: string, profileText: string): string 
     for (const item of e.items) {
       total++;
       const bare = item.replace(SKILL_MODIFIER, "").trim();
-      if (containsTerm(evidence, bare) || containsTerm(evidence, item)) kept.push(item);
+      if (containsTerm(evidence, bare) || containsTerm(evidence, item) || isSoftSkill(bare) || demonstrated(bare)) kept.push(item);
       else wouldDrop++;
     }
     keep.set(e.index, kept);

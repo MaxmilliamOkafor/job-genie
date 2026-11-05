@@ -352,8 +352,36 @@ export function isGrammaticalOutcome(clause: string): boolean {
   return ACTION_OPENING.test(text) && !FRAGMENT_OPENING.test(text);
 }
 
-/** Trims a clause at its own comma boundaries, never dropping the figure. */
+/**
+ * A shortened clause ends where the sentence breaks naturally: at its end,
+ * a comma or semicolon, or before "by", "so", "which", "rather than" and
+ * the like. "by rebuilding the PySpark" taken from "by rebuilding the
+ * PySpark and Presto pipeline" (5 Nov) ended inside a list of names.
+ */
+const NATURAL_NEXT = /^(?:\s*$|\s*[,;.:)]|\s+(?:by|so|which|rather|in order|allowing|enabling|meaning|making|while|before|after|across|for|with|using|through|from|to|at|on|in)\b)/i;
+export function endsAtNaturalBreak(original: string, cut: string): boolean {
+  const o = String(original || "").trim(), c = String(cut || "").trim().replace(/[,;.]+$/, "");
+  const at = o.indexOf(c);
+  if (at === -1 || !c) return true;
+  return NATURAL_NEXT.test(o.slice(at + c.length));
+}
+
+/** Trims a clause at its own comma boundaries, never dropping the figure, never mid-list. */
 export function shortenClause(clause: string, maxLen: number): string {
+  const out = shortenClauseAtBoundaries(clause, maxLen);
+  if (endsAtNaturalBreak(clause, out)) return out;
+  // Back to the last natural break before the cut that keeps the figure,
+  // else the whole clause: a longer line beats a broken one.
+  const text = clause.trim().replace(/\s*\([^)]*\)\s*$/, "");
+  const words = out.trim().split(/\s+/);
+  for (let n = words.length - 1; n >= 4; n--) {
+    const candidate = words.slice(0, n).join(" ").replace(/[,;]+$/, "");
+    if (text.startsWith(candidate) && endsAtNaturalBreak(text, candidate) && rankOutcome(candidate) > 0) return candidate;
+  }
+  return text;
+}
+
+function shortenClauseAtBoundaries(clause: string, maxLen: number): string {
   let text = clause.trim().replace(/\s*\([^)]*\)\s*$/, "");
   if (!rankOutcome(text) && text.length > maxLen) {
     const prefix = text.split(/,\s+/)[0];
