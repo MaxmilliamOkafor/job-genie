@@ -1404,7 +1404,7 @@ export function removeUnrecordedBulletTools(text: string, profileText: string): 
     const kept = join(clean(inside));
     return kept ? `(${kept})` : "";
   });
-  const tool = '(?:[A-Z][A-Za-z0-9.#+-]*|iOS|macOS|jQuery)(?: (?:Native|BI|Cloud|Actions))?';
+  const tool = '(?:[A-Z][A-Za-z0-9.#+-]*[A-Za-z0-9+#]|[A-Z]|iOS|macOS|jQuery)(?: (?:Native|BI|Cloud|Actions))?';
   const list = new RegExp(`(${tool}(?:,\\s*${tool})*(?:,?\\s+and\\s+${tool}))`, 'g');
   out = out.replace(list, (whole: string) => {
     const items = whole.split(/,\s*|\s+and\s+/);

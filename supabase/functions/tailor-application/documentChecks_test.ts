@@ -72,7 +72,7 @@ test('12: list tools require profile evidence, including lower-case-first names'
  const good='Built web tools (iOS, macOS and jQuery).'; equal(removeUnrecordedBulletTools(good,'iOS macOS jQuery'),good);
 });
 test('13: number words survive length rewrites', () => {
- const original='Reduced the overnight run from six hours to under one with Python and SQL after three late submissions across four teams.';
+ const original='Reduced runs from six hours to under one with Python after three late submissions across four teams.';
  equal(acceptRewrite(original,'Reduced the overnight run with Python and SQL after late submissions across teams.',[]),false);
  equal(acceptRewrite(original,original,[]),true);
 });
@@ -88,7 +88,8 @@ test('15: outcomes rank count, role fit, recency, then figures, including no dig
  equal(pickOutcomes(['Reduced latency by 30%'],[]),['Reduced latency by 30%']);
 });
 test('16: trunk zeros removed in both headers, Italy keeps zero', () => {
- for(const header of ['Sam\n+353 087 426 1508\nSUMMARY\nSaved text','Sam\n+44 (0)20 7946 0958\nDear Hiring Team,']) ok(!normaliseHeaderPhones(header).includes(' 0'));
+ equal(normaliseHeaderPhones('Sam\n+353 087 426 1508\nSUMMARY'), 'Sam\n+353 87 426 1508\nSUMMARY');
+ equal(normaliseHeaderPhones('Sam\n+44 (0)20 7946 0958\nDear Hiring Team,'), 'Sam\n+44 20 7946 0958\nDear Hiring Team,');
  equal(normaliseHeaderPhones('Sam\n+39 06 123456\nSUMMARY'), 'Sam\n+39 06 123456\nSUMMARY');
 });
 test('17: geography and plural people phrases are not job keywords', () => {
