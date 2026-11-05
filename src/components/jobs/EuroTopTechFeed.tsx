@@ -173,10 +173,10 @@ export function EuroTopTechFeed({ preferences }: Props) {
   useEffect(() => { if (linksKey) { try { setLinks(JSON.parse(localStorage.getItem(linksKey) || '{}')); } catch { setLinks({}); } } }, [linksKey]);
   const [fetchingLinks, setFetchingLinks] = useState<{ done: number; total: number } | null>(null);
   const linkOf = (r: EttRow) => links[r.job_id] || r.job_page || '';
-  const fetchLinks = async () => {
+  const fetchLinks = async (quiet = false): Promise<Record<number, string> | null> => {
     const todo = rows.filter((r) => selected.has(r.job_id) && !linkOf(r));
-    if (!todo.length) { toast.success('Every selected posting already has its link.'); return; }
-    if (!window.confirm(`Fetch ${todo.length} job link${todo.length === 1 ? '' : 's'}? Each one counts against your Euro Top Tech daily apply limit.`)) return;
+    if (!todo.length) { if (!quiet) toast.success('Every selected posting already has its link.'); return links; }
+    if (!window.confirm(`Get the employer's job link for ${todo.length} posting${todo.length === 1 ? '' : 's'}? Each one counts against your Euro Top Tech daily apply limit.`)) return null;
     const next = { ...links };
     setFetchingLinks({ done: 0, total: todo.length });
     let got = 0;
@@ -193,7 +193,14 @@ export function EuroTopTechFeed({ preferences }: Props) {
     setLinks(next);
     if (linksKey) localStorage.setItem(linksKey, JSON.stringify(next));
     setFetchingLinks(null);
-    toast.success(`${got} job link${got === 1 ? '' : 's'} added.`);
+    if (!quiet) toast.success(`${got} job link${got === 1 ? '' : 's'} added.`);
+    return next;
+  };
+  const exportSelected = async () => {
+    const map = await fetchLinks(true);
+    if (!map) return;
+    const list = rows.filter((r) => selected.has(r.job_id)).map((r) => ({ ...r, job_page: map[r.job_id] || r.job_page }));
+    exportCsv(list, 'selected');
   };
   const exportCsv = (list: EttRow[], label: string) => {
     if (!list.length) return;
@@ -298,15 +305,15 @@ export function EuroTopTechFeed({ preferences }: Props) {
                 <span>{shown.length} match. Page {page} of {Math.ceil(shown.length / PAGE)}.{selected.size ? ` ${selected.size} selected.` : ''}</span>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size || !!fetchingLinks} onClick={fetchLinks}>
+                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size || !!fetchingLinks} onClick={() => fetchLinks()}>
                   {fetchingLinks ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
                   {fetchingLinks ? `Getting links ${fetchingLinks.done}/${fetchingLinks.total}` : `Get job links (${selected.size})`}
                 </Button>
                 <Button size="sm" variant="outline" className="gap-2" onClick={() => exportCsv(shown, 'all')}>
                   <Download className="h-4 w-4" /> Export all ({shown.length})
                 </Button>
-                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size}
-                  onClick={() => exportCsv(rows.filter((r) => selected.has(r.job_id)), 'selected')}>
+                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size || !!fetchingLinks}
+                  onClick={exportSelected}>
                   <Download className="h-4 w-4" /> Export selected ({selected.size})
                 </Button>
               </div>
