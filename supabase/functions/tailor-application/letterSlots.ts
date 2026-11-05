@@ -153,7 +153,7 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   const bFlat = flat(bullet.text);
   for (const n of numbersIn(text)) if (!bFlat.includes(n.toLowerCase())) fails.push(`adds the number ${n}, which line ${bullet.n} does not have`);
   const kept = new Set(numberValues(text));
-  if (numberEntries(text).length > 1) fails.push("uses more than one figure");
+  if (numberEntries(text.replace(/\b(?:ISO|IFRS|GPT)[ -]?\d+(?:\.\d+)?/g, "")).length > 1) fails.push("uses more than one figure");
   for (const [v, shown] of numberEntries(text)) if (!numberValues(bullet.text).includes(v)) fails.push(`adds the number ${shown}`);
   for (const [v, shown] of numberEntries(bullet.text)) if (new Set(numberValues(bullet.text)).size <= 1 && !kept.has(v)) fails.push(`drops the number "${shown}" from line ${bullet.n}`);
   for (const tool of tools) if (has(text, tool) && !has(bullet.text, tool)) fails.push(`adds ${tool}, which line ${bullet.n} does not name`);
@@ -814,7 +814,7 @@ export async function buildSlotLetter(
   let whyAttempts = 0;
   const f0 = standIn ? "" : clean(reply.companyFact);
   if (f0) { const f = factFails(f0); if (!f.length) companyFact = f0; else log(`companyFact failed: ${f.join("; ")}`); }
-  const evidence = () => [opening?.text, ...chosen.map((c) => c.text)].filter(Boolean) as string[];
+  const evidence = () => chosen.map((c) => c.text);
   const whyFails = (w: string) => [...checkWhy(w, companyFact, evidence(), ctx), ...(hasTripleList(w) && lists() >= 1 ? ["uses a list of three"] : [])];
   let why = "";
   if (reply.why && companyFact) { whyAttempts++; const f = whyFails(reply.why); if (!f.length) why = reply.why; else log(`why failed: ${f.join("; ")}`); }
