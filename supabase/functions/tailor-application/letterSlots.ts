@@ -3,6 +3,7 @@
 // description, then assembles the letter. A failed slot gets one retry, then
 // it is dropped. Nothing is padded.
 
+import { evidencePhraseAppears } from "../_shared/documentChecks.ts";
 import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
 
 
@@ -389,7 +390,8 @@ export function lineScore(b: ProfileBullet, requirements: string[], description:
   const set = (x: string) => new Set(contentWords(x).map(whole));
   const req = set(requirements.join(" ")), roleSet = new Set(roleTerms(role).map(whole)), desc = set(description);
   const w = [...set(b.text)];
-  return w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
+  const responsibilityCount = requirements.filter((r) => evidencePhraseAppears(b.text, r)).length;
+  return responsibilityCount * 20 + w.filter((x) => req.has(x)).length * 4 + w.filter((x) => roleSet.has(x)).length * 3 + w.filter((x) => desc.has(x)).length * 0.1;
 }
 
 /** Lines ranked by fit for the role. The story line is never offered. */
@@ -865,4 +867,25 @@ export async function buildSlotLetter(
     ...(final.why ? ["why"] : []),
   ];
   return { letter: assembleLetter(final), parts: final, used };
+}
+
+/** Reapply body limits after review edits; never invent replacement evidence. */
+export function finalLetterChecks(letter: string, role: string, profileLines: string[], cv: string): string {
+  const lines = String(letter || "").split("\n");
+  const greet = lines.findIndex((l) => /^(?:Dear|Hello|Hi)\b/i.test(l.trim()));
+  const close = lines.findIndex((l, i) => i > greet && /^(?:Kind regards|Sincerely|Yours|Best regards)/i.test(l.trim()));
+  if (greet < 0 || close < 0) return letter;
+  const paragraphs = lines.slice(greet + 1, close).join("\n").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const source = [...profileLines, ...cv.split("\n")];
+  let titles = 0;
+  const roleRe = role ? new RegExp(esc(role), "gi") : null;
+  const body = paragraphs.map((p, i) => {
+    // Keep the saved opening intact. Other paragraphs cannot paste a CV sentence.
+    let text = i === 0 ? p : splitSentences(p).filter((s) => !/^That is the work I want to be part of as your\b/i.test(s) && !copiesRun(s, source)).join(" ");
+    text = text.replace(/I am available for a call[^.!?]*[.!?]/gi, "I am available for a call whenever suits you.");
+    if (roleRe) text = text.replace(roleRe, (match) => ++titles <= 2 ? match : "the role");
+    return sentenceSubjects(text);
+  }).filter(Boolean);
+  if (!body.some((p) => p.includes("I am available for a call whenever suits you."))) body.push("I am available for a call whenever suits you.");
+  return [...lines.slice(0, greet + 1), "", body.join("\n\n"), "", ...lines.slice(close)].join("\n");
 }

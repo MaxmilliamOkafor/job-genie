@@ -269,7 +269,7 @@ export function evidencedRequirements(requirements: string[], experienceBullets:
     if (NOT_A_STRENGTH.test(term)) continue;
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
-    if (!hasWord(body, term)) continue;
+    if (!hasWord(body, term) && !evidencePhraseAppears(body, term)) continue;
     seen.add(key);
     out.push(term.length > 3 && term === term.toUpperCase() ? term : term.toLowerCase());
     if (out.length >= limit) break;

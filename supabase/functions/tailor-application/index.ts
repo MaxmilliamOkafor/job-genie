@@ -35,7 +35,7 @@ import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShap
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
+import { finalLetterChecks, bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
@@ -5116,7 +5116,7 @@ ${
       jdKeywords.allKeywords,
     );
     result.tailoredResume = removeMonetaryClaims(polished.cv);
-    result.tailoredCoverLetter = removeMonetaryClaims(polished.letter);
+    result.tailoredCoverLetter = removeMonetaryClaims(finalLetterChecks(polished.letter, shortTitle(jobTitle), profileBullets(userProfile.professionalExperience || []).map((b) => b.text), result.tailoredResume));
     const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
     result.reviewNotes = chronologyNotes;
     if (chronologyNotes.length) result.review = { ...(result.review || { applied: 0, rejected: [], gaps: [] }), notes: chronologyNotes };
@@ -5405,13 +5405,13 @@ ${
         personalInfo: {
           name: candidateName,
           email: userProfile.email,
-          phone: userProfile.phone,
+          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
           location: smartLocation,
           linkedin: userProfile.linkedin,
           github: userProfile.github,
           portfolio: userProfile.portfolio,
         },
-        summary: extractProfessionalSummary(result.tailoredResume || "", result.resumeStructured?.summary),
+        summary: extractProfessionalSummary(result.tailoredResume || ""),
         coreCompetencies: Array.isArray(result.resumeStructured?.coreCompetencies) ? result.resumeStructured.coreCompetencies : [],
         experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
@@ -5497,7 +5497,7 @@ ${
         personalInfo: {
           name: candidateName,
           email: userProfile.email,
-          phone: userProfile.phone,
+          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
           location: smartLocation,
           linkedin: userProfile.linkedin,
           github: userProfile.github,
