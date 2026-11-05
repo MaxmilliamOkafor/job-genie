@@ -7,7 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { JobPreferences } from '@/lib/jobPreferences';
@@ -16,6 +17,7 @@ import {
   lastSeenKey,
   lastSyncKey,
   needsRefresh,
+  postingsCsv,
   savedJobOf,
   type EttCard,
   type EttRow,
@@ -91,14 +93,23 @@ export function EuroTopTechFeed({ preferences }: Props) {
   const loadRows = useCallback(async () => {
     if (!user) return;
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    const { data, error: err } = await supabase
-      .from('ett_postings')
-      .select('job_id, title, company, location, country, workplace, seniority, posted_date, pay, relocation, visa, job_page, first_seen_at')
-      .gte('posted_date', since)
-      .order('posted_date', { ascending: false })
-      .limit(2500);
+    // The server returns at most 1000 rows per request, so read in chunks up to 2500.
+    const all: EttRow[] = [];
+    let err: { message: string } | null = null;
+    for (let from = 0; from < 2500; from += 1000) {
+      const { data, error: e } = await supabase
+        .from('ett_postings')
+        .select('job_id, title, company, location, country, workplace, seniority, posted_date, pay, relocation, visa, job_page, first_seen_at')
+        .gte('posted_date', since)
+        .order('posted_date', { ascending: false })
+        .order('job_id', { ascending: true })
+        .range(from, Math.min(from + 999, 2499));
+      if (e) { err = e; break; }
+      all.push(...((data ?? []) as EttRow[]));
+      if (!data || data.length < 1000) break;
+    }
     if (err) setError(err.message);
-    else setRows((data ?? []) as EttRow[]);
+    else setRows(all);
     setLoading(false);
   }, [user, days]);
 
@@ -152,6 +163,20 @@ export function EuroTopTechFeed({ preferences }: Props) {
     [rows, query, workplace, country, matchPrefs, preferences, onlyNew, lastSeen],
   );
   const pageRows = shown.slice((page - 1) * PAGE, page * PAGE);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const toggle = (id: number) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allShownSelected = shown.length > 0 && shown.every((r) => selected.has(r.job_id));
+  const selectAllShown = (on: boolean) => setSelected((s) => { const n = new Set(s); shown.forEach((r) => (on ? n.add(r.job_id) : n.delete(r.job_id))); return n; });
+  const exportCsv = (list: EttRow[], label: string) => {
+    if (!list.length) return;
+    const blob = new Blob([postingsCsv(list)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `euro-top-tech-${label}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast.success(`Exported ${list.length} posting${list.length === 1 ? '' : 's'}`);
+  };
   useEffect(() => { setPage(1); }, [query, workplace, country, matchPrefs, onlyNew, days]);
 
   const apply = async (r: EttRow) => {
@@ -235,10 +260,29 @@ export function EuroTopTechFeed({ preferences }: Props) {
           </p>
         ) : (
           <>
-            <p className="mb-2 text-sm text-muted-foreground">{shown.length} match. Page {page} of {Math.ceil(shown.length / PAGE)}.</p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <label className="flex items-center gap-2">
+                  <Checkbox checked={allShownSelected} onCheckedChange={(v) => selectAllShown(v === true)} aria-label="Select all matches" />
+                  Select all {shown.length}
+                </label>
+                <span>{shown.length} match. Page {page} of {Math.ceil(shown.length / PAGE)}.{selected.size ? ` ${selected.size} selected.` : ''}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="gap-2" onClick={() => exportCsv(shown, 'all')}>
+                  <Download className="h-4 w-4" /> Export all ({shown.length})
+                </Button>
+                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size}
+                  onClick={() => exportCsv(rows.filter((r) => selected.has(r.job_id)), 'selected')}>
+                  <Download className="h-4 w-4" /> Export selected ({selected.size})
+                </Button>
+              </div>
+            </div>
             <ul className="divide-y divide-border">
               {pageRows.map((j) => (
                 <li key={j.job_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                  <Checkbox className="mt-1" checked={selected.has(j.job_id)} onCheckedChange={() => toggle(j.job_id)} aria-label={`Select ${j.title}`} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{j.title}</span>
@@ -250,6 +294,7 @@ export function EuroTopTechFeed({ preferences }: Props) {
                     <div className="text-sm text-muted-foreground">
                       {[j.pay, j.visa ? `Visa: ${j.visa}` : '', j.relocation ? `Relocation: ${j.relocation}` : ''].filter(Boolean).join(' · ')}
                     </div>
+                  </div>
                   </div>
                   <Button size="sm" onClick={() => apply(j)} disabled={applyingId === j.job_id} className="gap-2">
                     {applyingId === j.job_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}

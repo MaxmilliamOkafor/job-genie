@@ -160,3 +160,16 @@ describe('Euro Top Tech: the page', () => {
     expect(j.user_id).toBe('u');
   });
 });
+
+import { postingsCsv } from '../src/lib/euroTopTech';
+it('postingsCsv keeps every row and its job URL, escaping commas and quotes', () => {
+  const base = { location: null, country: 'IE', workplace: 'hybrid', seniority: null, posted_date: '2026-11-04', pay: null, visa: null, relocation: null };
+  const csv = postingsCsv([
+    { ...base, title: 'Dev, "Senior"', company: 'A', job_page: 'https://x/1' },
+    { ...base, title: 'QA', company: 'B', job_page: 'https://x/2' },
+  ]);
+  const lines = csv.split('\r\n');
+  expect(lines.length).toBe(3);
+  expect(lines[1]).toBe('"Dev, ""Senior""",A,,IE,hybrid,,2026-11-04,,,,https://x/1');
+  expect(lines[2].endsWith('https://x/2')).toBe(true);
+});
