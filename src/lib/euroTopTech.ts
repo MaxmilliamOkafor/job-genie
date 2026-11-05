@@ -192,3 +192,16 @@ export function filterPostings(rows: EttRow[], f: EttFilter): EttRow[] {
     return true;
   });
 }
+
+type CsvRow = { title: string | null; company: string | null; location: string | null; country: string | null; workplace: string | null; seniority: string | null; posted_date: string; pay: string | null; visa: string | null; relocation: string | null; job_page: string | null };
+
+/** CSV of postings, one row each, with the job link in its own column. */
+export function postingsCsv(rows: CsvRow[]): string {
+  const head = ['Title', 'Company', 'Location', 'Country', 'Workplace', 'Seniority', 'Posted', 'Pay', 'Visa', 'Relocation', 'Job URL'];
+  const cell = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = rows.map((r) => [r.title, r.company, r.location, r.country, r.workplace, r.seniority, r.posted_date, r.pay, r.visa, r.relocation, r.job_page].map(cell).join(','));
+  return '\uFEFF' + [head.join(','), ...lines].join('\r\n');
+}
