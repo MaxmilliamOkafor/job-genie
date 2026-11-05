@@ -40,7 +40,7 @@ import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreen
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
-import { filterJobKeywords } from "../_shared/keywordChecks.ts";
+import { filterJobKeywords, filterJobKeywordLists } from "../_shared/keywordChecks.ts";
 import { toolChronologyNotes } from "./guards.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
@@ -2313,15 +2313,16 @@ serve(async (req) => {
     // evidence map. Requirements it names are merged into the keyword pool
     // so coverage is measured against what the posting actually asks for.
     const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
-    const mergedRequirements = Array.from(
+    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description);
+    const mergedRequirements = filterJobKeywords(Array.from(
       new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
-    );
+    ), description);
     console.log(
       `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
     );
 
     // Jobscan keyword extraction
-    const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
+    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), description);
 
     // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
     // Initial, per-revision and final coverage are only comparable when they
@@ -2363,14 +2364,14 @@ serve(async (req) => {
     );
 
     // Categorise keywords by priority (JobOwl-inspired weighted system)
-    const weightedKeywords = categoriseKeywordsByPriority(
+    const weightedKeywords = filterJobKeywordLists(categoriseKeywordsByPriority(
       jdKeywords.hardSkills,
       jdKeywords.tools,
       jdKeywords.softSkills,
       jdKeywords.titles,
       jdKeywords.certifications,
       description,
-    );
+    ), description);
     console.log(`Keyword priorities - High: ${weightedKeywords.high.length}, Medium: ${weightedKeywords.medium.length}, Low: ${weightedKeywords.low.length}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();

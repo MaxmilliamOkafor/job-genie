@@ -465,12 +465,8 @@ export function shortenClause(clause: string, maxLen: number): string {
  * across two offices" than by a batch job going from six hours to one.
  */
 export function pickOutcomes(experienceBullets: string[], requirements: string[] = [], roles: { title: string; bullets: string[] }[] = [], targetTitle = ""): string[] {
-  const allWanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
-  // Consulting summaries compare the responsibilities, not incidental stack names.
-  const clientRole = /consult|client|pre-sales|customer success/i.test(targetTitle);
-  const responsibilities = allWanted.filter((r) => /client|customer|stakeholder|pre-sales|workshop|handover|delivery|present|consult|solution/i.test(r));
-  const wanted = clientRole && responsibilities.length ? responsibilities : allWanted;
-  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r) || tokens(r).some((w) => w.length > 3 && evidencePhraseAppears(line, w))).length;
+  const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
+  const relevance = (line: string) => wanted.filter((r) => hasWord(line, r) || evidencePhraseAppears(line, r)).length;
   const roleRank = (line: string) => {
     const index = roles.findIndex((r) => r.bullets.some((b) => stripBullet(b) === stripBullet(line)));
     if (index < 0) return { fit: 0, recent: roles.length };
@@ -481,7 +477,7 @@ export function pickOutcomes(experienceBullets: string[], requirements: string[]
     .map((line, index) => ({
       clause: outcomeClause(line.replace(/\s*\([^)]*\)\s*$/, "")),
       rank: rankOutcome(line),
-      relevant: relevance(line) + (clientRole ? (line.match(/\b(?:clients?|pre-sales|workshops?|handovers?|CTOs?|bids?|presented)\b/gi) || []).length * 10 : 0),
+      relevant: relevance(line),
       index,
       role: roleRank(line),
     }))
