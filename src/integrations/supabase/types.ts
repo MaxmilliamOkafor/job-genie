@@ -305,6 +305,60 @@ export type Database = {
         }
         Relationships: []
       }
+      ett_postings: {
+        Row: {
+          company: string | null
+          country: string | null
+          first_seen_at: string
+          id: string
+          job_id: number
+          job_page: string | null
+          location: string | null
+          pay: string | null
+          posted_date: string | null
+          relocation: string | null
+          seniority: string | null
+          title: string | null
+          user_id: string
+          visa: string | null
+          workplace: string | null
+        }
+        Insert: {
+          company?: string | null
+          country?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id: number
+          job_page?: string | null
+          location?: string | null
+          pay?: string | null
+          posted_date?: string | null
+          relocation?: string | null
+          seniority?: string | null
+          title?: string | null
+          user_id: string
+          visa?: string | null
+          workplace?: string | null
+        }
+        Update: {
+          company?: string | null
+          country?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id?: number
+          job_page?: string | null
+          location?: string | null
+          pay?: string | null
+          posted_date?: string | null
+          relocation?: string | null
+          seniority?: string | null
+          title?: string | null
+          user_id?: string
+          visa?: string | null
+          workplace?: string | null
+        }
+        Relationships: []
+      }
       ingest_state: {
         Row: {
           job_name: string
@@ -1168,6 +1222,7 @@ export type Database = {
         Returns: string
       }
       jp_seniority: { Args: { v: string }; Returns: string }
+      prune_old_ett_postings: { Args: never; Returns: number }
       prune_old_job_postings: { Args: never; Returns: number }
       search_job_pool: {
         Args: {

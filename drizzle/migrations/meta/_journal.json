@@ -8,6 +8,13 @@
       "when": 1792882770612,
       "tag": "0000_add_cover_letter_style",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793881019989,
+      "tag": "0001_eurotoptech_postings",
+      "breakpoints": true
     }
   ]
 }
