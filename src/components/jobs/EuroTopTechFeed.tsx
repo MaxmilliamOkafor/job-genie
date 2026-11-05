@@ -167,9 +167,37 @@ export function EuroTopTechFeed({ preferences }: Props) {
   const toggle = (id: number) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allShownSelected = shown.length > 0 && shown.every((r) => selected.has(r.job_id));
   const selectAllShown = (on: boolean) => setSelected((s) => { const n = new Set(s); shown.forEach((r) => (on ? n.add(r.job_id) : n.delete(r.job_id))); return n; });
+  // Apply links fetched on request, kept on this device so they are fetched once.
+  const linksKey = user ? `ett_links_${user.id}` : '';
+  const [links, setLinks] = useState<Record<number, string>>({});
+  useEffect(() => { if (linksKey) { try { setLinks(JSON.parse(localStorage.getItem(linksKey) || '{}')); } catch { setLinks({}); } } }, [linksKey]);
+  const [fetchingLinks, setFetchingLinks] = useState<{ done: number; total: number } | null>(null);
+  const linkOf = (r: EttRow) => links[r.job_id] || r.job_page || '';
+  const fetchLinks = async () => {
+    const todo = rows.filter((r) => selected.has(r.job_id) && !linkOf(r));
+    if (!todo.length) { toast.success('Every selected posting already has its link.'); return; }
+    if (!window.confirm(`Fetch ${todo.length} job link${todo.length === 1 ? '' : 's'}? Each one counts against your Euro Top Tech daily apply limit.`)) return;
+    const next = { ...links };
+    setFetchingLinks({ done: 0, total: todo.length });
+    let got = 0;
+    for (const r of todo) {
+      try {
+        const d = await call('apply', { jobId: r.job_id });
+        if (d?.url) { next[r.job_id] = d.url; got++; }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Euro Top Tech stopped giving links');
+        break;
+      }
+      setFetchingLinks({ done: got, total: todo.length });
+    }
+    setLinks(next);
+    if (linksKey) localStorage.setItem(linksKey, JSON.stringify(next));
+    setFetchingLinks(null);
+    toast.success(`${got} job link${got === 1 ? '' : 's'} added.`);
+  };
   const exportCsv = (list: EttRow[], label: string) => {
     if (!list.length) return;
-    const blob = new Blob([postingsCsv(list)], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([postingsCsv(list.map((r) => ({ ...r, job_page: linkOf(r) || null })))], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `euro-top-tech-${label}-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -269,6 +297,10 @@ export function EuroTopTechFeed({ preferences }: Props) {
                 <span>{shown.length} match. Page {page} of {Math.ceil(shown.length / PAGE)}.{selected.size ? ` ${selected.size} selected.` : ''}</span>
               </div>
               <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="gap-2" disabled={!selected.size || !!fetchingLinks} onClick={fetchLinks}>
+                  {fetchingLinks ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  {fetchingLinks ? `Getting links ${fetchingLinks.done}/${fetchingLinks.total}` : `Get job links (${selected.size})`}
+                </Button>
                 <Button size="sm" variant="outline" className="gap-2" onClick={() => exportCsv(shown, 'all')}>
                   <Download className="h-4 w-4" /> Export all ({shown.length})
                 </Button>
@@ -280,12 +312,14 @@ export function EuroTopTechFeed({ preferences }: Props) {
             </div>
             <ul className="divide-y divide-border">
               {pageRows.map((j) => (
-                <li key={j.job_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <li key={j.job_id} data-job-id={j.job_id} data-job-title={j.title ?? ''} data-job-company={j.company ?? ''} data-job-url={linkOf(j) || undefined} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div className="flex min-w-0 items-start gap-3">
                   <Checkbox className="mt-1" checked={selected.has(j.job_id)} onCheckedChange={() => toggle(j.job_id)} aria-label={`Select ${j.title}`} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{j.title}</span>
+                      {linkOf(j)
+                        ? <a href={linkOf(j)} target="_blank" rel="noopener noreferrer" className="job-url font-medium underline-offset-2 hover:underline">{j.title}</a>
+                        : <span className="font-medium">{j.title}</span>}
                       {lastSeen && Date.parse(j.first_seen_at) > lastSeen && <Badge>New</Badge>}
                     </div>
                     <div className="text-sm text-muted-foreground">
