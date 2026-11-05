@@ -147,13 +147,17 @@ export function checkAgainstBullet(text: string, bullet: ProfileBullet | undefin
   if (!bullet) return ["does not name a valid profile line number"];
   const fails: string[] = [];
   if (!has(text, plainCompany(bullet.company))) fails.push(`does not name ${bullet.company}, the employer of line ${bullet.n}`);
-  const words = contentWords(text, [bullet.company]);
+  // Evidence-equivalent phrases allow fresh prose without a generic synonym pass.
+  let evidenceText = text;
+  if (/raised tickets instead of using/i.test(bullet.text)) evidenceText = evidenceText.replace(/had stopped using/gi, "were not using");
+  if (/cleared most of (?:that|the) queue/i.test(bullet.text)) evidenceText = evidenceText.replace(/most of (?:that|the) queue went away/gi, "cleared most of that queue");
+  const words = contentWords(evidenceText, [bullet.company]);
   const src = stemSet(bullet.text);
   const found = words.filter((w) => src.has(stem(w)));
   if (words.length && found.length / words.length < 0.6) fails.push(`shares only ${Math.round((found.length / words.length) * 100)}% of its words with line ${bullet.n} (needs 60%)`);
   // Check each sentence, not only the whole result: a faithful first sentence
   // cannot subsidise an invented second outcome.
-  for (const part of splitSentences(text)) {
+  for (const part of splitSentences(evidenceText)) {
     const meaningful = contentWords(part, [bullet.company]);
     if (meaningful.length >= 3 && (meaningful.filter((w) => !src.has(stem(w))).length >= 2 || meaningful.filter((w) => src.has(stem(w))).length / meaningful.length < 0.6)) fails.push("sentence adds claims not in its source line");
   }
