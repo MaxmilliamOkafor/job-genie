@@ -125,7 +125,9 @@ const Profile = () => {
         willing_to_relocate: localProfile.willing_to_relocate,
         driving_license: localProfile.driving_license,
         visa_required: localProfile.visa_required,
-        veteran_status: localProfile.veteran_status,
+        // The switch shows off until touched; saved as that, so forms get
+        // "I am not a protected veteran" rather than nothing (6 Nov).
+        veteran_status: localProfile.veteran_status ?? false,
         disability: localProfile.disability,
         security_clearance: localProfile.security_clearance,
         hispanic_latino: localProfile.hispanic_latino,
