@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { HARD_LIMIT_MS, keepAliveBody, overBudget, remainingMs, wantsKeepAlive } from "../_shared/timeBudget.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildCandidateLocation } from "../_shared/location.ts";
 import {
@@ -2206,10 +2207,23 @@ function buildStrategyBlock(strategy: AtsStrategy): string {
 
 
 
-serve(async (req) => {
+const handleTailor = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // THE RUN'S TIME BUDGET (6 Nov): optional passes are skipped once the run
+  // is late, and each optional call is cut short before the platform's limit.
+  const tailorStartedAt = Date.now();
+  const budgetFetch = (limitMs: number, label: string, url: string, init: RequestInit): Promise<Response> => {
+    if (overBudget(tailorStartedAt, Date.now(), limitMs)) {
+      console.log(`[BUDGET] ${label} skipped at ${Math.round((Date.now() - tailorStartedAt) / 1000)}s`);
+      return Promise.reject(new Error(`${label} skipped: over the time budget`));
+    }
+    const cut = AbortSignal.timeout(remainingMs(tailorStartedAt, Date.now(), HARD_LIMIT_MS));
+    const signal = init.signal ? AbortSignal.any([init.signal, cut]) : cut;
+    return fetch(url, { ...init, signal });
+  };
 
   try {
     const { userId, supabase } = await verifyAuth(req);
@@ -3851,7 +3865,7 @@ ${
 
         let revisionText = "";
         try {
-          const revisionResponse = await fetch(apiConfig.endpoint, {
+          const revisionResponse = await budgetFetch(100_000, "coverage revision", apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4818,7 +4832,7 @@ ${
       if (bad.length) {
         console.log(`[BULLET LENGTH] ${bad.length} bullets out of range`);
         try {
-          const lenRes = await fetch(apiConfig.endpoint, {
+          const lenRes = await budgetFetch(85_000, "bullet length", apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4868,7 +4882,7 @@ ${
       };
       const askSlots = async (prompt: string): Promise<string | null> => {
         try {
-          const r = await fetch(apiConfig.endpoint, {
+          const r = await budgetFetch(105_000, "letter slots", apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4916,7 +4930,7 @@ ${
       if (firstFailed.length) {
         console.log(`[COVER LETTER CHECK] Failed: ${firstFailed.join(" | ")}`);
         try {
-          const retryRes = await fetch(apiConfig.endpoint, {
+          const retryRes = await budgetFetch(95_000, "letter retry", apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4956,7 +4970,7 @@ ${
       const before = wordCount(result.tailoredCoverLetter);
       const currentFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements).length;
       try {
-        const shortRes = await fetch(apiConfig.endpoint, {
+        const shortRes = await budgetFetch(95_000, "letter shorten", apiConfig.endpoint, {
           method: "POST",
           headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -5001,7 +5015,7 @@ ${
         .filter((c, i, a) => a.indexOf(c) === i && !(story && story.includes(c)));
       if (copied.length) {
         try {
-          const rwRes = await fetch(apiConfig.endpoint, {
+          const rwRes = await budgetFetch(95_000, "letter reword", apiConfig.endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -5062,7 +5076,7 @@ ${
       const stepDown = isStepDown(jobTitle, description, profileYearsSpan(userProfile));
       const screened = await runScreenerPasses(
         async (signal, cur, remaining) => {
-          const res = await fetch(apiConfig.endpoint, {
+          const res = await budgetFetch(90_000, "screener", apiConfig.endpoint, {
             method: "POST",
             signal,
             headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
@@ -5629,4 +5643,28 @@ ${
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+};
+
+// KEEP-ALIVE, WHEN ASKED FOR (?keepalive=1). The platform stops a request
+// that sends nothing for 150 seconds; a space every 15 seconds keeps it
+// open, and JSON readers skip leading spaces. An error then arrives in the
+// body with its status, so only callers that read it ask for this.
+serve(async (req) => {
+  if (req.method === "OPTIONS" || !wantsKeepAlive(req.url)) return handleTailor(req);
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const tick = setInterval(() => { try { controller.enqueue(enc.encode(" ")); } catch { /* closed */ } }, 15_000);
+      try {
+        const res = await handleTailor(req);
+        controller.enqueue(enc.encode(keepAliveBody(res.ok, res.status, await res.text())));
+      } catch (e) {
+        controller.enqueue(enc.encode(keepAliveBody(false, 500, JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))));
+      } finally {
+        clearInterval(tick);
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
