@@ -715,15 +715,24 @@ export function letterBody(o: LetterParts): string[] {
   const names = [o.company, company, ...employers];
   const lead = o.story ? o.story.trim() : (o.opening || "");
   const target = `the ${o.role} role${isStandInCompany(o.company) || !company ? "" : ` at ${company}`}`;
-  const p1 = dedupeSentences(lead ? `${lead} That is what drew me to ${target}.` : `I am applying for ${target}.`);
-  const lastOfP1 = splitSentences(p1).pop() || "";
   const fact = o.companyFact && !isStandInCompany(o.company) ? cleanNames(o.companyFact, names) : "";
   const fewWords = fact.split(/\s+/).filter(Boolean).length < 6;
-  const p3 = fact && !fewWords && o.why ? [sentence(fact), sentence(o.why)].join(" ") : "";
+  const factPara = fact && !fewWords && o.why ? [sentence(fact), sentence(o.why)].join(" ") : "";
+  // THE FIRST LINE IS ABOUT THEM (6 Nov). "I am applying for..." opens every
+  // letter a recruiter reads; the company's own work, and why it matches
+  // yours, opens this one. Then the story: one project, what was wrong,
+  // what you did, what changed. A letter with no company fact keeps the
+  // story first.
+  const p1 = factPara
+    ? dedupeSentences(`${factPara} That is why I am applying for ${target}.`)
+    : dedupeSentences(lead ? `${lead} That is what drew me to ${target}.` : `I am applying for ${target}.`);
+  const pStory = factPara && lead ? lead : "";
+  const lastOfP1 = splitSentences(pStory || p1).pop() || "";
+  const p3 = "";
   const notice = o.notice ? `My notice period is ${o.notice.trim().replace(/[.]$/, "")}.` : "";
   const p4 = [o.rightToWork, notice, "I am available for a call whenever suits you."].filter(Boolean).join(" ");
   const uk = /^kind regards/i.test(String(o.signOff || "Kind regards,"));
-  return [p1, orderResults(o.results.slice(0, 2).filter((r, i, all) => !all.slice(0, i).some((p) => employerOf(p, employers) && employerOf(p, employers) === employerOf(r, employers))), lastOfP1, employers).join(" "), p3, p4].filter(Boolean).map((x) => sentenceSubjects(cleanNames(x, names))).map((x) => (uk ? ukSpelling(x) : x));
+  return [p1, pStory, orderResults(o.results.slice(0, 2).filter((r, i, all) => !all.slice(0, i).some((p) => employerOf(p, employers) && employerOf(p, employers) === employerOf(r, employers))), lastOfP1, employers).join(" "), p3, p4].filter(Boolean).map((x) => sentenceSubjects(cleanNames(x, names))).map((x) => (uk ? ukSpelling(x) : x));
 }
 
 /** Drops any sentence whose content words all appear in the other sentences of the paragraph. */
