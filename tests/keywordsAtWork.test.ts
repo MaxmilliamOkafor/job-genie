@@ -30,7 +30,7 @@ const BULLETS = [
 describe('the posting\'s keywords at work, not just listed', () => {
   it('puts an evidenced MUST tool into the bullet that tells that story', () => {
     const out = keywordsAtWork(CV, { must: ['Terraform', 'Snowflake', 'Stakeholder Management'], asked: ['Terraform'], profileBullets: BULLETS }).cv;
-    expect(out).toContain('• Reduced environment provisioning from a multi-week request to a single automated pipeline run, using Terraform.');
+    expect(out).toContain('• Reduced environment provisioning from a multi-week request to a single automated pipeline run (Terraform).');
     expect(/•[^\n]*Snowflake/.test(out)).toBe(false);
     expect(/•[^\n]*Stakeholder/.test(out)).toBe(false);
     expect(keywordsAtWork(out, { must: ['Terraform'], asked: ['Terraform'], profileBullets: BULLETS }).cv).toBe(out);
@@ -58,6 +58,13 @@ describe('the posting\'s keywords at work, not just listed', () => {
     expect(out.indexOf('\nDriftGuard\n')).toBeLessThan(out.indexOf('\nLedgerLens\n'));
     expect(out).toMatch(/SignalDesk\nPython, LangChain, RAG, LLMs\n• Streams[^\n]*\nCode: https:\/\/github\.com\/x\/signaldesk\n\nDriftGuard/);
     expect(projectsForTheJob(CV.split('\n'), ['Salesforce']).moved).toBe(false);
+  });
+
+  it('never writes a ", using X." tail, and asks for the term in the first half of a bullet', () => {
+    const out = keywordsAtWork(CV, { must: ['Terraform'], asked: ['Terraform'], profileBullets: BULLETS }).cv;
+    expect(/, using [A-Z]/.test(out)).toBe(false);
+    const src = readFileSync('supabase/functions/tailor-application/index.ts', 'utf8');
+    expect(src).toContain("The posting's term sits in the FIRST HALF of the bullet");
   });
 
   it('runs at the final step, before monetary exclusion', () => {

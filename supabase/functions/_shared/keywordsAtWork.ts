@@ -3,7 +3,7 @@
 // Pure helpers for the final document step, from Max's tailoring brief:
 //   1. A MUST keyword the work shows also appears inside a work bullet:
 //      the bullet that tells the same story in the saved profile gets the
-//      posting's word (in its tool list, or ", using Terraform."). Tools
+//      posting's word (in its tool list in brackets). Tools
 //      only, never a soft skill or a credential, never from a skills list.
 //   2. No keyword more than three times. Extra mentions come out of tool
 //      lists in brackets and repeated skills rows only; sentences, the
@@ -80,10 +80,12 @@ export function mustAtWork(lines: string[], must: string[], profileSentences: st
     const items = list ? list[1].split(/\s*,\s*|\s+and\s+/).filter(Boolean) : [];
     if (list && items.every((x) => /[A-Za-z]/.test(x) && toolLike(x.trim()))) {
       body = body.slice(0, list.index) + "(" + list[1].replace(/\s+and\s+/, ", ") + ", " + term + ")" + list[2];
-    } else if (/\busing\b/i.test(body)) {
+    } else if (/\(|\b(?:using|with)\b/i.test(body)) {
       continue;
     } else {
-      body = body.replace(/\s*\.?\s*$/, "") + ", using " + term + ".";
+      // Never a ", using X." tail: the bullet gets a tool list in
+      // brackets, the way the CV lists tools.
+      body = body.replace(/\s*\.?\s*$/, "") + " (" + term + ").";
     }
     out[best] = m[1] + body;
     touched.add(best);
