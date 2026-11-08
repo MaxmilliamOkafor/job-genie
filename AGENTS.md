@@ -12,3 +12,4 @@
 - Capability stem matching is separate from literal ATS coverage; only the explicit Go phrase disambiguation changes whole-term coverage.
 - Filter every extracted keyword category and strategy term before prompts or scores; final bullet-tool checks consume candidate evidence only, never posting strategy metadata.
 - Summary ranking counts posting responsibilities separately from the fixed ATS denominator, then uses held-role fit, recency and figures as tie-breakers.
+- Final keyword placement (MUST tools in backed bullets, three-mention cap, project order) uses the shared pure keywordsAtWork helper after the polish pass and before monetary exclusion.

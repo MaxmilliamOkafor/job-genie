@@ -35,6 +35,7 @@ import {
 import { buildSummary, enforceSummaryShape, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
+import { keywordsAtWork } from "../_shared/keywordsAtWork.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { finalLetterChecks, bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
@@ -5132,7 +5133,16 @@ ${
       description,
       jdKeywords.allKeywords,
     );
-    result.tailoredResume = removeMonetaryClaims(polished.cv);
+    // The posting's MUST keywords inside a work bullet the saved profile
+    // backs, no keyword more than three times, and the projects that show
+    // what it asks for first. Monetary exclusion runs after it.
+    const atWork = keywordsAtWork(polished.cv, {
+      must: requiredTerms,
+      asked: jdKeywords.allKeywords,
+      profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
+    });
+    if (atWork.notes.length) console.log(`[KEYWORDS AT WORK] ${atWork.notes.join("; ")}`);
+    result.tailoredResume = removeMonetaryClaims(atWork.cv);
     const finalSummary = buildSummary(summaryContext);
     const finalSummarySection = summarySectionOf(result.tailoredResume);
     if (finalSummary && finalSummarySection && /consult|client|pre-sales|customer success/i.test(jobTitle)) {
