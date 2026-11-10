@@ -3,6 +3,8 @@
 // every required keyword and section heading.
 import { numberEntries } from "./letterSlots.ts";
 import { containsTerm } from "./guards.ts";
+import { isApplicantDataNotice } from "../_shared/evidence.ts";
+import { hasSelfTalk } from "../_shared/documentRules.ts";
 
 export type ReviewDoc = "cv" | "letter";
 export interface ReviewEdit { doc: ReviewDoc; old: string; new: string; reason: string }
@@ -141,6 +143,7 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
   if (count > 1) return "old text occurs more than once";
   if (edit.doc === "cv" && experienceSection(doc).includes(edit.old) && /\b(?:learned|gained)\b/i.test(edit.new)) return "adds learned or gained reflection in an experience bullet";
   if (addsReflection(edit.old, edit.new)) return "adds a learned, learnt, gained or taught me sentence";
+  if (hasSelfTalk(edit.new) && !hasSelfTalk(edit.old)) return "talks about the document itself (ATS, keywords or resume content)";
   const summaryWhy = summaryReject(doc, edit, ctx);
   if (summaryWhy) return summaryWhy;
   const profile = ctx.profileText;
@@ -274,6 +277,8 @@ export function extractCriteria(posting: string, max = 10): ScreenerCriterion[] 
     const text = m ? m[1].trim() : (inReq && line.length > 15 && line.length < 200 ? line : "");
     if (!text) { if (inReq && !line) inReq = false; continue; }
     if (/equal opportunity|reasonable adjustment|diversity|benefits|salary|about us|we offer/i.test(text)) continue;
+    // GDPR is boilerplate only when it is about the applicant's own data.
+    if (isApplicantDataNotice(text)) continue;
     const key = text.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);

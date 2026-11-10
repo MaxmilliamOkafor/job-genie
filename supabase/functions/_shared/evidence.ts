@@ -940,6 +940,24 @@ function looksLikeHeading(line: string): boolean {
 }
 
 /**
+ * GDPR and data protection are legal boilerplate only when the text is about
+ * the applicant's own data ("we process your personal data"). "Experience with
+ * dbt and exposure to GDPR" asks for something and is read (10 Nov).
+ */
+const APPLICANT_DATA = /\b(?:your|applicant(?:'s|s')?|candidate(?:'s|s')?)\s+(?:personal\s+)?(?:data|information)\b|\b(?:process|collect|store|hold|retain|use)\s+(?:your\s+)?personal\s+(?:data|information)\b|\bprivacy\s+(?:notice|policy|statement)\b|\b(?:applicant|candidate|recruitment)\s+privacy\b|\bdata\s+protection\s+(?:notice|policy|statement)\b/i;
+export function isApplicantDataNotice(line: string): boolean {
+  return APPLICANT_DATA.test(String(line || ""));
+}
+/** A heading-shaped line that names a regulation as something to know or have worked with. */
+function isRequirementAboutRegulation(line: string): boolean {
+  const t = String(line || "");
+  if (isApplicantDataNotice(t)) return false;
+  if (!/\b(?:gdpr|data protection|privacy|legal)\b/i.test(t)) return false;
+  if (/\b(?:benefit|perks?|compensation|salary|equity|pension|culture|values|diversity|inclusion|equal|eeo|accommodation|disability|apply|application|interview)\b/i.test(t)) return false;
+  return /\b(?:experience|exposure|knowledge|familiar(?:ity)?|understanding|working|work with|proficien|background|skills?|and|with)\b/i.test(t) || t.split(/\s+/).length > 4;
+}
+
+/**
  * Removes benefits, perks, compensation, company description, values and
  * culture, legal/EEO, privacy and application-instruction sections. A section
  * whose heading names requirements is always kept, and prose with no headings
@@ -957,13 +975,13 @@ export function stripNonRequirementSections(
     if (looksLikeHeading(line)) {
       const heading = line.trim();
       if (REQUIREMENT_HEADING.test(heading)) skipping = false;
-      else if (NON_REQUIREMENT_HEADING.test(heading)) {
+      else if (NON_REQUIREMENT_HEADING.test(heading) && !isRequirementAboutRegulation(heading)) {
         skipping = true;
         removedSections.push(heading.replace(/:$/, ""));
         continue;
       } else skipping = false;
     }
-    if (!skipping) kept.push(line);
+    if (!skipping && !isApplicantDataNotice(line)) kept.push(line);
   }
 
   const text = kept.join("\n").trim();
