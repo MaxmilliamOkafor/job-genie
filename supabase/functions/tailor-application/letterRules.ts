@@ -98,14 +98,15 @@ export function finalLetterRules(letter: string, ctx: LetterRuleContext): { lett
   for (let i = 0; i < paras.length; i++) {
     const sents = splitSentences(paras[i]);
     if (sents.length < 2) continue;
+    let total = words();
     const kept = sents.filter((s) => {
       if (!hasSelfTalk(s) && !isGenericSentence(s)) return true;
-      if (words() - wordCount(s) < FLOOR && !hasSelfTalk(s)) return true;
+      if (total - wordCount(s) < FLOOR && !hasSelfTalk(s)) return true;
+      total -= wordCount(s);
       notes.push(`removed: ${s}`);
-      paras[i] = paras[i].replace(s, "").replace(/ {2,}/g, " ").trim();
       return false;
     });
-    paras[i] = kept.join(" ");
+    if (kept.length) paras[i] = kept.join(" ");
   }
 
   // "For the X role at Y, I would bring hands-on A and B from that work." once at most,
@@ -134,11 +135,10 @@ export function finalLetterRules(letter: string, ctx: LetterRuleContext): { lett
     if (opensWithCompany) {
       const why = new RegExp(`That is why I am applying for the ${esc(role)} role`, "i");
       if (role && !why.test(paras[0])) { paras[0] = `${paras[0]} That is why I am applying for the ${role} role.`; notes.push("kept the why-I-am-applying sentence"); }
-    } else if (!termAppearsIn(paras[0], company)) {
+    } else {
       const roleOnly = role ? new RegExp(`\\b(applying for|drew me to) the ${esc(role)} role(?! at)`, "i") : null;
-      if (roleOnly && roleOnly.test(paras[0])) paras[0] = paras[0].replace(roleOnly, (m) => `${m} at ${company}`);
-      else if (role) paras[0] = `I am applying for the ${role} role at ${company}. ${paras[0]}`;
-      notes.push("opening names the employer");
+      if (roleOnly && roleOnly.test(paras[0])) { paras[0] = paras[0].replace(roleOnly, (m) => `${m} at ${company}`); notes.push("opening names the employer"); }
+      else if (role && !termAppearsIn(paras[0], company)) { paras[0] = `I am applying for the ${role} role at ${company}. ${paras[0]}`; notes.push("opening names the employer"); }
     }
   }
 

@@ -13,6 +13,7 @@ import { Copy, Download, Eye, FileText, Loader2, Search, RefreshCw } from 'lucid
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { refreshDocuments } from '@/lib/refreshDocuments';
+import { WhatChangedBox } from '@/components/documents/WhatChangedBox';
 import { toast } from 'sonner';
 import {
   documentSlug as slug,
@@ -32,13 +33,15 @@ export default function Documents() {
   const [open, setOpen] = useState<Application | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [changes, setChanges] = useState<string[]>([]);
 
   const refresh = async () => {
     if (!open || !user || refreshing) return;
     setRefreshing(true);
     try {
-      const updated = await refreshDocuments(supabase, open.id, user.id);
+      const { whatChanged, ...updated } = await refreshDocuments(supabase, open.id, user.id);
       setOpen({ ...open, ...updated, job: open.job });
+      setChanges(whatChanged);
       setExported({});
       await fetchApplications();
       toast.success('CV and cover letter updated from your latest saved profile');
@@ -56,6 +59,7 @@ export default function Documents() {
   useEffect(() => {
     setExported({});
     setExporting(null);
+    setChanges([]);
   }, [open?.id]);
 
   const docs = useMemo(() => {
@@ -147,6 +151,7 @@ export default function Documents() {
             {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {refreshing ? 'Updating documents...' : 'Update from latest profile'}
           </Button>
+          <WhatChangedBox lines={changes} />
           <Tabs defaultValue="cv">
             <TabsList>
               <TabsTrigger value="cv">CV</TabsTrigger>

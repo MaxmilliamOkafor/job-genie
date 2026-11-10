@@ -23,6 +23,8 @@ export interface JobContact {
   mailboxVerified: boolean;
   requiresReview: boolean;
   removedAt?: string | null;
+  /** Provenance as written: "leadocean", "flow-linkedin", Apollo values or a website method. */
+  contactRelevance?: string | null;
 }
 
 export interface JobContactsTarget {
@@ -53,6 +55,7 @@ function fromRow(row: Record<string, unknown>): JobContact {
     mailboxVerified: row.mailbox_verified === true,
     requiresReview: row.requires_review !== false,
     removedAt: (row.removed_at as string) ?? null,
+    contactRelevance: ((row.contact_relevance ?? row.discovery_method) as string) ?? null,
   };
 }
 

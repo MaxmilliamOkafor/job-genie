@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Copy, ExternalLink, Loader2, RefreshCw, Search, PenLine } from 'lucide-react';
 import { JobContact, JobContactsTarget, useJobContacts } from '@/hooks/useJobContacts';
+import { contactSourceLabel } from '@/lib/contactSource';
 
 const TYPE_LABEL: Record<JobContact['contactType'], string> = {
   job_poster: 'Named job poster',
@@ -142,6 +143,7 @@ export function ContactPanel({
                   )}
 
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    {contactSourceLabel(c.contactRelevance) && <span>{contactSourceLabel(c.contactRelevance)}</span>}
                     <span>Source checked {stamp(c.checkedAt)}</span>
                     {!c.mailboxVerified && <span>Mailbox not verified</span>}
                     {c.requiresReview && <span className="text-warning">Needs your review</span>}

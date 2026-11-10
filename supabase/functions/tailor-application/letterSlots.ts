@@ -5,6 +5,8 @@
 
 import { evidencePhraseAppears } from "../_shared/documentChecks.ts";
 import { BANNED_PHRASES, LETTER_BANNED, containsTerm, isToolName, letterRightToWorkSentence, wordCount } from "./guards.ts";
+import { hasSelfTalk } from "../_shared/documentRules.ts";
+import { isGenericSentence } from "./letterRules.ts";
 
 
 /** Word floor for checked slots. Never pad or add a third result. */
@@ -343,6 +345,9 @@ function commonFails(s: string, ctx: SlotContext): string[] {
   if (ctx.company && new RegExp(`\\b${esc(ctx.company)}\\s*,?\\s*where\\s+I\\b`, "i").test(s)) fails.push(`writes "where I" after ${ctx.company}, as if the candidate works there`);
   for (const b of bannedIn(s)) fails.push(`uses the banned phrase "${b}"`);
   if (/[\u2013\u2014]/.test(s)) fails.push("uses a dash");
+  if (hasSelfTalk(s)) fails.push("talks about the document itself (ATS, keywords or resume content)");
+  if (isGenericSentence(s)) fails.push("a sentence any candidate could have written");
+  if (/\([^()]{1,80}\)/.test(s)) fails.push("uses bracketed shorthand from the CV");
   if (/\b(?:I would bring|what I would bring|I bring)\b/i.test(s)) {
     const tools = ctx.tools.filter((t) => has(s, t));
     if (!tools.length || tools.some((t) => !ctx.bullets.some((b) => has(b.text, t)))) fails.push("unsupported what-I-would-bring claim");
@@ -640,6 +645,11 @@ const CLAUSE_RULES = `Each result is a short story grounded in ONE numbered prof
 - Write "AI" and "NLP". Avoid lists of three; at most one in the letter. Never "not X but Y".
 - Never use: ${SLOT_BANNED.map((b) => `"${b}"`).join(", ")}.
 - Never add a what-I-would-bring sentence assembled from posting keywords. Any named tool must be shown in the candidate's bullets, not inferred from Go-Live.
+- Every result keeps that line's own figure exactly ("38%", "2.1%", "from six hours to under one"); never "improved performance", "a revenue lift" or "much faster" in place of it.
+- Never mention ATS, applicant tracking, keywords, resume content, optimisation or how the letter was written.
+- No sentence any candidate could have written: "bridged technical and business stakeholders", "translated requirements into reliable delivery", "improved speed, quality and operational outcomes", "proven track record", "passionate about", "fast-paced environment", "results-driven".
+- No brackets and no bracketed shorthand such as "(CI/CD)" or "(A/B testing)". No list of more than three tools in one sentence.
+- Name the company, never "your team" or "your company".
 - No em or en dashes.`;
 
 const FACT_RULE = (company: string) => `"companyFact": one plain sentence starting with "${company}" saying what the company does, using only words from the job description, as a full grammatical sentence. No quotation marks, no list of three, and no marketing boast ("the global leader in", "world-leading", "industry-leading", "the leading").`;

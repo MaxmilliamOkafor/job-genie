@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { isSupportedJobUrl } from '@/lib/jobSites';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,26 +63,7 @@ const JobQueuePage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Validate job URL
-  const isValidJobUrl = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      const validDomains = [
-        'greenhouse.io',
-        'lever.co',
-        'workday.com',
-        'myworkdayjobs.com',
-        'ashbyhq.com',
-        'smartrecruiters.com',
-        'icims.com',
-        'jobvite.com',
-        'linkedin.com',
-        'workable.com',
-      ];
-      return validDomains.some((d) => parsed.hostname.includes(d));
-    } catch {
-      return false;
-    }
-  };
+  const isValidJobUrl = (url: string): boolean => isSupportedJobUrl(url);
 
   // Add URLs
   const addUrls = useCallback(() => {
@@ -521,7 +503,7 @@ const JobQueuePage = () => {
                 Drag & drop a CSV file with job URLs
               </p>
               <p className="text-xs text-muted-foreground mb-4">
-                Supports Workday, SmartRecruiters, iCIMS, Bullhorn, Teamtailor, LinkedIn
+                Supports Workday, SmartRecruiters, iCIMS, Bullhorn, Teamtailor, LinkedIn, UKG / UltiPro, Phenom, Eightfold, ClearCompany
               </p>
               <input
                 type="file"

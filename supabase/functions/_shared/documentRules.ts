@@ -184,7 +184,7 @@ export function capKeywordAdditions(cv: string, profileBullets: string[], perCv 
       });
       if (kept.length === items.length) return whole;
       if (!kept.length) return "";
-      return ` (${kept.length > 1 ? `${kept.slice(0, -1).join(", ")} and ${kept[kept.length - 1]}` : kept[0]})`;
+      return ` (${kept.join(", ")})`;
     }).replace(/\s+([.,;])/g, "$1");
     lines[i] = m[1] + body;
   }
@@ -269,25 +269,30 @@ export function tidySkillsSection(cv: string, profileText: string): { cv: string
     notes.push(`merged ${e.label} into ${toolLines[0].label}`);
   }
   entries = entries.filter((e) => lines[e.index] !== "\u0000");
-  // Lone items join their peers.
-  if (entries.length > 1) {
-    for (const e of entries.slice()) {
-      if (e.items.length !== 1 || LONE_OK_LABEL.test(e.label)) continue;
-      const others = entries.filter((x) => x !== e && !LONE_OK_LABEL.test(x.label) && lines[x.index] !== "\u0000");
-      if (!others.length) continue;
-      loose.push(e.items[0]);
-      lines[e.index] = "\u0000";
-      notes.push(`moved lone ${e.label} item ${e.items[0]}`);
-    }
-    entries = entries.filter((e) => lines[e.index] !== "\u0000");
-  }
-  const homes = entries.filter((e) => !LONE_OK_LABEL.test(e.label));
-  for (const item of loose) {
-    if (!homes.length || entries.some((e) => e.items.some((x) => same(x, item)))) continue;
+  // Loose items go to the line where their peers are.
+  const homeFor = (item: string, except?: Entry): Entry | undefined => {
+    const homes = entries.filter((e) => e !== except && !LONE_OK_LABEL.test(e.label) && lines[e.index] !== "\u0000");
+    if (!homes.length) return undefined;
     const k = kindOf(item);
-    const home = homes.find((e) => majorityKind(e) === k) || homes.slice().sort((a, b) => b.items.length - a.items.length)[0];
-    home.items.push(item);
+    return homes.filter((e) => majorityKind(e) === k).sort((a, b) => b.items.length - a.items.length)[0]
+      || homes.find((e) => /^tools?\b/i.test(e.label))
+      || homes.slice().sort((a, b) => b.items.length - a.items.length)[0];
+  };
+  for (const item of loose) {
+    if (entries.some((e) => e.items.some((x) => same(x, item)))) continue;
+    const home = homeFor(item);
+    if (home) home.items.push(item);
   }
+  // A lone item joins the line most of whose items are its kind.
+  for (const e of entries) {
+    if (e.items.length !== 1 || LONE_OK_LABEL.test(e.label) || lines[e.index] === "\u0000") continue;
+    const home = homeFor(e.items[0], e);
+    if (!home) continue;
+    if (!home.items.some((x) => same(x, e.items[0]))) home.items.push(e.items[0]);
+    lines[e.index] = "\u0000";
+    notes.push(`moved lone ${e.label} item ${e.items[0]} to ${home.label}`);
+  }
+  entries = entries.filter((e) => lines[e.index] !== "\u0000");
   // A tool named in a bullet keeps its full name in Skills.
   const outside = lines.filter((l, i) => kinds[i] !== "skills" && l !== "\u0000").join("\n");
   for (const e of entries) {

@@ -1,3 +1,5 @@
+import { whatChangedLines } from './whatChanged';
+
 export async function refreshDocuments(client: any, applicationId: string, userId: string) {
   const { data: application, error: readError } = await client.from('applications')
     .select('id, job:jobs(id, title, company, location, description, requirements, url)')
@@ -16,5 +18,6 @@ export async function refreshDocuments(client: any, applicationId: string, userI
     .update({ tailored_resume: data.tailoredResume, tailored_cover_letter: data.tailoredCoverLetter })
     .eq('id', applicationId).eq('user_id', userId).select().single();
   if (saveError || !updated) throw new Error('Your refreshed documents could not be saved. Please try again.');
-  return updated;
+  // The "What changed" lines travel with the saved row; they are not stored.
+  return { ...updated, whatChanged: whatChangedLines(data.whatChanged) };
 }

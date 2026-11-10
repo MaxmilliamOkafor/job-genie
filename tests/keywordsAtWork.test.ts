@@ -69,8 +69,9 @@ describe('the posting\'s keywords at work, not just listed', () => {
 
   it('runs at the final step, before monetary exclusion', () => {
     const src = readFileSync('supabase/functions/tailor-application/index.ts', 'utf8');
-    const at = src.indexOf('keywordsAtWork(polished.cv');
+    const at = src.indexOf('keywordsAtWork(renamed.cv');
     expect(at).toBeGreaterThan(src.indexOf('polishTailoredDocuments('));
-    expect(src.indexOf('removeMonetaryClaims(atWork.cv)')).toBeGreaterThan(at);
+    expect(src.indexOf('renameToPostingWords(polished.cv')).toBeGreaterThan(src.indexOf('polishTailoredDocuments('));
+    expect(src.indexOf('removeMonetaryClaims(finalCv.cv)')).toBeGreaterThan(at);
   });
 });

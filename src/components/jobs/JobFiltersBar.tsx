@@ -86,6 +86,10 @@ const ATS_PLATFORMS = [
   'Workable',
   'ICIMS',
   'Oracle Cloud',
+  'UKG / UltiPro',
+  'Phenom',
+  'Eightfold',
+  'ClearCompany',
   'Career Page',
   'Other',
 ];

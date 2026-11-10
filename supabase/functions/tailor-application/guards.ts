@@ -1354,9 +1354,8 @@ export function trimHeadline(resume: string, profileText: string): string {
     const rest = words.slice(w).join(" ").replace(/[(),.&;:]/g, " ");
     if (containsTerm(evidence, word) || containsTerm(evidence, rest)) continue;
     const kept = words.slice(0, w).join(" ").replace(/[\s|&,-]+$/, "").trim();
-    // Never a two-word title cut to its first word.
-    const separated = /[|,(&-]|\b(?:for|with|in|on)$/i.test(words.slice(0, w).join(" ").trim()) || /^[(|&-]/.test(words[w]);
-    if (kept.split(/\s+/).length === 1 && !separated) return resume;
+    // Never a title cut to a bare rank word ("Lead", "Senior").
+    if (/^(?:lead|senior|junior|principal|staff|head|chief|associate|assistant|deputy|interim)$/i.test(kept)) return resume;
     if (kept.length >= 3) { lines[hi] = kept.replace(/\s+(?:for|with|in|on)$/i, ""); return lines.join("\n"); }
     return resume;
   }

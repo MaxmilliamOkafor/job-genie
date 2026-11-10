@@ -32,6 +32,8 @@ import { Profile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { WhatChangedBox } from '@/components/documents/WhatChangedBox';
+import { whatChangedLines } from '@/lib/whatChanged';
 
 interface AutomationPanelProps {
   jobs: Job[];
@@ -61,6 +63,7 @@ const OPENAI_TIERS = {
 export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanelProps) {
   const { user } = useAuth();
   const [isRunning, setIsRunning] = useState(false);
+  const [lastChanges, setLastChanges] = useState<{ label: string; lines: string[] } | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [backgroundCount, setBackgroundCount] = useState(10);
@@ -217,6 +220,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
       }).eq('id', job.id);
 
       onJobApplied(job.id);
+      setLastChanges({ label: `${job.title} at ${job.company}`, lines: whatChangedLines(data.whatChanged) });
 
       // Show detailed status
       const attachmentStatus = resumeOk && coverLetterOk 
@@ -464,6 +468,13 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
 
           {isRunning && !backgroundMode && (
             <Progress value={progress} className="h-2" />
+          )}
+
+          {lastChanges && lastChanges.lines.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Last tailored: {lastChanges.label}</p>
+              <WhatChangedBox lines={lastChanges.lines} />
+            </div>
           )}
 
           {/* Live Logs */}

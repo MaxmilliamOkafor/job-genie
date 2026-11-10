@@ -180,5 +180,9 @@ export const atsPlatforms = [
   "Teamtailor",
   "Workable",
   "iCIMS",
-  "Oracle Cloud"
+  "Oracle Cloud",
+  "UKG / UltiPro",
+  "Phenom",
+  "Eightfold",
+  "ClearCompany"
 ];

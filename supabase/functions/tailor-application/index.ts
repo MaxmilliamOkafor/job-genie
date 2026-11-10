@@ -36,8 +36,12 @@ import { buildSummary, enforceSummaryShape, summaryRequirements, type SummaryCon
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { keywordsAtWork } from "../_shared/keywordsAtWork.ts";
+import { hasSelfTalk, renameToPostingWords } from "../_shared/documentRules.ts";
+import { whatChanged } from "../_shared/whatChanged.ts";
+import { finalCvRules } from "./finalRules.ts";
+import { finalLetterRules } from "./letterRules.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
-import { finalLetterChecks, bodyWords, buildSlotLetter, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
+import { finalLetterChecks, bodyWords, buildSlotLetter, isStandInCompany, profileBullets, profileTextOf, rightToWorkSentence, shortTitle } from "./letterSlots.ts";
 import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreenerPasses, secondPassNote, screenerSystemPrompt, screenerUserPrompt, ScreenerCriterion } from "./review.ts";
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
@@ -2328,18 +2332,18 @@ const handleTailor = async (req: Request): Promise<Response> => {
     // evidence map. Requirements it names are merged into the keyword pool
     // so coverage is measured against what the posting actually asks for.
     const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
-    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description);
-    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), description));
+    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description, company);
+    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), description, company));
     atsStrategy.evidence = Object.fromEntries(Object.entries(atsStrategy.evidence).filter(([term]) => strategyTerms.has(term)));
     const mergedRequirements = filterJobKeywords(Array.from(
       new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
-    ), description);
+    ), description, company);
     console.log(
       `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
     );
 
     // Jobscan keyword extraction
-    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), description);
+    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), description, company);
 
     // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
     // Initial, per-revision and final coverage are only comparable when they
@@ -2347,7 +2351,7 @@ const handleTailor = async (req: Request): Promise<Response> => {
     // replaces the raw extraction immediately. Incidental employer names,
     // boilerplate and overlapping title phrases are dropped rather than being
     // counted as requirements the candidate has to satisfy.
-    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, description), [company], jobTitle);
+    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, description, company), [company], jobTitle);
     console.log(
       `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
     );
@@ -2388,7 +2392,7 @@ const handleTailor = async (req: Request): Promise<Response> => {
       jdKeywords.titles,
       jdKeywords.certifications,
       description,
-    ), description);
+    ), description, company);
     console.log(`Keyword priorities - High: ${weightedKeywords.high.length}, Medium: ${weightedKeywords.medium.length}, Low: ${weightedKeywords.low.length}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();
@@ -2890,6 +2894,87 @@ Keywords belong in the summary and the skills sections, OR inside a
 bullet where they describe what was actually done, integrated into the
 sentence's grammar. If a keyword cannot be integrated grammatically and
 truthfully, leave it out of the bullet.
+
+RULE 30 - THE DOCUMENT NEVER TALKS ABOUT ITSELF (hard ban, subject to RULE -1 and RULE 0)
+The CV and the cover letter never contain the words ATS, applicant tracking,
+keyword, keywords, keyword extraction, keyword injection, resume content,
+"optimised for" / "optimized for" (about the document), job description
+requirements, or any sentence about how the document was written or matched.
+Not in the summary, not in a bullet, not in a project line, not in Skills.
+"Skilled in keyword extraction and aligning resume content to ATS
+requirements" is an automatic failure.
+
+RULE 31 - KEYWORDS GO IN THE BULLET THAT SHOWS THE WORK (subject to RULE 0)
+For each required keyword, in this order:
+ 1. If a bullet already describes that same work under another name, use the
+    posting's name there: "monthly close reporting" becomes "month-end close
+    reporting".
+ 2. If a bullet describes work that is an instance of the requirement, put the
+    posting's word beside the candidate's own, once: "a four-week live test
+    (A/B testing)", "GitHub Actions (CI/CD) pipelines", "built in PyTorch (deep
+    learning)". Ordinary phrases in lower case; names and acronyms keep their
+    capitals.
+ 3. Otherwise the keyword goes in the Skills section only.
+At most one such addition per bullet and six per CV. Never a ", using X." or
+", leveraging X" tail (RULE 14 stays). Never put a keyword into a bullet whose
+work does not show it.
+
+RULE 32 - THE SKILLS SECTION READS LIKE A PERSON WROTE IT
+- Every added term sits on the line where its peers already are (Kubernetes
+  with the other infrastructure, Month-End Close with the other accounting
+  terms). Never a line called "Additional Skills" or "Core Competencies".
+- No line with a single item unless it is Languages or Soft Skills; a lone item
+  joins the line most of whose items are its kind. "Tools" and "Tools &
+  Platforms" are one line.
+- A tool named in a bullet appears in Skills under its full name ("GitHub
+  Actions", never "GitHub").
+- Never list a qualification the profile does not hold: ACA, ACCA, CPA, CIMA,
+  AAT, CGMA, CMA, CIA, CFA, CISSP, CISM, CKA, PMP, PRINCE2, or anything
+  "certified", "chartered" or "licensed". If the posting asks for one the
+  candidate lacks, it is left out of the CV entirely.
+
+RULE 33 - HEADLINE
+The line under the name is the role only, as a whole title ("Lead
+Accountant", "Senior Data Engineer"). Never cut a two-word title to its first
+word, and never add a platform or tool the experience does not show.
+
+RULE 34 - WHAT COUNTS AS A REQUIREMENT
+Never treat these as requirements or put them on the CV: the employer's own
+name, even when it is also a product ("New Relic is hiring a Lead Accountant"
+does not ask for New Relic) unless the posting separately asks for experience
+with it by name; "hiring" from "X is hiring"; "leadership" from "our
+leadership team"; "shipping" from "shipping models to production"; bare
+numbers and fragments ("6+", "FP" from "FP&A", "GAAP" when the posting says
+"US GAAP"); departments the role partners with ("Partner with FP&A, Tax and
+Treasury"). "SOX controls" on a finance posting is the requirement "SOX", not
+"SOX IT Controls". GDPR is legal boilerplate only when the sentence is about
+the applicant's own data; "experience with dbt and exposure to GDPR" is a
+requirement.
+
+RULE 35 - COVER LETTER
+- The opening names the employer: "I am applying for the <role> role at
+  <Company>." Never "I am writing to apply", never "the role" with no company.
+  If a paragraph about the company exists (it starts with the company's name),
+  it opens the letter, followed by "That is why I am applying for the <role>
+  role."
+- No list of more than three tools or skills in one sentence: keep the three
+  the posting asks for, topped up only from tools the CV shows. Never name a
+  tool the CV does not contain.
+- Every result carries the CV's own figure (38%, 2.1%, "from six hours to
+  under one"); never "improved performance", "a revenue lift" or "much
+  faster".
+- No sentence any candidate could have written ("bridged technical and
+  business stakeholders", "translated requirements into reliable delivery",
+  "proven track record", "passionate about", "fast-paced environment",
+  "results-driven").
+- "To your team" / "join your company" names the company.
+- No bracketed shorthand from the CV: not "(CI/CD)", "(A/B testing)" or
+  "(Python, Go and C++)".
+- "For the <role> role at <Company>, I would bring hands-on X and Y from that
+  work." appears at most once, and never when the paragraphs above already
+  name X and Y.
+- The proof paragraphs come before the closing ("Thank you for considering my
+  application..."), never after it.
 
 RULE 15b - NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
 A number that is hedged reads as a number that was guessed, which is worse
@@ -4927,7 +5012,8 @@ ${
 
     // COVER LETTER CHECK: employer named outside the greeting, 2 of 3 requirements. One retry at most.
     if (!slotLetterBuilt && result.tailoredCoverLetter) {
-      const firstFailed = checkCoverLetter(result.tailoredCoverLetter, company, topRequirements);
+      const selfTalkFail = (l: string) => hasSelfTalk(l) ? ["talks about the document itself (ATS, keywords or resume content); remove every such sentence"] : [];
+      const firstFailed = [...checkCoverLetter(result.tailoredCoverLetter, company, topRequirements), ...selfTalkFail(result.tailoredCoverLetter)];
       if (firstFailed.length) {
         console.log(`[COVER LETTER CHECK] Failed: ${firstFailed.join(" | ")}`);
         try {
@@ -4954,7 +5040,7 @@ ${
               yearsContext,
             ).text;
             if (revised.length >= 100) {
-              const secondFailed = checkCoverLetter(revised, company, topRequirements);
+              const secondFailed = [...checkCoverLetter(revised, company, topRequirements), ...selfTalkFail(revised)];
               if (secondFailed.length < firstFailed.length) result.tailoredCoverLetter = revised;
               console.log(`[COVER LETTER CHECK] Retry failed checks: ${secondFailed.length}; kept ${secondFailed.length < firstFailed.length ? "retry" : "original"}`);
             }
@@ -5125,6 +5211,7 @@ ${
     if (result.resumeStructured) result.resumeStructured = removeMonetaryClaimsFromPayload(result.resumeStructured);
 
     // Final clean-up rules, after every guard and before the documents are saved or returned.
+    const cvBeforeFinal = result.tailoredResume || "";
     const polished = polishTailoredDocuments(
       result.tailoredResume || "",
       result.tailoredCoverLetter || "",
@@ -5136,22 +5223,49 @@ ${
     // The posting's MUST keywords inside a work bullet the saved profile
     // backs, no keyword more than three times, and the projects that show
     // what it asks for first. Monetary exclusion runs after it.
-    const atWork = keywordsAtWork(polished.cv, {
+    // Rule B.1: a bullet that names the same work another way uses the
+    // posting's name ("monthly close" becomes "month-end close").
+    const renamed = renameToPostingWords(polished.cv, jdKeywords.allKeywords);
+    if (renamed.renamed.length) console.log(`[KEYWORDS AT WORK] renamed to the posting's words: ${renamed.renamed.join(", ")}`);
+    const atWork = keywordsAtWork(renamed.cv, {
       must: requiredTerms,
       asked: jdKeywords.allKeywords,
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
     });
     if (atWork.notes.length) console.log(`[KEYWORDS AT WORK] ${atWork.notes.join("; ")}`);
-    result.tailoredResume = removeMonetaryClaims(atWork.cv);
+    // Keyword limits, human skills lines, held qualifications only, and no
+    // sentence about the document itself (10 Nov extension brief).
+    const finalCv = finalCvRules(atWork.cv, {
+      profileText: profileTextOf(userProfile),
+      profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
+    });
+    if (finalCv.notes.length) console.log(`[FINAL CV RULES] ${finalCv.notes.join("; ")}`);
+    result.tailoredResume = removeMonetaryClaims(finalCv.cv);
     const finalSummary = buildSummary(summaryContext);
     const finalSummarySection = summarySectionOf(result.tailoredResume);
-    if (finalSummary && finalSummarySection && /consult|client|pre-sales|customer success/i.test(jobTitle)) {
+    const summaryNeedsRebuild = finalCv.summaryChanged && !!finalSummary && !hasSelfTalk(finalSummary);
+    if (finalSummary && finalSummarySection && (summaryNeedsRebuild || /consult|client|pre-sales|customer success/i.test(jobTitle))) {
       const lines = result.tailoredResume.split("\n");
       lines.splice(finalSummarySection.start + 1, finalSummarySection.end - finalSummarySection.start - 1, removeMonetaryClaims(finalSummary), "");
       result.tailoredResume = lines.join("\n");
       if (result.resumeStructured) result.resumeStructured.summary = removeMonetaryClaims(finalSummary);
     }
-    result.tailoredCoverLetter = removeMonetaryClaims(finalLetterChecks(polished.letter, shortTitle(jobTitle), profileBullets(userProfile.professionalExperience || []).map((b) => b.text), result.tailoredResume));
+    const checkedLetter = finalLetterChecks(polished.letter, shortTitle(jobTitle), profileBullets(userProfile.professionalExperience || []).map((b) => b.text), result.tailoredResume);
+    const letterRules = finalLetterRules(checkedLetter, {
+      role: shortTitle(jobTitle),
+      company,
+      cv: result.tailoredResume || "",
+      postingTerms: jdKeywords.allKeywords,
+      standIn: isStandInCompany(company),
+    });
+    if (letterRules.notes.length) console.log(`[FINAL LETTER RULES] ${letterRules.notes.join("; ")}`);
+    result.tailoredCoverLetter = removeMonetaryClaims(letterRules.letter);
+    result.whatChanged = whatChanged({
+      profileText: profileTextOf(userProfile),
+      cvBefore: cvBeforeFinal,
+      cvAfter: result.tailoredResume || "",
+      keywords: requirementList.terms,
+    });
     const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
     result.reviewNotes = chronologyNotes;
     if (chronologyNotes.length) result.review = { ...(result.review || { applied: 0, rejected: [], gaps: [] }), notes: chronologyNotes };
