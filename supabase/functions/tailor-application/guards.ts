@@ -1348,10 +1348,16 @@ export function trimHeadline(resume: string, profileText: string): string {
     if (!word || word.length < 3) continue;
     if (ROLE_WORDS.has(word.toLowerCase())) continue;
     if (!/^[A-Z]/.test(word)) continue;
+    // A role noun ("Accountant", "Controller", "Recruiter") is part of the
+    // title, never a platform: "Lead Accountant" stays whole (10 Nov).
+    if (!KNOWN_TOOL.test(word) && /(?:er|or|ant|ent|ist|ian|ive|ee|ect|ager|ead)s?$/i.test(word)) continue;
     const rest = words.slice(w).join(" ").replace(/[(),.&;:]/g, " ");
     if (containsTerm(evidence, word) || containsTerm(evidence, rest)) continue;
     const kept = words.slice(0, w).join(" ").replace(/[\s|&,-]+$/, "").trim();
-    if (kept.split(/\s+/).length >= 1 && kept.length >= 3) { lines[hi] = kept; return lines.join("\n"); }
+    // Never a two-word title cut to its first word.
+    const separated = /[|,(&-]|\b(?:for|with|in|on)$/i.test(words.slice(0, w).join(" ").trim()) || /^[(|&-]/.test(words[w]);
+    if (kept.split(/\s+/).length === 1 && !separated) return resume;
+    if (kept.length >= 3) { lines[hi] = kept.replace(/\s+(?:for|with|in|on)$/i, ""); return lines.join("\n"); }
     return resume;
   }
   return resume;
