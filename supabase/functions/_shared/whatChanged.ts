@@ -21,7 +21,7 @@ function skillItems(cv: string): string[] {
 }
 const headlineOf = (cv: string) => (String(cv || "").split("\n")[1] || "").trim();
 
-function names(list: string[], max = 6): string {
+function namesOf(list: string[], max = 6): string {
   const shown = list.slice(0, max).join(", ");
   return list.length > max ? `${shown} and ${list.length - max} more` : shown;
 }
@@ -33,10 +33,19 @@ export interface WhatChangedInput {
   /** The final CV text. */
   cvAfter: string;
   keywords: string[];
+  /** The posting, so each term is written the way the job writes it ("GDPR", never "Gdpr"). */
+  posting?: string;
+}
+
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function asWritten(term: string, posting = ""): string {
+  const m = posting ? new RegExp(`(?<![\\w])${escRe(term)}(?![\\w])`, "i").exec(posting) : null;
+  return m ? m[0] : term;
 }
 
 export function whatChanged(o: WhatChangedInput): string[] {
   const lines: string[] = [];
+  const names = (list: string[], max = 6) => namesOf(list.map((t) => asWritten(t, o.posting || "")), max);
   const before = measureCoverage(o.profileText || "", o.keywords || []);
   const after = measureCoverage(o.cvAfter || "", o.keywords || []);
   if (after.total) {

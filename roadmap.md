@@ -6,7 +6,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
-- [ ] Extension sync brief (10 Nov): sync functions from codex/professional-ui-ats-autofill 500786a; prompt rules A-G (self-talk ban, keywords at work, human skills lines, whole headline, requirement exclusions, letter rules, stable output); "What changed" box; LeadOcean contact label; Settings keys note; UKG/Phenom/Eightfold/ClearCompany job sites; regression tests; deploy tailor-application and generate-pdf.
+- [x] Extension sync brief (10 Nov): sync functions from codex/professional-ui-ats-autofill 500786a; prompt rules A-G (self-talk ban, keywords at work, human skills lines, whole headline, requirement exclusions, letter rules, stable output); "What changed" box; LeadOcean contact label; Settings keys note; UKG/Phenom/Eightfold/ClearCompany job sites; regression tests; deploy tailor-application and generate-pdf.
 - [x] Finish and audit all twenty final CV and letter rules; all keyword categories and strategy terms filtered, 409 existing tests and 31 Deno tests passed, tailor-application redeployed without error logs, signed-in refresh verified Accenture client work leads the consulting summary.
 - [x] Use the latest authenticated saved Settings profile for generation and provide regeneration of existing saved documents; deployed and verified signed-in regeneration of both documents and saved read-back.
 - [x] Exclude monetary amounts from generated CVs and letters and older-draft exports; 381 application tests passed, both functions deployed, signed-in CV and letter Word downloads verified.

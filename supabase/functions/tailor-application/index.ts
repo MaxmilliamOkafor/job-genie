@@ -5238,6 +5238,7 @@ ${
     const finalCv = finalCvRules(atWork.cv, {
       profileText: profileTextOf(userProfile),
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
+      posting: description,
     });
     if (finalCv.notes.length) console.log(`[FINAL CV RULES] ${finalCv.notes.join("; ")}`);
     result.tailoredResume = removeMonetaryClaims(finalCv.cv);
@@ -5265,6 +5266,7 @@ ${
       cvBefore: cvBeforeFinal,
       cvAfter: result.tailoredResume || "",
       keywords: requirementList.terms,
+      posting: description,
     });
     const chronologyNotes = toolChronologyNotes(userProfile.professionalExperience || []);
     result.reviewNotes = chronologyNotes;

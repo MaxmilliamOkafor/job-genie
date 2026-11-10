@@ -358,3 +358,39 @@ export function dropUnheldQualifications(cv: string, profileText: string): { cv:
   }
   return { cv: removed.length ? out.join("\n") : cv, removed };
 }
+
+// ============================================================
+// NEVER A KEYWORD IN A BULLET WHOSE WORK DOES NOT SHOW IT.
+// A bullet that copies five or more words in a row from the posting that the
+// saved profile never says ("Shipped features to production every week by
+// owning the product roadmap", 10 Nov live run) is the posting's duty grafted
+// onto the candidate's work. The saved profile line is restored.
+// ============================================================
+
+const wordsOf = (s: string) => (String(s || "").toLowerCase().match(/[a-z0-9+#]+/g) || []);
+function runs(words: string[], n: number): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i + n <= words.length; i++) out.add(words.slice(i, i + n).join(" "));
+  return out;
+}
+
+export function restorePostingGrafts(cv: string, profileBullets: string[], posting: string, profileText = "", run = 5): { cv: string; restored: string[] } {
+  if (!posting || !(profileBullets || []).length) return { cv, restored: [] };
+  const postingRuns = runs(wordsOf(posting), run);
+  const profileRuns = runs(wordsOf(`${profileText}\n${profileBullets.join("\n")}`), run);
+  const lines = String(cv || "").split("\n");
+  const kinds = sectionsOf(lines);
+  const restored: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (kinds[i] !== "exp") continue;
+    const m = BULLET.exec(lines[i]);
+    if (!m) continue;
+    const grafted = [...runs(wordsOf(m[2]), run)].some((r) => postingRuns.has(r) && !profileRuns.has(r));
+    if (!grafted) continue;
+    const src = bestSource(m[2], profileBullets);
+    if (src.score < 0.4 || src.line.trim() === m[2].trim()) continue;
+    restored.push(m[2]);
+    lines[i] = m[1] + src.line.trim();
+  }
+  return { cv: restored.length ? lines.join("\n") : cv, restored };
+}

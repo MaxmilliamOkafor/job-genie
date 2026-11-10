@@ -324,7 +324,7 @@ export function composeResult(clause: string, employer: string): string {
   c = c.replace(/^At\s+[^,]+,\s*/i, "");
   c = c.replace(new RegExp(`,?\\s+(?:at|for|with|while at|during my time at)\\s+${esc(employer)}$`, "i"), "");
   c = sentenceSubjects(c);
-  if (/^(?:[a-z]+ed|built|rebuilt|led|ran|cut|made|wrote|drove|grew|set|took|held|won)\b/i.test(c)) c = `I ${c.charAt(0).toLowerCase()}${c.slice(1)}`;
+  if (/^(?:[a-z]+ed|built|rebuilt|led|ran|cut|made|wrote|drove|grew|set|took|held|won|gave|brought|began|kept|sent|sold|spent|taught|found|chose|became|broke|bought|caught|fought|left|met|paid|put|saw|showed|split|stood|told|understood|undertook|oversaw|rewrote|overcame)\b/i.test(c)) c = `I ${c.charAt(0).toLowerCase()}${c.slice(1)}`;
   return `At ${plainCompany(employer)}, ${c}.`;
 }
 

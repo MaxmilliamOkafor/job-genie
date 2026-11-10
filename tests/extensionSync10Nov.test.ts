@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { capKeywordAdditions, dropUnheldQualifications, hasSelfTalk, removeSelfTalkFromCv, renameToPostingWords, tidySkillsSection } from '../supabase/functions/_shared/documentRules.ts';
+import { capKeywordAdditions, dropUnheldQualifications, hasSelfTalk, removeSelfTalkFromCv, renameToPostingWords, restorePostingGrafts, tidySkillsSection } from '../supabase/functions/_shared/documentRules.ts';
 import { filterJobKeywords } from '../supabase/functions/_shared/keywordChecks.ts';
 import { stripNonRequirementSections } from '../supabase/functions/_shared/evidence.ts';
 import { keywordsAtWork } from '../supabase/functions/_shared/keywordsAtWork.ts';
 import { whatChanged } from '../supabase/functions/_shared/whatChanged.ts';
+import { composeResult } from '../supabase/functions/tailor-application/letterSlots.ts';
 import { trimHeadline } from '../supabase/functions/tailor-application/guards.ts';
 import { finalLetterRules } from '../supabase/functions/tailor-application/letterRules.ts';
 import { finalCvRules } from '../supabase/functions/tailor-application/finalRules.ts';
@@ -85,6 +86,16 @@ describe('B. keywords go in the bullet that shows the work', () => {
   });
 });
 
+describe('B. never a keyword in a bullet whose work does not show it', () => {
+  it('a bullet that copies a posting duty the profile never states gets the profile line back', () => {
+    const profile = ['Owned the product roadmap and wrote the requirements and acceptance criteria for each release.'];
+    const cv = 'PROFESSIONAL EXPERIENCE\n- Shipped features to production every week by owning the product roadmap and writing the requirements and acceptance criteria for each release.';
+    const out = restorePostingGrafts(cv, profile, 'Requirements\n- Shipping features to production every week\n- Shipped features to production every week', profile[0]);
+    expect(out.cv).toBe('PROFESSIONAL EXPERIENCE\n- Owned the product roadmap and wrote the requirements and acceptance criteria for each release.');
+    expect(restorePostingGrafts(out.cv, profile, 'Shipped features to production every week', profile[0]).cv).toBe(out.cv);
+  });
+});
+
 describe('C. the skills section reads like a person wrote it', () => {
   const out = tidySkillsSection(CV, PROFILE_TEXT).cv;
   const skillLines = out.split('\n').slice(out.split('\n').indexOf('TECHNICAL SKILLS') + 1);
@@ -159,6 +170,9 @@ describe('F. cover letter', () => {
     expect(out).not.toMatch(/I am writing to apply/);
     expect(out).toContain('to the Acme team');
   });
+  it('every result sentence has its subject, including irregular verbs', () => {
+    expect(composeResult('Gave risk and finance a single agreed set of daily exposure figures', 'Citigroup')).toBe('At Citigroup, I gave risk and finance a single agreed set of daily exposure figures.');
+  });
   it('lists at most three tools and never one the CV does not show', () => {
     expect(out).toContain('Python, Go and C++');
     expect(out).not.toMatch(/Snowflake|Rust/);
@@ -211,6 +225,7 @@ describe('website changes', () => {
     expect(lines[lines.length - 1]).toBe('Not added, because your CV does not show them: Snowflake. Add them yourself only if they are true.');
     expect(lines.length).toBeLessThanOrEqual(5);
     expect(whatChanged({ profileText: '', cvBefore: '', cvAfter: '', keywords: [] })).toEqual([]);
+    expect(whatChanged({ profileText: '', cvBefore: '', cvAfter: 'Python', keywords: ['Gdpr'], posting: 'Exposure to GDPR' }).pop()).toContain('show them: GDPR.');
   });
   it('the box shows plain text only', () => {
     expect(whatChangedLines(['<b>Keyword coverage</b>: 71%', 3, null])).toEqual(['Keyword coverage: 71%']);

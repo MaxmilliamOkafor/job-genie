@@ -2,11 +2,13 @@
 // step so tests exercise exactly what the function runs. Idempotent: the
 // extension re-runs its own clean-up on every preview and download, and a
 // second pass here returns the same text.
-import { capKeywordAdditions, dropUnheldQualifications, removeSelfTalkFromCv, tidySkillsSection } from "../_shared/documentRules.ts";
+import { capKeywordAdditions, dropUnheldQualifications, removeSelfTalkFromCv, restorePostingGrafts, tidySkillsSection } from "../_shared/documentRules.ts";
 
-export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[] }): { cv: string; notes: string[]; summaryChanged: boolean } {
+export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[]; posting?: string }): { cv: string; notes: string[]; summaryChanged: boolean } {
   const notes: string[] = [];
-  const capped = capKeywordAdditions(cv, ctx.profileBullets);
+  const grafts = restorePostingGrafts(cv, ctx.profileBullets, ctx.posting || "", ctx.profileText);
+  if (grafts.restored.length) notes.push(`posting duties grafted onto bullets, profile line restored: ${grafts.restored.join(" | ")}`);
+  const capped = capKeywordAdditions(grafts.cv, ctx.profileBullets);
   if (capped.cut.length) notes.push(`keyword additions over the limit removed: ${capped.cut.join(", ")}`);
   const skills = tidySkillsSection(capped.cv, ctx.profileText);
   notes.push(...skills.notes);

@@ -13,3 +13,5 @@
 - Filter every extracted keyword category and strategy term before prompts or scores; final bullet-tool checks consume candidate evidence only, never posting strategy metadata.
 - Summary ranking counts posting responsibilities separately from the fixed ATS denominator, then uses held-role fit, recency and figures as tie-breakers.
 - Final keyword placement (MUST tools in backed bullets, three-mention cap, project order) uses the shared pure keywordsAtWork helper after the polish pass and before monetary exclusion.
+- Final CV rules (posting-graft restore, keyword-addition caps, skills tidy-up, unheld qualifications, self-referential wording) run through finalCvRules, and letter rules through finalLetterRules, after keywordsAtWork and before monetary exclusion; both are pure and idempotent because the extension re-runs its own clean-up on every preview and download.
+- The "What changed" lines are computed server-side by the shared whatChanged helper with the coverage gauge's whole-term matcher and returned as plain strings; the website only renders them as text.
