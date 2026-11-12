@@ -6,6 +6,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
+- [x] Extension sync brief (12 Nov, 3fc7434): no function changes on the branch; section H Stripe Dublin lessons (no ability grafts, brackets at phrase ends, bare cities, no home relocation or US authorisation abroad, page-title wrapper, one entry per language, word-named tools, skill phrases, needs from the ad, no repeated "At" opener, language line); tests; deploy.
 - [x] Extension sync brief (11 Nov, e486e9d): no function changes since 500786a; user_integration_keys table for LeadOcean and Flow keys; Settings Connections card (ends in XXXX, Remove); privacy tests.
 - [x] Extension sync brief (10 Nov): sync functions from codex/professional-ui-ats-autofill 500786a; prompt rules A-G (self-talk ban, keywords at work, human skills lines, whole headline, requirement exclusions, letter rules, stable output); "What changed" box; LeadOcean contact label; Settings keys note; UKG/Phenom/Eightfold/ClearCompany job sites; regression tests; deploy tailor-application and generate-pdf.
 - [x] Finish and audit all twenty final CV and letter rules; all keyword categories and strategy terms filtered, 409 existing tests and 31 Deno tests passed, tailor-application redeployed without error logs, signed-in refresh verified Accenture client work leads the consulting summary.

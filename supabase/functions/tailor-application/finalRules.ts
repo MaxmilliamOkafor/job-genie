@@ -3,8 +3,41 @@
 // extension re-runs its own clean-up on every preview and download, and a
 // second pass here returns the same text.
 import { capKeywordAdditions, dropUnheldQualifications, removeSelfTalkFromCv, restorePostingGrafts, tidySkillsSection } from "../_shared/documentRules.ts";
+import { dropPageTitleWrapper, noForeignUsAuthorisation, noGraftedAbility, noHomeRelocation, oneEntryPerLanguage, skillsReadRight, strayGloss } from "../_shared/postingLessons.ts";
 
-export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[]; posting?: string }): { cv: string; notes: string[]; summaryChanged: boolean } {
+const BULLET = /^(\s*(?:[•●▪◦‣∙·*]|-)\s+)(.*)$/;
+const LABEL_LINE = /^\s*[^:]{2,40}:\s/;
+
+/**
+ * The 12 Nov Stripe Dublin lessons on a CV: the work leads each bullet, no
+ * bracketed word inside a noun phrase, one entry per language, word-named
+ * products only when the profile shows them, half-phrases written as skills,
+ * no relocation to the home city, no US authorisation for a job outside the US,
+ * and no "Job Application for" wrapper.
+ */
+export function cvReadsRight(cv: string, ctx: { profileText: string; homeCity?: string; jobCountry?: string | null }): { cv: string; notes: string[] } {
+  const notes: string[] = [];
+  const lines = String(cv || "").split("\n").map((l) => {
+    const m = BULLET.exec(l);
+    if (m) {
+      const body = noGraftedAbility(m[2]);
+      if (body !== m[2]) notes.push(`bullet reworded so the work leads: ${body}`);
+      return m[1] + body;
+    }
+    if (LABEL_LINE.test(l)) return l;
+    const next = strayGloss(l);
+    if (next !== l) notes.push("bracketed word inside a phrase removed");
+    return next;
+  });
+  let next = lines.join("\n");
+  next = oneEntryPerLanguage(next);
+  const skills = skillsReadRight(next, ctx.profileText);
+  notes.push(...skills.notes);
+  next = noForeignUsAuthorisation(noHomeRelocation(dropPageTitleWrapper(skills.cv), ctx.homeCity || ""), ctx.jobCountry ?? null);
+  return { cv: next === cv ? cv : next, notes };
+}
+
+export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[]; posting?: string; homeCity?: string; jobCountry?: string | null }): { cv: string; notes: string[]; summaryChanged: boolean } {
   const notes: string[] = [];
   const grafts = restorePostingGrafts(cv, ctx.profileBullets, ctx.posting || "", ctx.profileText);
   if (grafts.restored.length) notes.push(`posting duties grafted onto bullets, profile line restored: ${grafts.restored.join(" | ")}`);
@@ -16,5 +49,7 @@ export function finalCvRules(cv: string, ctx: { profileText: string; profileBull
   if (quals.removed.length) notes.push(`qualifications not held removed: ${quals.removed.join(" | ")}`);
   const self = removeSelfTalkFromCv(quals.cv, ctx.profileBullets);
   if (self.removed.length) notes.push(`self-referential wording removed: ${self.removed.join(" | ")}`);
-  return { cv: self.cv, notes, summaryChanged: self.summaryChanged };
+  const right = cvReadsRight(self.cv, ctx);
+  notes.push(...right.notes);
+  return { cv: right.cv, notes, summaryChanged: self.summaryChanged };
 }

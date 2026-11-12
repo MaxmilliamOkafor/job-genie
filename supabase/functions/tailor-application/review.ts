@@ -5,6 +5,7 @@ import { numberEntries } from "./letterSlots.ts";
 import { containsTerm } from "./guards.ts";
 import { isApplicantDataNotice } from "../_shared/evidence.ts";
 import { hasSelfTalk } from "../_shared/documentRules.ts";
+import { hasGraftedAbility, strayGloss } from "../_shared/postingLessons.ts";
 
 export type ReviewDoc = "cv" | "letter";
 export interface ReviewEdit { doc: ReviewDoc; old: string; new: string; reason: string }
@@ -144,6 +145,8 @@ export function rejectReason(doc: string, edit: ReviewEdit, ctx: ReviewContext):
   if (edit.doc === "cv" && experienceSection(doc).includes(edit.old) && /\b(?:learned|gained)\b/i.test(edit.new)) return "adds learned or gained reflection in an experience bullet";
   if (addsReflection(edit.old, edit.new)) return "adds a learned, learnt, gained or taught me sentence";
   if (hasSelfTalk(edit.new) && !hasSelfTalk(edit.old)) return "talks about the document itself (ATS, keywords or resume content)";
+  if (hasGraftedAbility(edit.new) && !hasGraftedAbility(edit.old)) return "opens on the posting's ability with the work as a by ...ing clause";
+  if (strayGloss(edit.new) !== edit.new && strayGloss(edit.old) === edit.old) return "puts a bracketed word inside a phrase";
   const summaryWhy = summaryReject(doc, edit, ctx);
   if (summaryWhy) return summaryWhy;
   const profile = ctx.profileText;

@@ -8,6 +8,7 @@
 import { isToolName, wordCount } from "./guards.ts";
 import { termAppearsIn } from "../_shared/coverage.ts";
 import { hasSelfTalk } from "../_shared/documentRules.ts";
+import { dropPageTitleWrapper, languageTheAdAsks, letterGraftOut, needsFromTheAd, noForeignUsAuthorisation, noHomeRelocation, noRepeatedOpeners } from "../_shared/postingLessons.ts";
 
 const FLOOR = 150;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -37,6 +38,12 @@ export interface LetterRuleContext {
   /** The posting's terms, used to keep the tools it asks for. */
   postingTerms?: string[];
   standIn?: boolean;
+  /** The posting text: needs and languages are only the ones it states in words. */
+  posting?: string;
+  /** The candidate's saved city: never "relocate to" it. */
+  homeCity?: string;
+  /** The job's country from jobCountry(); never US authorisation outside the US. */
+  jobCountry?: string | null;
 }
 
 function bodyRange(lines: string[]): [number, number] | null {
@@ -81,7 +88,7 @@ export function finalLetterRules(letter: string, ctx: LetterRuleContext): { lett
 
   // Wording rules, sentence by sentence.
   paras = paras.map((p) => {
-    let t = p;
+    let t = dropPageTitleWrapper(letterGraftOut(p));
     t = t.replace(/\bI am writing to apply for\b/g, "I am applying for").replace(/\bI am writing to apply\b/g, "I am applying");
     if (!standIn) {
       t = t.replace(/\b(to|join|joining) your team\b/g, (_m, w: string) => `${w} the ${company} team`)
@@ -93,6 +100,10 @@ export function finalLetterRules(letter: string, ctx: LetterRuleContext): { lett
     t = trimToolLists(t, ctx.cv || "", ctx.postingTerms || []);
     return t.replace(/ {2,}/g, " ").replace(/\s+([.,;])/g, "$1").trim();
   });
+
+  // 12 Nov: no relocating to the home city, no US authorisation outside the
+  // US, and two sentences in a row never both open "At <employer>,".
+  paras = noRepeatedOpeners(paras.map((p) => noForeignUsAuthorisation(noHomeRelocation(p, ctx.homeCity || ""), ctx.jobCountry ?? null).replace(/ {2,}/g, " ").trim()));
 
   // Self-talk and generic sentences go, never emptying a paragraph and never under the floor.
   for (let i = 0; i < paras.length; i++) {
@@ -150,6 +161,11 @@ export function finalLetterRules(letter: string, ctx: LetterRuleContext): { lett
     notes.push("closing moved after the proof paragraphs");
   }
 
-  const next = [...lines.slice(0, greet + 1), "", paras.join("\n\n"), "", ...lines.slice(close)].join("\n");
+  let next = [...lines.slice(0, greet + 1), "", paras.join("\n\n"), "", ...lines.slice(close)].join("\n");
+  // The opening names only needs the posting states; a language it asks for is said once.
+  const needed = needsFromTheAd(next, ctx.posting || "");
+  if (needed !== next) { notes.push("opening need the posting never states replaced"); next = needed; }
+  const spoken = languageTheAdAsks(next, ctx.posting || "", ctx.cv || "");
+  if (spoken !== next) { notes.push("language the posting asks for stated at the CV's level"); next = spoken; }
   return { letter: notes.length || next !== letter ? next : letter, notes };
 }

@@ -48,6 +48,8 @@ import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } fro
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
 import { filterJobKeywords, filterJobKeywordLists } from "../_shared/keywordChecks.ts";
 import { toolChronologyNotes } from "./guards.ts";
+import { jobCountry } from "./guards.ts";
+import { unwrapPageTitle } from "../_shared/postingLessons.ts";
 import { loadSavedProfile } from "./savedProfile.ts";
 
 
@@ -333,8 +335,10 @@ function normaliseJobTitle(raw: string, company?: string): string {
 }
 
 function validateRequest(data: any): TailorRequest {
-  const company = validateString(data.company, MAX_STRING_SHORT, "company");
-  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"), company);
+  // "Job Application for <role> at <Company>" (a page title) gives the role and the company.
+  const pageTitle = unwrapPageTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"));
+  const company = validateString(data.company, MAX_STRING_SHORT, "company") || pageTitle.company;
+  const jobTitle = normaliseJobTitle(pageTitle.title, company);
 
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_REQUIREMENTS, MAX_STRING_MEDIUM, "requirements");
@@ -2976,6 +2980,37 @@ RULE 35 - COVER LETTER
 - The proof paragraphs come before the closing ("Thank you for considering my
   application..."), never after it.
 
+RULE 36 - LESSONS FROM A STRIPE APPLICATION IN DUBLIN (subject to RULE -1 and RULE 0)
+- A requirement is never a bullet's verb. "Ability to understand complex
+  technical ecosystems" never becomes "Understood complex technical ecosystems
+  by architecting...": the work leads ("Architected a UK retailer's
+  migration..."). Never open a bullet or a letter sentence with Understood,
+  Demonstrated, Showed, Showcased, Exhibited, Displayed or Possessed followed
+  by "by ...ing".
+- A bracketed word goes only where a phrase ends, never between an adjective
+  and its noun: not "cutting annual (operational efficiency) infrastructure
+  cost". After a tool's name it is fine: "GitHub Actions (CI/CD) pipelines".
+- A bare city name in a posting is the capital or major city people mean
+  (Dublin is Ireland, Paris is France, Sydney is Australia). Never write
+  "Relocating to <city>" or "happy to relocate to <city>" when that city is
+  where the candidate already lives, and never "US work authorised" for a job
+  outside the US.
+- "Job Application for" is never part of the role, the letter or a file name.
+- One entry per language in Languages ("German (advanced)", never "German
+  (advanced), German").
+- A product named like an ordinary word (Segment, Heap, Mode, Linear, Notion,
+  Close, Outreach, Gong) goes on the CV only when the saved profile shows the
+  candidate used it; in a posting it is usually the plain word.
+- Half-phrases from the posting are written the way a person lists the skill:
+  "Cross-functional Collaboration", not "Cross Functional"; "Analytical
+  Skills", not "Analytical Ability".
+- The letter's opening names only needs the posting states in words.
+  "Pre-sales" is not "sales". Two sentences in a row never both open
+  "At <employer>,".
+- When the posting asks for fluency in a language the CV lists, the letter
+  says so once, at the CV's level ("I speak German at an advanced level."),
+  before the closing line. The role's title "(German fluency)" does not count.
+
 RULE 15b - NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
 A number that is hedged reads as a number that was guessed, which is worse
 than no number at all. Taken from a real generated CV: "cut the manual
@@ -5239,6 +5274,8 @@ ${
       profileText: profileTextOf(userProfile),
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
       posting: description,
+      homeCity: userProfile.city || "",
+      jobCountry: jobCountry(location || extractedCity || ""),
     });
     if (finalCv.notes.length) console.log(`[FINAL CV RULES] ${finalCv.notes.join("; ")}`);
     result.tailoredResume = removeMonetaryClaims(finalCv.cv);
@@ -5258,6 +5295,9 @@ ${
       cv: result.tailoredResume || "",
       postingTerms: jdKeywords.allKeywords,
       standIn: isStandInCompany(company),
+      posting: description,
+      homeCity: userProfile.city || "",
+      jobCountry: jobCountry(location || extractedCity || ""),
     });
     if (letterRules.notes.length) console.log(`[FINAL LETTER RULES] ${letterRules.notes.join("; ")}`);
     result.tailoredCoverLetter = removeMonetaryClaims(letterRules.letter);
