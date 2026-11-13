@@ -49,6 +49,12 @@ export interface SummaryContext {
   employers?: string[];
   /** Place names (city, country, role locations), so they can never appear. */
   places?: string[];
+  /**
+   * The one track the candidate wants next (extension Settings > Career focus),
+   * such as "Machine Learning Engineer". When set, the first sentence presents
+   * the candidate on that track; it is printed as a title only when held.
+   */
+  careerFocus?: string;
 }
 
 export const MIN_LEN = 150;
@@ -242,6 +248,62 @@ export function deriveField(heldTitles: string[], targetTitle = "", currentTitle
 }
 
 
+
+/* ------------------------------------------------------------------ *
+ * Career focus: one track, never a second identity (12 Nov)
+ * ------------------------------------------------------------------ */
+
+/** The focus as supplied, tidied; empty when absent or not a title-like phrase. */
+export function cleanCareerFocus(raw: unknown): string {
+  const text = String(raw ?? "")
+    .replace(/[\u0000-\u001f]/g, " ")
+    .replace(/[^A-Za-z0-9 &/+#.()'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80)
+    .trim();
+  return /[A-Za-z]{2}/.test(text) ? text : "";
+}
+
+/** The held title the focus names, when the work history contains it. */
+export function heldFocusTitle(focus: string, heldTitles: string[]): string {
+  const f = cleanCareerFocus(focus).toLowerCase();
+  if (!f) return "";
+  return heldTitles.map((t) => (t || "").trim()).find((t) => t.toLowerCase() === f) || "";
+}
+
+/**
+ * The opening words for a focused summary: the held title when the work
+ * history contains it, otherwise "Focused on <the track in its own words>",
+ * which presents the track without claiming a title never held.
+ */
+export function focusOpener(focus: string, heldTitles: string[]): string {
+  const f = cleanCareerFocus(focus);
+  if (!f) return "";
+  const held = heldFocusTitle(f, heldTitles);
+  if (held) return held;
+  const field = deriveField([f.replace(/\([^)]*\)/g, " ")], f);
+  return field ? `Focused on ${field}` : "";
+}
+
+/** Fields of the other held roles, most related to the focus first, as support. */
+function supportFields(focus: string, heldTitles: string[]): string[] {
+  const want = new Set(tokens(focus));
+  const held = [...new Set(heldTitles.map((t) => (t || "").trim()).filter(Boolean))];
+  const ranked = held
+    .map((t, i) => ({ t, i, fit: tokens(t).filter((w) => want.has(w)).length }))
+    .sort((a, b) => b.fit - a.fit || a.i - b.i);
+  const fieldOf = (t: string) => deriveField([t], t);
+  const focusField = fieldOf(focus).toLowerCase();
+  const out: string[] = [];
+  for (const { t } of ranked) {
+    const f = fieldOf(t);
+    if (!f || f.toLowerCase() === focusField || out.some((o) => o.toLowerCase() === f.toLowerCase())) continue;
+    out.push(f);
+    if (out.length === 2) break;
+  }
+  return out;
+}
 
 /* ------------------------------------------------------------------ *
  * Scope clause
@@ -555,12 +617,24 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   // application to another field it is the wrong one.
   const sentencesAll = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
   const firstSentence = sentencesAll[0] || "";
-  if (!/^background in\s+\S/i.test(text)) problems.push("does not open with the field");
+  const focus = cleanCareerFocus(ctx.careerFocus);
+  const focusHeld = focus ? heldFocusTitle(focus, ctx.heldTitles) : "";
+  if (focus) {
+    // With a career focus the first sentence presents that track; "Background
+    // in ..." describes a second identity and is never the opener.
+    if (/^background in\b/i.test(text)) problems.push("opens with \"Background in\" despite a career focus");
+    const opener = focusOpener(focus, ctx.heldTitles);
+    if (opener && !text.toLowerCase().startsWith(opener.toLowerCase())) problems.push("does not open with the career focus");
+  } else if (!/^background in\s+\S/i.test(text)) problems.push("does not open with the field");
   const held = ctx.heldTitles.filter(Boolean);
   for (const title of held) {
+    if (focusHeld && title.toLowerCase() === focusHeld.toLowerCase()) continue;
     if (title.length > 2 && hasWord(firstSentence, title)) problems.push(`job title claimed: ${title}`);
   }
-  if (ctx.targetTitle && ctx.targetTitle.trim().length > 2 && hasWord(text, ctx.targetTitle)) {
+  // A focus title never held is never printed as a title.
+  if (focus && !focusHeld && hasWord(text, focus)) problems.push(`career focus claimed as a title: ${focus}`);
+  const targetIsHeldFocus = !!focusHeld && focusHeld.toLowerCase() === (ctx.targetTitle || "").trim().toLowerCase();
+  if (!targetIsHeldFocus && ctx.targetTitle && ctx.targetTitle.trim().length > 2 && hasWord(text, ctx.targetTitle)) {
     problems.push("states the posting's title");
   }
   // A comma-separated run of short noun phrases is a skills list, not a summary.
@@ -587,28 +661,43 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
 
 /** Builds the required shape from the profile and posting. Empty when no figure exists. */
 export function buildSummary(ctx: SummaryContext): string {
+  const focus = cleanCareerFocus(ctx.careerFocus);
+  const opener = focus ? focusOpener(focus, ctx.heldTitles) : "";
   const field = deriveField(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle, ctx.field);
+  // With a focus, the outcomes come from the roles that back that track first.
   const outcomes = pickOutcomes(
     ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets,
     ctx.requirements,
     ctx.outcomeRoles,
-    ctx.targetTitle,
+    opener ? focus : ctx.targetTitle,
   );
-  if (!field || outcomes.length === 0) return "";
+  if ((!field && !opener) || outcomes.length === 0) return "";
+  const support = opener ? supportFields(focus, ctx.heldTitles) : [];
+  // supportCount: how many supporting fields a focused lead names when it
+  // has no strengths clause (two, then one, then none to fit the length).
+  const leadFor = (terms: string[], supportCount = 2): string => {
+    if (opener) {
+      const joiner = opener.startsWith("Focused on ") ? ", " : " ";
+      if (terms.length >= 2) return `${opener}${joiner}with strengths in ${lowerFirst(terms[0])} and ${lowerFirst(terms[1])}.`;
+      const backing = support.slice(0, supportCount);
+      if (backing.length) return `${opener}${joiner}backed by work in ${joinScope(backing)}.`;
+      return `${opener}.`;
+    }
+    return terms.length >= 2
+      ? `Background in ${field}, with strengths in ${lowerFirst(terms[0])} and ${lowerFirst(terms[1])}.`
+      : `Background in ${field}.`;
+  };
 
   // Strength terms must be in the posting's wording and evidenced by an
   // experience bullet, never by the skills list alone. Fewer than two qualifying
   // and the clause is omitted rather than padded.
   const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 2);
 
-  const assemble = (terms: string[], clauseBudget: number) => {
+  const assemble = (terms: string[], clauseBudget: number, supportCount = 2) => {
     const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
     const outcomeSentence =
       shortened.length >= 2 ? `${upperFirst(shortened[0])}; ${lowerFirst(shortened[1])}.` : `${upperFirst(shortened[0])}.`;
-    const lead =
-      terms.length >= 2
-        ? `Background in ${field}, with strengths in ${lowerFirst(terms[0])} and ${lowerFirst(terms[1])}.`
-        : `Background in ${field}.`;
+    const lead = leadFor(terms, supportCount);
     return `${lead} ${outcomeSentence}`.replace(/\s+/g, " ").trim();
   };
 
@@ -622,6 +711,8 @@ export function buildSummary(ctx: SummaryContext): string {
     assemble([], 110),
     assemble([], 85),
     assemble([], 65),
+    // A focused lead names fewer supporting fields before any figure is cut.
+    ...(opener ? [assemble([], 110, 1), assemble([], 85, 1), assemble([], 65, 1), assemble([], 85, 0), assemble([], 65, 0)] : []),
   ];
   const fits = attempts.find((t) => t.length >= MIN_LEN && t.length <= MAX_LEN);
   if (fits) return fits;
@@ -633,7 +724,7 @@ export function buildSummary(ctx: SummaryContext): string {
         /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
         (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
       ).split(/,\s+/)[0];
-      const expanded = `Background in ${field}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
+      const expanded = `${leadFor([])} ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
       if (expanded.length >= MIN_LEN && expanded.length <= MAX_LEN && findViolations(expanded, ctx).length === 0) {
         return expanded;
       }

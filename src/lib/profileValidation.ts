@@ -424,16 +424,16 @@ export const validateEducationEntry = (edu: any): string[] => {
   const endYear = yearPart(e);
   const badYear = (y: string) => !/^\d{4}$/.test(y) || Number(y) < MIN_YEAR || Number(y) > max;
 
-  if (!s) errors.push(`${label}: From (year) is required.`);
-  else if (badYear(startYear)) errors.push(`${label}: From must include a year between ${MIN_YEAR} and ${max}.`);
+  if (!s) errors.push(`${label}: Start date is required.`);
+  else if (badYear(startYear)) errors.push(`${label}: Start date must include a year between ${MIN_YEAR} and ${max}.`);
 
-  if (!e) errors.push(`${label}: To (year) is required.`);
+  if (!e) errors.push(`${label}: Graduation date is required.`);
   else if (e !== 'Present' && badYear(endYear)) {
-    errors.push(`${label}: To must include a year between ${MIN_YEAR} and ${max}.`);
+    errors.push(`${label}: Graduation date must include a year between ${MIN_YEAR} and ${max}.`);
   }
 
   if (startYear && endYear && Number(endYear) < Number(startYear)) {
-    errors.push(`${label}: To (year) cannot be earlier than From (year).`);
+    errors.push(`${label}: Graduation date cannot be earlier than the start date.`);
   }
 
   return errors;
@@ -525,9 +525,9 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
       // Science") and leaves field_of_study empty. Autofill and evidence matching
       // both read field_of_study, so the subject is recovered from the degree.
       field_of_study: tidyText(String(edu.field_of_study ?? '')) || subjectFromDegree(degree),
-      // graduation_year is a stated fact derived from the completion year only;
-      // an in-progress degree has no graduation year.
-      graduation_year: /^\d{4}$/.test(end_year) ? end_year : '',
+      // graduation_year is a stated fact derived from the completion year only
+      // ("July 2020" gives 2020); an in-progress degree has no graduation year.
+      graduation_year: /present|current/i.test(end_year) ? '' : ((end_year.match(/(?:19|20)\d{2}/g) || []).pop() || ''),
     };
   });
 

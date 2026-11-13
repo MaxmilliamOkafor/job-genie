@@ -32,7 +32,9 @@ import {
   normaliseSkillsSection,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
-import { buildSummary, enforceSummaryShape, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
+import { buildSummary, cleanCareerFocus, enforceSummaryShape, focusOpener, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
+import { condenseEarlierRoles } from "../_shared/twoPages.ts";
+import { educationDisplayDate } from "../_shared/educationDates.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { keywordsAtWork } from "../_shared/keywordsAtWork.ts";
@@ -134,6 +136,8 @@ interface TailorRequest {
   includeReferral?: boolean;
   coverLetterTone?: "professional" | "enthusiastic" | "concise";
   screenerCriteria: ScreenerCriterion[];
+  /** The one track the candidate wants next (extension Settings > Career focus); empty when not set. */
+  careerFocus: string;
 }
 
 async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
@@ -423,6 +427,7 @@ function validateRequest(data: any): TailorRequest {
     includeReferral: !!data.includeReferral,
     coverLetterTone: coverLetterTone as "professional" | "enthusiastic" | "concise",
     screenerCriteria,
+    careerFocus: cleanCareerFocus(typeof data.careerFocus === "string" ? data.careerFocus : ""),
   };
 }
 
@@ -2281,6 +2286,7 @@ const handleTailor = async (req: Request): Promise<Response> => {
       includeReferral,
       coverLetterTone,
       screenerCriteria,
+      careerFocus,
     } = validateRequest(rawData);
 
     // Validate that profile has required info
@@ -2715,7 +2721,9 @@ The summary is read as a description of the PERSON, so it must be true and check
 <a job title the employment history actually contains> working across <two or three requirements from this posting that the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>.
 
 Worked example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite; cut month-end close from nine working days to three."
-
+${careerFocus ? `
+CAREER FOCUS (the candidate's one track): "${careerFocus.replace(/[`$\\]/g, "")}". The first sentence presents the candidate on that track, backed by the experience that supports it; every other role is described as support for that track, never as a second identity. ${focusOpener(careerFocus, (userProfile.professionalExperience || []).map((e: any) => String(e?.title || "")).filter(Boolean)).startsWith("Focused on ") ? `The work history does not contain that title, so never write it as a title held: open with "${focusOpener(careerFocus, (userProfile.professionalExperience || []).map((e: any) => String(e?.title || "")).filter(Boolean))}".` : `The work history contains that title, so the summary may open with it.`} Never open the summary with "Background in". Choose the outcomes from the roles that back that track first.
+` : ""}
 NEVER IN THE SUMMARY:
 - A job title the candidate has not held. The headline under the name carries the target role; the summary must lead with the HELD title closest to the posting, never the posting's title itself.
 - Employer names (they are already in the employment block below).
@@ -2756,6 +2764,7 @@ KEYWORD PLACEMENT STRATEGY (this decides whether the CV wins): distribute the se
 - PROJECTS and CERTIFICATIONS: use them to reinforce two to four high-value posting terms that do not fit naturally into the experience section. Never create a SOFT SKILLS section anywhere.
 Loading the TECHNICAL SKILLS section with posting terms while leaving the experience bullets generic is a failure of this rule.
 
+THE CV FITS TWO PAGES: the latest role keeps all its bullets; every other role keeps at most four; a role that ended more than five years ago or lasted under a year keeps at most three. Keep the bullets most related to this posting.
 BULLET FORMULA AND WEIGHTING: every bullet follows [strong action verb] + [hard or soft skill in context] + [what was built or changed] + [outcome], one to two lines, never a dense paragraph. The posting's term sits in the FIRST HALF of the bullet, where a recruiter's eye lands ("Designed AWS reference architectures for..."), never at the end of it. Put the most important posting terms in the FIRST ONE OR TWO bullets of the most recent and most relevant role; weight keyword integration heavily towards that role and keep older, less relevant roles lighter. Vary how a term appears across bullets (design, implementation, optimisation, automation, leadership) instead of repeating the same phrase, while keeping the posting's core term intact. If a term fits naturally in only one role, leave it there rather than forcing it everywhere. Outcomes come only from the profile's own figures, kept exactly as written; where the profile records no figure, express impact qualitatively ("reduced manual effort", "improved reliability") and never invent a number.
 
 PARTIAL EXPOSURE PHRASING: when the profile evidences only light exposure to a term the posting wants, phrase it accurately rather than dropping or inflating it - for example "Introduced Terraform to automate infrastructure for a pilot service". If the posting term has no basis in the profile at all, emphasise the closest truthful adjacent skill instead and say nothing about the missing one.
@@ -2777,7 +2786,7 @@ THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is th
 CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
 PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
 
-EDUCATION FORMAT: Each entry is degree plus recorded grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line. NEVER print graduation years, study dates, date ranges or "Class of 20XX" in EDUCATION. Dates remain in profile data for application forms only. Employment dates are unchanged.
+EDUCATION FORMAT: Each entry is degree plus recorded grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), then the institution followed by the GRADUATION YEAR ONLY on the next line ("University of Derby 2020"). Never a start date, a month, a study range or "Class of 20XX": a range beside full-time work reads as two full-time commitments at once, and the graduation year is what an ATS reads as the education date. A course still running shows "2025 - Present". The full dates stay in the profile for application forms. Employment dates are unchanged.
 
 GRADES ARE COPIED, NEVER DERIVED: A numeric grade (a GPA, a "3.8/4.0", a percentage) may appear ONLY if that exact figure is written in the profile's education record. Never convert a classification into a number: a Distinction is not "4.0", First Class Honours is not "3.7", and a 2:1 is not "3.3". If the record holds only a classification, write only the classification.
 
@@ -3415,7 +3424,7 @@ Use a figure only when it appears word for word in the candidate's profile. Neve
 6c. TARGET TITLE FIDELITY: Use the target job title EXACTLY as supplied. Never append the company name, "Careers", a location, or any text from the page title to it. Scraped page titles such as "GTM Strategy/Operations Associate | Datadog Careers" are cleaned before they reach you, so the supplied title is already the whole title - never add to it and never quote page furniture in the CV headline or in the cover letter's Re: line.
 6c. THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
 6c. CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
-7. EDUCATION FORMAT: degree plus recorded grade on one line, institution on the next. Never print education years, date ranges or "Class of 20XX". Keep education dates only in profile data for application forms. Employment dates remain unchanged.
+7. EDUCATION FORMAT: degree plus recorded grade on one line, then the institution and the graduation year only on the next ("University of Derby 2020"). Never a start date, a month or a study range; a course still running shows "2025 - Present". Full dates stay in the profile for application forms. Employment dates remain unchanged.
 8. OUTPUT HYGIENE: plain text only, no markdown, no asterisks, no bullet symbols other than "- " at bullet starts. No em dashes; use a plain hyphen.
 9. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
 10. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
@@ -3516,7 +3525,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
    - CERTIFICATIONS (only per the CERTIFICATIONS RULE below)
    - CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
-   - EDUCATION: each entry is degree plus recorded grade on one line and institution on the next. Never print graduation years, study dates, date ranges or "Class of 20XX". Dates remain saved for application forms. GRADES ARE COPIED, NEVER DERIVED: a numeric grade or GPA may appear only if that exact figure is written in the profile's education record; never convert a Distinction, First Class Honours or a 2:1 into a number.
+   - EDUCATION: each entry is degree plus recorded grade on one line, then the institution and the graduation year only on the next ("University of Derby 2020"). Never a start date, a month, a study range or "Class of 20XX"; a course still running shows "2025 - Present". Full dates remain saved for application forms. GRADES ARE COPIED, NEVER DERIVED: a numeric grade or GPA may appear only if that exact figure is written in the profile's education record; never convert a Distinction, First Class Honours or a 2:1 into a number.
    - NAME THE PRACTICE THE BULLET ALREADY DESCRIBES: when the posting asks for a practice that one of the candidate's own bullets already performs, name it in that bullet in natural English and change nothing else - a bullet provisioning cloud environments with Terraform may read "Provisioned AWS environments as code with Terraform", keeping the tool, scope, figures and outcome exactly as recorded. Never name a practice a bullet does not perform and never add a tool.
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
@@ -4842,6 +4851,7 @@ ${
       currentTitle: String(currentRole?.title || "").trim(),
       field: String((userProfile as any).field || (userProfile as any).profession || (userProfile as any).discipline || "").trim(),
       targetTitle: jobTitle || "",
+      careerFocus,
       requirements: summaryRequirements(jdKeywords.allKeywords, description),
       experienceBullets: experienceBulletsOf(result.tailoredResume || ""),
       outcomeBullets: profileRoles.flatMap((role: any) =>
@@ -4890,7 +4900,7 @@ ${
       rebuilt: summaryDecision.rebuilt,
       violations: summaryDecision.violations,
       meaning:
-        "Two sentences, 150-220 characters: the candidate's field in its own words, two capabilities the experience evidences, then two figures joined with a semicolon. Never a job title, employer, place name or total years.",
+        "Two sentences, 150-220 characters: the candidate's field in its own words (or the career focus when one is set, as a title only when held), two capabilities the experience evidences, then two figures joined with a semicolon. Never a job title, employer, place name or total years.",
     };
 
     if (result.tailoredResume) {
@@ -5262,7 +5272,13 @@ ${
     // posting's name ("monthly close" becomes "month-end close").
     const renamed = renameToPostingWords(polished.cv, jdKeywords.allKeywords);
     if (renamed.renamed.length) console.log(`[KEYWORDS AT WORK] renamed to the posting's words: ${renamed.renamed.join(", ")}`);
-    const atWork = keywordsAtWork(renamed.cv, {
+    // Two pages: the latest role keeps every bullet, other roles at most four,
+    // roles that ended over five years ago or lasted under a year at most three,
+    // dropping the bullets least related to the posting first. Before keyword
+    // placement, so the posting's terms land in bullets that stay.
+    const condensed = condenseEarlierRoles(renamed.cv, { asked: [...requiredTerms, ...jdKeywords.allKeywords] });
+    if (condensed.dropped.length) console.log(`[TWO PAGES] earlier roles condensed, ${condensed.dropped.length} bullet(s) left out`);
+    const atWork = keywordsAtWork(condensed.cv, {
       must: requiredTerms,
       asked: jdKeywords.allKeywords,
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
@@ -5627,7 +5643,8 @@ ${
         education: (Array.isArray(userProfile.education) ? userProfile.education : []).map((edu: any) => ({
           degree: edu?.degree || "",
           school: edu?.school || edu?.institution || "",
-          dates: "",
+          // Graduation year only; a course still running shows "2025 - Present".
+          dates: educationDisplayDate(edu),
           gpa: edu?.gpa || "",
         })),
         skills: {

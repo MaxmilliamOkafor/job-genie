@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
+import { educationDisplayDate, yearOnlyText } from "../_shared/educationDates.ts";
 import { removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseCoverLetterStyle, signatureDimensions, coverLetterClosingSpacing, type CoverLetterStyle } from "./coverLetterStyle.ts";
@@ -1043,7 +1044,7 @@ serve(async (req) => {
           bullets: p.bullets || [],
         })),
         education: (sanitizedData.education || []).map((e) => ({
-          degree: e.degree, school: e.school, dates: e.dates, gpa: e.gpa,
+          degree: e.degree, school: e.school, dates: yearOnlyText(e.dates || ""), gpa: e.gpa,
         })),
         skills: sanitizedData.skills,
         certifications: sanitizedData.certifications || [],
@@ -1153,8 +1154,8 @@ function profileToResumeData(profile: Record<string, unknown>): ResumeData {
     ? (profile.education as Array<Record<string, unknown>>).map((edu) => ({
         degree: (edu.degree as string) || "",
         school: (edu.institution as string) || (edu.school as string) || "",
-        // Education dates are stored for application forms, never printed on CVs.
-        dates: "",
+        // Graduation year only ("2020"); a course still running shows "2025 - Present".
+        dates: educationDisplayDate(edu),
         gpa: (edu.gpa as string) || "",
       }))
     : [];
@@ -1255,7 +1256,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?
         })),
         projects,
         education: (structuredCv.education || []).map((edu) => ({
-          degree: edu.degree, school: edu.school, dates: edu.dates, gpa: edu.gpa,
+          degree: edu.degree, school: edu.school, dates: yearOnlyText(edu.dates || ""), gpa: edu.gpa,
         })),
         skills: structuredCv.skills,
         certifications: structuredCv.certifications || [],
@@ -1750,25 +1751,39 @@ async function handleRawContentRequest(body: {
       }
 
       if (section.type.includes("EDUCATION")) {
+        // Each entry shows its graduation year only. A date on its own line,
+        // or at the end of the institution line ("University of Derby 2020"),
+        // becomes that entry's date; a study range becomes its last year.
         const edus: EducationEntry[] = [];
-        const content = section.content.filter((line) => {
-          const text = line.trim();
-          return !/^(?:class\s+of\s+)?(?:19|20)\d{2}(?:\s*[-–—]\s*(?:19|20)\d{2})?$/i.test(text) &&
-            !/^(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:19|20)\d{2}(?:\s*[-–—]\s*(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:19|20)\d{2})?$/i.test(text);
-        });
+        const DATE_ONLY = /^(?:class\s+of\s+)?(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(?:19|20)\d{2}|Present|Current))?$/i;
+        const TRAILING_DATE = /\s+((?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(?:19|20)\d{2}|Present|Current))?)\s*$/i;
+        const split = (line: string): { text: string; dates: string } => {
+          const m = TRAILING_DATE.exec(line);
+          return m ? { text: line.slice(0, m.index).replace(/[\s,|]+$/, ""), dates: yearOnlyText(m[1].replace(/^class\s+of\s+/i, "")) } : { text: line, dates: "" };
+        };
+        const content = section.content.map((line) => line.trim()).filter(Boolean);
         for (let i = 0; i < content.length; i++) {
           const line = content[i];
+          if (DATE_ONLY.test(line)) {
+            const last = edus[edus.length - 1];
+            if (last && !last.dates) last.dates = yearOnlyText(line.replace(/^class\s+of\s+/i, ""));
+            continue;
+          }
           if (line.includes("|")) {
             const parts = line.split("|").map((p) => p.trim());
+            const tail = split(parts.slice(1).join(" | "));
             edus.push({
               degree: parts[0] || "",
-              school: parts.slice(1).join(" | "),
-              dates: "",
+              school: tail.text,
+              dates: tail.dates,
             });
           } else {
-            const school = content[i + 1] && !content[i + 1].includes("|") ? content[i + 1] : "";
-            edus.push({ degree: line, school, dates: "" });
-            if (school) i++;
+            const head = split(line);
+            const nextLine = content[i + 1] || "";
+            const takesSchool = !!nextLine && !nextLine.includes("|") && !DATE_ONLY.test(nextLine);
+            const school = takesSchool ? split(nextLine) : { text: "", dates: "" };
+            edus.push({ degree: head.text, school: school.text, dates: school.dates || head.dates });
+            if (takesSchool) i++;
           }
         }
         norm.education = edus;

@@ -17,12 +17,14 @@ const EDUCATION = [
 ];
 
 describe('education section enforcement', () => {
-  it('restores a missing section without printing study dates', () => {
+  // 13 Nov brief: education shows the graduation year only, never a start date or range.
+  it('restores a missing section with graduation years only', () => {
     const result = enforceEducationSection('NAME\n\nPROFESSIONAL EXPERIENCE\nRole', EDUCATION);
     expect(result.restored).toBe(true);
-    expect(result.text).toContain('EDUCATION\nMSc Artificial Intelligence and Machine Learning\nImperial College London');
-    expect(result.text).not.toContain('2020');
-    expect(result.text).not.toContain('2021');
+    expect(result.text).toContain('EDUCATION\nMSc Artificial Intelligence and Machine Learning\nImperial College London 2021');
+    expect(result.text).toContain('University of Derby 2020');
+    expect(result.text).not.toContain('2016');
+    expect(result.text).not.toContain('August 2020');
   });
 
   it('replaces model-written dated education while preserving employment dates elsewhere', () => {

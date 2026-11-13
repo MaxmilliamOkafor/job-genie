@@ -58,6 +58,7 @@ import {
 // extension payload and the chips below stay in sync.
 import { WORK_AUTH_OPTIONS } from '@/lib/workAuthCountries';
 import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
+import { educationDisplayDate } from '@/lib/educationDates';
 
 
 // Default ATS answers that pass knockout questions
@@ -2287,36 +2288,37 @@ const Profile = () => {
                     />
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">From (year)</Label>
+                        <Label className="text-xs text-muted-foreground">Start date</Label>
                         <Input
                           value={edu.start_year || ''}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            // Kept as typed ("August 2016"): application forms ask for it.
+                            const raw = e.target.value.slice(0, 30);
                             const edus = [...(localProfile.education || [])];
                             edus[eduIndex] = { ...edus[eduIndex], start_year: raw };
                             updateLocalField('education', edus);
                           }}
-                          placeholder="2016"
-                          inputMode="numeric"
-                          maxLength={4}
-                          className="w-24"
+                          placeholder="August 2016"
+                          maxLength={30}
+                          className="w-36"
+                          aria-label="Start date"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">To (year)</Label>
+                        <Label className="text-xs text-muted-foreground">Graduation date</Label>
                         <Input
                           value={edu.end_year === 'Present' ? 'Present' : (edu.end_year || '')}
                           disabled={edu.end_year === 'Present'}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            const raw = e.target.value.slice(0, 30);
                             const edus = [...(localProfile.education || [])];
                             edus[eduIndex] = { ...edus[eduIndex], end_year: raw };
                             updateLocalField('education', edus);
                           }}
-                          placeholder="2020"
-                          inputMode="numeric"
-                          maxLength={4}
-                          className="w-24"
+                          placeholder="July 2020"
+                          maxLength={30}
+                          className="w-36"
+                          aria-label="Graduation date"
                         />
                       </div>
                       <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
@@ -2341,7 +2343,7 @@ const Profile = () => {
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Workday requires both years - saving is blocked until they are filled.
+                          Application forms such as Workday ask for both dates, so both are kept. Your CV and this page show the graduation year only.
                         </p>
                       );
                     })()}
@@ -2367,21 +2369,19 @@ const Profile = () => {
                         className="w-32"
                       />
                       <p className="text-xs text-muted-foreground self-center">
-                        Dates are hidden from CV to prevent age bias
+                        CVs show the graduation year only
                       </p>
                     </div>
                   </div>
                 ) : (
                   <>
                     <h3 className="font-semibold">{edu.degree}</h3>
-                    <p className="text-muted-foreground">{edu.institution}</p>
+                    {/* Graduation year only ("University of Derby, 2020"); stored dates are unchanged. */}
+                    <p className="text-muted-foreground" data-testid="education-line">
+                      {[edu.institution || edu.school, educationDisplayDate(edu)].filter(Boolean).join(', ')}
+                    </p>
                     {edu.field_of_study && (
                       <p className="text-sm text-muted-foreground">{edu.field_of_study}</p>
-                    )}
-                    {(edu.start_year || edu.end_year) && (
-                      <p className="text-sm text-muted-foreground">
-                        {[edu.start_year, edu.end_year].filter(Boolean).join(' - ')}
-                      </p>
                     )}
                     {edu.description && (
                       <p className="text-sm text-muted-foreground mt-1">{edu.description}</p>

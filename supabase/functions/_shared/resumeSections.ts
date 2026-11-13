@@ -1,3 +1,5 @@
+import { educationDisplayDate, educationYearOnly } from "./educationDates.ts";
+
 const SECTION_HEADING = /^\s*[A-Z][A-Z0-9 &/-]{3,}\s*$/;
 
 const educationLines = (education: any[]): string[] => {
@@ -5,17 +7,22 @@ const educationLines = (education: any[]): string[] => {
   for (const row of education) {
     const degree = String(row?.degree || row?.qualification || "").trim();
     const institution = String(row?.institution || row?.school || "").trim();
-    if (degree) lines.push(degree);
-    if (institution && institution.toLowerCase() !== degree.toLowerCase()) lines.push(institution);
+    // The graduation year only ("University of Derby 2020"); a course still
+    // running shows "2025 - Present". Never a start date or a study range.
+    const when = educationDisplayDate(row);
+    const hasInstitution = !!institution && institution.toLowerCase() !== degree.toLowerCase();
+    if (degree) lines.push(hasInstitution || !when ? degree : `${degree} ${when}`);
+    if (hasInstitution) lines.push(when ? `${institution} ${when}` : institution);
     if (degree || institution) lines.push("");
   }
   while (lines.length && !lines[lines.length - 1]) lines.pop();
   return lines;
 };
 
-/** Rebuilds education from saved qualifications, deliberately excluding dates. */
+/** Rebuilds education from saved qualifications, showing each graduation year only. */
 export function enforceEducationSection(resume: string, education: any[]): { text: string; restored: boolean } {
-  if (!resume || !Array.isArray(education) || education.length === 0) return { text: resume, restored: false };
+  if (!resume) return { text: resume, restored: false };
+  if (!Array.isArray(education) || education.length === 0) return { text: educationYearOnly(resume), restored: false };
   const body = educationLines(education);
   if (!body.length) return { text: resume, restored: false };
   const lines = resume.split("\n");

@@ -69,7 +69,10 @@ describe('the posting\'s keywords at work, not just listed', () => {
 
   it('runs at the final step, before monetary exclusion', () => {
     const src = readFileSync('supabase/functions/tailor-application/index.ts', 'utf8');
-    const at = src.indexOf('keywordsAtWork(renamed.cv');
+    // The two-page condensing runs between renaming and keyword placement.
+    const at = src.indexOf('keywordsAtWork(condensed.cv');
+    expect(src.indexOf('condenseEarlierRoles(renamed.cv')).toBeGreaterThan(src.indexOf('renameToPostingWords(polished.cv'));
+    expect(at).toBeGreaterThan(src.indexOf('condenseEarlierRoles(renamed.cv'));
     expect(at).toBeGreaterThan(src.indexOf('polishTailoredDocuments('));
     expect(src.indexOf('renameToPostingWords(polished.cv')).toBeGreaterThan(src.indexOf('polishTailoredDocuments('));
     expect(src.indexOf('removeMonetaryClaims(finalCv.cv)')).toBeGreaterThan(at);
