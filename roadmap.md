@@ -6,6 +6,7 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
+- [x] Extension sync brief (13 Nov, c90da15): no function changes on the branch; section I (careerFocus leads the summary, never "Background in" with a focus, focus title only when held; education graduation year only; two-page bullet limits) and section E (Profile shows graduation year, Start date / Graduation date fields keep both stored dates); tests; deploy.
 - [x] Extension sync brief (12 Nov, 3fc7434): no function changes on the branch; section H Stripe Dublin lessons (no ability grafts, brackets at phrase ends, bare cities, no home relocation or US authorisation abroad, page-title wrapper, one entry per language, word-named tools, skill phrases, needs from the ad, no repeated "At" opener, language line); tests; deploy.
 - [x] Extension sync brief (11 Nov, e486e9d): no function changes since 500786a; user_integration_keys table for LeadOcean and Flow keys; Settings Connections card (ends in XXXX, Remove); privacy tests.
 - [x] Extension sync brief (10 Nov): sync functions from codex/professional-ui-ats-autofill 500786a; prompt rules A-G (self-talk ban, keywords at work, human skills lines, whole headline, requirement exclusions, letter rules, stable output); "What changed" box; LeadOcean contact label; Settings keys note; UKG/Phenom/Eightfold/ClearCompany job sites; regression tests; deploy tailor-application and generate-pdf.
@@ -16,7 +17,7 @@
 - [x] Apply the four uploaded changes: prompt figures, saved cover letter layout/signature, latest documents, and checked letter wording; test and deploy.
 - [x] 15. Apply uploaded required-qualification, Professional skills, invisible-character, document-property and letter-joining rules; test all and deploy both functions.
 - [x] 9. Enforce grammatical, evidence-led summaries; ignore rank words when matching held titles, fall back to the current role, and reject bias-prone opening claims.
-- [ ] 10. Keep education dates in profile data but remove them from tailored CVs; restore a missing EDUCATION section before responding.
+- [x] 10. Keep education dates in profile data; tailored CVs show the graduation year only (replaced by the 13 Nov brief); restore a missing EDUCATION section before responding.
 - [x] 11. Confirm stale-tab skill merging and newest-first profile display remain intact.
 - [ ] 12. Exclude screening criteria from extracted requirements while preserving canonical 12-20 requirement lists.
 - [ ] 13. Enforce one labelled TECHNICAL SKILLS line per category with no more than ten entries.
