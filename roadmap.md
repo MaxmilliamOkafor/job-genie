@@ -1,6 +1,7 @@
 # Job Genie alignment roadmap
 
 ## Done
+- [x] Live feed brief (13 Nov): 342 sources (starter list, Job search companies, CV employers); whole boards, SmartRecruiters offsets; 6 at a time, 60 per run; places by country/city/remote region; title-first phrase keywords; widenings with counts; New since last visit; tests. Pending the user's go-ahead: deploy ingest-jobs and move its schedule from every 5 to every 15 minutes.
 - [x] Rechecked the five reuploaded changes; added missing plain-wording safeguards and single-retry dropping, 391 tests passed, tailor-application deployed and signed-in generation verified.
 - [x] 1. Four views (Apply / Documents / Follow-up / Settings) with navy + violet nav + teal actions, 15px body, 44px controls, legacy route redirects.
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.

@@ -10,6 +10,8 @@
  * user's own rows already say.
  */
 
+import { CITY_COUNTRY, COUNTRY_ALIASES } from '../../supabase/functions/_shared/jobPlace';
+
 const WRAPPER = /^\s*(?:job\s+)?application\s+for\s+(?:the\s+)?/i;
 const SITE_WORDS =
   'careers?|jobs?|job board|jobs board|greenhouse|lever|ashby|ashbyhq|workday|smartrecruiters|workable|recruitee|teamtailor|personio|bamboohr|hiring|join us|apply';
@@ -55,39 +57,8 @@ export function unwrapJobTitle(rawTitle: string, rawCompany = ''): { title: stri
 
 // ---------------------------------------------------------------- places
 
-/** Cities whose country is not in doubt for this user's searches. */
-export const CITY_COUNTRY: Record<string, string> = {
-  dublin: 'Ireland', cork: 'Ireland', galway: 'Ireland', limerick: 'Ireland', waterford: 'Ireland',
-  london: 'United Kingdom', manchester: 'United Kingdom', edinburgh: 'United Kingdom', glasgow: 'United Kingdom',
-  belfast: 'United Kingdom', birmingham: 'United Kingdom', bristol: 'United Kingdom', leeds: 'United Kingdom',
-  paris: 'France', lyon: 'France', berlin: 'Germany', munich: 'Germany', hamburg: 'Germany', frankfurt: 'Germany',
-  amsterdam: 'Netherlands', rotterdam: 'Netherlands', madrid: 'Spain', barcelona: 'Spain', lisbon: 'Portugal',
-  porto: 'Portugal', braga: 'Portugal', warsaw: 'Poland', krakow: 'Poland', zurich: 'Switzerland', geneva: 'Switzerland',
-  stockholm: 'Sweden', copenhagen: 'Denmark', oslo: 'Norway', helsinki: 'Finland', vienna: 'Austria',
-  prague: 'Czechia', brussels: 'Belgium', milan: 'Italy', rome: 'Italy', budapest: 'Hungary',
-  'new york': 'United States', 'san francisco': 'United States', seattle: 'United States', austin: 'United States',
-  boston: 'United States', chicago: 'United States', 'los angeles': 'United States',
-  toronto: 'Canada', vancouver: 'Canada', montreal: 'Canada', sydney: 'Australia', melbourne: 'Australia',
-  singapore: 'Singapore', bangalore: 'India', bengaluru: 'India', tokyo: 'Japan', 'tel aviv': 'Israel',
-  'sao paulo': 'Brazil', 'são paulo': 'Brazil',
-};
-
-/** Country words and codes, mapped to one name. "CA" is left out: California or Canada. */
-const COUNTRY_ALIASES: Record<string, string> = {
-  ie: 'Ireland', ireland: 'Ireland', 'republic of ireland': 'Ireland', roi: 'Ireland',
-  uk: 'United Kingdom', gb: 'United Kingdom', 'united kingdom': 'United Kingdom', 'great britain': 'United Kingdom',
-  england: 'United Kingdom', scotland: 'United Kingdom', wales: 'United Kingdom', 'northern ireland': 'United Kingdom',
-  us: 'United States', usa: 'United States', 'united states': 'United States', 'united states of america': 'United States',
-  de: 'Germany', germany: 'Germany', fr: 'France', france: 'France', nl: 'Netherlands', netherlands: 'Netherlands',
-  es: 'Spain', spain: 'Spain', pt: 'Portugal', portugal: 'Portugal', pl: 'Poland', poland: 'Poland',
-  ch: 'Switzerland', switzerland: 'Switzerland', se: 'Sweden', sweden: 'Sweden', dk: 'Denmark', denmark: 'Denmark',
-  no: 'Norway', norway: 'Norway', fi: 'Finland', finland: 'Finland', at: 'Austria', austria: 'Austria',
-  be: 'Belgium', belgium: 'Belgium', it: 'Italy', italy: 'Italy', hu: 'Hungary', hungary: 'Hungary',
-  cz: 'Czechia', czechia: 'Czechia', 'czech republic': 'Czechia', canada: 'Canada', au: 'Australia', australia: 'Australia',
-  sg: 'Singapore', singapore: 'Singapore', in: 'India', india: 'India', jp: 'Japan', japan: 'Japan',
-  il: 'Israel', israel: 'Israel', br: 'Brazil', brazil: 'Brazil', mx: 'Mexico', mexico: 'Mexico',
-  kr: 'South Korea', 'south korea': 'South Korea',
-};
+// Place tables are shared with the job import so both read places the same way.
+export { CITY_COUNTRY };
 
 /** The country a word or code names, or null when it names none (or is ambiguous). */
 export function countryOf(value: string): string | null {

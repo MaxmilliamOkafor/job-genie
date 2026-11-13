@@ -504,7 +504,9 @@ export type Database = {
       }
       job_pool: {
         Row: {
+          city: string | null
           company: string
+          country_code: string | null
           dedupe_key: string | null
           department: string | null
           description: string | null
@@ -524,6 +526,7 @@ export type Database = {
           posted_at: string
           posted_at_known: boolean
           provider: string
+          remote_region: string | null
           requisition_id: string | null
           resolved_url: string | null
           risk_flags: string[]
@@ -537,7 +540,9 @@ export type Database = {
           workplace_type: string | null
         }
         Insert: {
+          city?: string | null
           company: string
+          country_code?: string | null
           dedupe_key?: string | null
           department?: string | null
           description?: string | null
@@ -557,6 +562,7 @@ export type Database = {
           posted_at?: string
           posted_at_known?: boolean
           provider: string
+          remote_region?: string | null
           requisition_id?: string | null
           resolved_url?: string | null
           risk_flags?: string[]
@@ -570,7 +576,9 @@ export type Database = {
           workplace_type?: string | null
         }
         Update: {
+          city?: string | null
           company?: string
+          country_code?: string | null
           dedupe_key?: string | null
           department?: string | null
           description?: string | null
@@ -590,6 +598,7 @@ export type Database = {
           posted_at?: string
           posted_at_known?: boolean
           provider?: string
+          remote_region?: string | null
           requisition_id?: string | null
           resolved_url?: string | null
           risk_flags?: string[]
@@ -1235,9 +1244,21 @@ export type Database = {
     }
     Functions: {
       job_pool_mark_canonical: { Args: never; Returns: number }
+      jp_add_job_source: {
+        Args: { p_company: string; p_provider: string; p_token: string }
+        Returns: undefined
+      }
+      jp_board_source: {
+        Args: { p_url: string }
+        Returns: {
+          provider: string
+          token: string
+        }[]
+      }
       jp_norm_location: { Args: { v: string }; Returns: string }
       jp_norm_text: { Args: { v: string }; Returns: string }
       jp_norm_title: { Args: { v: string }; Returns: string }
+      jp_phrase_query: { Args: { p_term: string }; Returns: unknown }
       jp_requisition_id: {
         Args: { p_external_id: string; p_url: string }
         Returns: string
@@ -1248,13 +1269,16 @@ export type Database = {
       search_job_pool: {
         Args: {
           p_company?: string
+          p_country_code?: string
           p_employment?: string[]
           p_include_unverified?: boolean
           p_limit?: number
           p_location_terms?: string[]
           p_max_age_hours?: number
           p_offset?: number
+          p_remote_regions?: string[]
           p_require_known_date?: boolean
+          p_seen_after?: string
           p_seniority?: string[]
           p_skills?: string[]
           p_sort?: string
@@ -1262,7 +1286,9 @@ export type Database = {
           p_workplace?: string[]
         }
         Returns: {
+          city: string
           company: string
+          country_code: string
           department: string
           description: string
           duplicate_count: number
@@ -1275,16 +1301,19 @@ export type Database = {
           link_note: string
           link_status: string
           location: string
+          new_count: number
           posted_at: string
           posted_at_known: boolean
           provider: string
           relevance: number
+          remote_region: string
           requisition_id: string
           resolved_url: string
           risk_flags: string[]
           salary: string
           seniority: string
           title: string
+          title_match: boolean
           total_count: number
           url: string
           workplace_type: string

@@ -86,7 +86,8 @@ import {
   type JobSearchFilters,
 } from '@/lib/jobSearch';
 import { tidyJobForSave } from '@/lib/jobRecords';
-import { plainDescription, searchCountry } from '@/lib/liveFeedFilter';
+import { plainDescription } from '@/lib/liveFeedFilter';
+import { isNewSince, previousVisit, writeLastVisit } from '@/lib/lastVisit';
 import { profileSkillNames } from '@/lib/profileMatch';
 
 // Career boards hand us HTML. plainDescription shows the employer's own words
@@ -152,10 +153,15 @@ function JobRow({
   job,
   selected,
   onSelect,
+  placeLabel,
+  isNew,
 }: {
   job: SearchedJob;
   selected: boolean;
   onSelect: () => void;
+  /** "Dublin", "Ireland" or "Remote, EMEA" when a place was searched. */
+  placeLabel?: string | null;
+  isNew?: boolean;
 }) {
   return (
     <button
@@ -170,7 +176,14 @@ function JobRow({
             : 'border-dashed border-border hover:border-primary/50'
       }`}
     >
-      <h3 className="text-lg font-semibold leading-snug text-foreground md:text-xl">{job.title}</h3>
+      <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold leading-snug text-foreground md:text-xl">
+        <span>{job.title}</span>
+        {isNew && (
+          <Badge variant="secondary" className="text-xs font-medium">
+            New
+          </Badge>
+        )}
+      </h3>
 
       <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-base text-muted-foreground">
         <span className="flex items-center gap-1.5">
@@ -179,7 +192,11 @@ function JobRow({
         </span>
         <span className="flex items-center gap-1.5">
           <MapPin className="h-4 w-4" />
-          {tidyLocation(job.location)}
+          {placeLabel ? (
+            <span title={tidyLocation(job.location)}>{placeLabel}</span>
+          ) : (
+            tidyLocation(job.location)
+          )}
         </span>
         {job.salary && <span>{job.salary}</span>}
       </p>
@@ -402,6 +419,23 @@ const ExplorePage = () => {
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
   const isSaved = (job: SearchedJob) => savedUrls.has(job.resolved_url ?? job.url);
 
+  // The previous visit is read once; this visit is recorded when the page is left,
+  // so "New" badges stay while the list is open.
+  const [lastVisit, setLastVisit] = useState<string | null>(null);
+  const [visitRead, setVisitRead] = useState(false);
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    if (!userId) return;
+    setLastVisit(previousVisit(userId));
+    setVisitRead(true);
+    const record = () => writeLastVisit(userId);
+    window.addEventListener('pagehide', record);
+    return () => {
+      window.removeEventListener('pagehide', record);
+      record();
+    };
+  }, [userId]);
+
   useEffect(() => {
     saveFilters(filters);
   }, [filters]);
@@ -452,12 +486,23 @@ const ExplorePage = () => {
     refreshNow,
     isRefreshing,
     capped,
+    newCount,
+    widenings,
+    weekCount,
+    labelFor,
   } = useJobSearch(filters, {
     // Saved preferences are applied before the first search runs, so an
     // unfiltered page can never arrive late and replace the filtered one.
-    enabled: !prefsLoading && prefsApplied,
-    country: searchCountry(profile?.country, filters.location),
+    enabled: !prefsLoading && prefsApplied && (visitRead || !user),
+    profileCountry: profile?.country ?? null,
+    seenAfter: lastVisit,
   });
+
+  const applyWidening = (next: JobSearchFilters) => {
+    setFilters(next);
+    setQueryDraft(next.query);
+    setLocationDraft(next.location);
+  };
 
   const orderedJobs = useMemo(
     () => (spread && filters.sort === 'newest' ? spreadByEmployer(jobs) : jobs),
@@ -524,6 +569,14 @@ const ExplorePage = () => {
   const handleRefresh = async () => {
     try {
       const result = await refreshNow();
+      if (result?.skipped) {
+        toast.info(
+          result.reason === 'running'
+            ? 'A refresh is already running. New vacancies appear here when it finishes.'
+            : 'Refreshing is paused after repeated failures.',
+        );
+        return;
+      }
       const failed = result?.sources_failed ?? 0;
       if (failed > 0) {
         toast.warning(`Refreshed, but ${failed} career ${failed === 1 ? 'board' : 'boards'} failed.`);
@@ -1171,9 +1224,28 @@ const ExplorePage = () => {
           {!error && isStrictWindow(filters.posted) && (
             <span>Vacancies without a genuine posting date are left out of this date range.</span>
           )}
+          {!isLoading && !error && newCount > 0 && (
+            <span className="font-medium text-primary">
+              {newCount.toLocaleString()} new since your last visit
+            </span>
+          )}
         </div>
 
-        {!error && concentration && concentration.share > 0.35 && (
+        {!isLoading && !error && total > 0 && weekCount && weekCount.count > total && (
+          <p className="mb-4 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+            {weekCount.count.toLocaleString()}
+            {weekCount.capped ? '+' : ''} matching vacancies arrived in the last 7 days.{' '}
+            <button
+              type="button"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+              onClick={() => applyWidening({ ...filters, posted: '168' })}
+            >
+              Show the last 7 days
+            </button>
+          </p>
+        )}
+
+        {!error && concentration && jobs.length >= 5 && concentration.share > 0.35 && (
           <p className="mb-4 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
             {concentration.company} accounts for {Math.round(concentration.share * 100)}% of this page.{' '}
             {spread
@@ -1205,10 +1277,25 @@ const ExplorePage = () => {
               <Card>
                 <CardContent className="p-8 text-center">
                   <p className="text-base font-medium">No vacancies match this search</p>
-                  <p className="mt-1.5 text-base text-muted-foreground">
-                    Try a wider date range or clear a filter. There simply are no matches in the sources we cover.
-                  </p>
-                  <Button variant="outline" className="mt-4" onClick={clearAll}>
+                  {widenings.length > 0 ? (
+                    <>
+                      <p className="mt-1.5 text-base text-muted-foreground">
+                        Nothing in the sources we cover matches exactly. These wider searches do have vacancies:
+                      </p>
+                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                        {widenings.map((w) => (
+                          <Button key={w.widening.kind} variant="outline" onClick={() => applyWidening(w.widening.filters)}>
+                            {w.widening.label(w.count, w.capped)}
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-1.5 text-base text-muted-foreground">
+                      Try a wider date range or clear a filter. There simply are no matches in the sources we cover.
+                    </p>
+                  )}
+                  <Button variant="ghost" className="mt-4" onClick={clearAll}>
                     Clear filters
                   </Button>
                 </CardContent>
@@ -1220,6 +1307,8 @@ const ExplorePage = () => {
                 <JobRow
                   key={job.id}
                   job={job}
+                  placeLabel={labelFor(job)}
+                  isNew={isNewSince(job.first_seen_at, lastVisit)}
                   selected={selected?.id === job.id}
                   onSelect={() => {
                     setSelectedId(job.id);

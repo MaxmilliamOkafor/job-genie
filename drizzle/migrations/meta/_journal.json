@@ -22,6 +22,13 @@
       "when": 1794408736685,
       "tag": "0002_user_integration_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794610343310,
+      "tag": "0003_live_feed_places_phrases_sources",
+      "breakpoints": true
     }
   ]
 }

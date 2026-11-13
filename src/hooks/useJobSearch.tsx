@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  expandQuery,
-  locationTerms,
-  postedHours,
-  isStrictWindow,
-  type JobSearchFilters,
-} from '@/lib/jobSearch';
-import { matchesLiveFeedSearch, titleMatchesSearch, type LiveFeedCheck } from '@/lib/liveFeedFilter';
+import { type JobSearchFilters } from '@/lib/jobSearch';
+import { matchesLiveFeedSearch, resultPlaceLabel, titleMatchesSearch } from '@/lib/liveFeedFilter';
+import { planSearch, weekNoteFor, wideningsFor, type SearchArgs, type Widening } from '@/lib/feedSearch';
+import { isNewSince } from '@/lib/lastVisit';
 
 export interface SearchedJob {
   id: string;
@@ -36,6 +32,11 @@ export interface SearchedJob {
   duplicate_count: number;
   relevance: number;
   total_count: number;
+  country_code?: string | null;
+  city?: string | null;
+  remote_region?: string | null;
+  title_match?: boolean;
+  new_count?: number;
 }
 
 export interface SourceHealth {
@@ -74,13 +75,32 @@ function byNewest(a: SearchedJob, b: SearchedJob): number {
 export interface JobSearchOptions {
   /** Hold the first search until saved preferences are applied, so an unfiltered page never shows. */
   enabled?: boolean;
-  /** The user's country, for remote vacancies that state a region. */
-  country?: string;
+  /** The profile's country, used when the searched place does not name one. */
+  profileCountry?: string | null;
+  /** The previous visit, for "new since your last visit". */
+  seenAfter?: string | null;
+}
+
+export interface RefreshResult {
+  skipped?: boolean;
+  reason?: string;
+  message?: string;
+  sources_polled?: number;
+  jobs_inserted?: number;
+  sources_failed?: number;
+  errors?: string[];
+}
+
+export interface OfferedWidening {
+  widening: Widening;
+  count: number;
+  capped: boolean;
 }
 
 export function useJobSearch(filters: JobSearchFilters, options: JobSearchOptions = {}) {
   const enabled = options.enabled !== false;
-  const country = options.country ?? '';
+  const profileCountry = options.profileCountry ?? null;
+  const seenAfter = options.seenAfter ?? null;
   const [jobs, setJobs] = useState<SearchedJob[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,45 +131,20 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
     };
   }, []);
 
-  const args = useMemo(() => {
-    const hours = postedHours(filters.posted);
-    return {
-      p_terms: expandQuery(filters.query),
-      p_skills: filters.skills,
-      p_location_terms: locationTerms(filters.location, filters.includeNearby),
-      p_company: filters.company.trim(),
-      p_workplace: filters.workplace,
-      p_seniority: filters.seniority,
-      p_employment: filters.employment,
-      p_max_age_hours: hours,
-      // Undated listings are excluded only from the strict freshness windows.
-      p_require_known_date: isStrictWindow(filters.posted),
-      p_include_unverified: filters.includeUnverified,
-      p_sort: filters.sort,
-    };
-  }, [filters]);
+  const plan = useMemo(() => planSearch(filters, profileCountry), [filters, profileCountry]);
+  const { args, check, remoteArgs } = plan;
+  const [newCount, setNewCount] = useState(0);
+  const [widenings, setWidenings] = useState<OfferedWidening[]>([]);
+  const [weekCount, setWeekCount] = useState<{ count: number; capped: boolean } | null>(null);
 
-  // A keyword or a place means the results are checked here (phrase in the
-  // title or description, place in the vacancy's location, remote only when its
-  // region includes the user's country) and the count is taken after that check.
-  const check = useMemo<LiveFeedCheck | null>(() => {
-    if (!filters.query.trim() && !filters.location.trim()) return null;
-    return {
-      terms: args.p_terms,
-      locationTerms: args.p_location_terms,
-      workplace: filters.workplace,
-      country,
-    };
-  }, [args, filters.query, filters.location, filters.workplace, country]);
-
-  const argsKey = JSON.stringify({ args, check });
+  const argsKey = JSON.stringify({ args, check, remoteArgs, seenAfter });
   const [capped, setCapped] = useState(false);
   const checkedRef = useRef<{ key: string; list: SearchedJob[] } | null>(null);
   // Only the newest search may write results: a slower, older response (such as
   // the unfiltered first load) is dropped instead of replacing the filtered page.
   const seqRef = useRef(0);
 
-  const fetchCandidates = useCallback(async (rpcArgs: typeof args) => {
+  const fetchCandidates = useCallback(async (rpcArgs: SearchArgs) => {
     const first = await supabase.rpc('search_job_pool', { ...rpcArgs, p_limit: BATCH, p_offset: 0 });
     if (first.error) throw first.error;
     const rows = (first.data ?? []) as SearchedJob[];
@@ -171,11 +166,9 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
       if (!check) return;
       let list = checkedRef.current?.key === argsKey ? checkedRef.current.list : null;
       if (!list) {
-        const remoteAllowed = filters.workplace.length === 0 || filters.workplace.includes('Remote');
         const lookups = [fetchCandidates(args)];
-        if (args.p_location_terms.length && remoteAllowed && country) {
-          lookups.push(fetchCandidates({ ...args, p_location_terms: [], p_workplace: ['Remote'] }));
-        }
+        // Remote work whose region covers the searched country ("Remote, EMEA" for Dublin).
+        if (remoteArgs) lookups.push(fetchCandidates(remoteArgs));
         const results = await Promise.all(lookups);
         const seen = new Set<string>();
         const merged: SearchedJob[] = [];
@@ -198,6 +191,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
         checkedRef.current = { key: argsKey, list };
         setCapped(results.some((r) => r.capped));
       }
+      setNewCount(list.filter((j) => isNewSince(j.first_seen_at, seenAfter)).length);
       const max = Math.max(0, Math.ceil(list.length / PAGE_SIZE) - 1);
       const pageNo = Math.min(Math.max(0, targetPage), max);
       setError(null);
@@ -208,7 +202,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
       setIsLoading(false);
       setIsFetchingMore(false);
     },
-    [args, argsKey, check, country, fetchCandidates, filters.workplace],
+    [args, argsKey, check, remoteArgs, fetchCandidates, seenAfter],
   );
 
   const runQuery = useCallback(
@@ -235,6 +229,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
 
       const { data, error: err } = await supabase.rpc('search_job_pool', {
         ...args,
+        p_seen_after: seenAfter,
         p_limit: PAGE_SIZE,
         p_offset: targetPage * PAGE_SIZE,
       });
@@ -258,6 +253,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
       const rows = (data ?? []) as SearchedJob[];
       setError(null);
       setTotal(rows[0]?.total_count ?? (append ? total : 0));
+      if (!append) setNewCount(Number(rows[0]?.new_count ?? 0));
       setJobs((prev) => {
         if (!append) return rows;
         const seen = new Set(prev.map((j) => j.id));
@@ -269,7 +265,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
     },
     // total is read only as an append-time fallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [args, check, runChecked],
+    [args, check, runChecked, seenAfter],
   );
 
   useEffect(() => {
@@ -278,6 +274,62 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
     runQuery(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [argsKey, enabled]);
+
+  /** How many vacancies a different set of filters would show, checked the same way. */
+  const countFor = useCallback(
+    async (next: JobSearchFilters): Promise<{ count: number; capped: boolean }> => {
+      const p = planSearch(next, profileCountry);
+      if (!p.check) {
+        const { data, error: err } = await supabase.rpc('search_job_pool', { ...p.args, p_limit: 1, p_offset: 0 });
+        if (err) throw err;
+        return { count: Number((data as SearchedJob[] | null)?.[0]?.total_count ?? 0), capped: false };
+      }
+      const results = await Promise.all([
+        fetchCandidates(p.args),
+        ...(p.remoteArgs ? [fetchCandidates(p.remoteArgs)] : []),
+      ]);
+      const seen = new Set<string>();
+      let count = 0;
+      for (const r of results) for (const row of r.rows) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        if (matchesLiveFeedSearch(row, p.check)) count++;
+      }
+      return { count, capped: results.some((r) => r.capped) };
+    },
+    [fetchCandidates, profileCountry],
+  );
+
+  // No dead ends: an empty search offers wider ones with their counts, and a
+  // short 24-hour list says how many arrived this week. Nothing is applied
+  // until the user presses a button.
+  useEffect(() => {
+    setWidenings([]);
+    setWeekCount(null);
+    if (!enabled || isLoading || error) return;
+    let live = true;
+    const week = weekNoteFor(filters, total);
+    if (week) {
+      countFor(week)
+        .then((r) => live && setWeekCount(r))
+        .catch(() => undefined);
+    }
+    if (total === 0) {
+      const options = wideningsFor(filters, plan.country);
+      Promise.all(
+        options.map((w) => countFor(w.filters).then((r) => ({ widening: w, ...r })).catch(() => null)),
+      ).then((found) => {
+        if (!live) return;
+        setWidenings(found.filter((f): f is OfferedWidening => Boolean(f && f.count > 0)));
+      });
+    }
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [argsKey, enabled, isLoading, error, total]);
+
+  const labelFor = useCallback((job: SearchedJob) => resultPlaceLabel(job, check), [check]);
 
   const loadMore = useCallback(() => {
     if (isLoading || isFetchingMore) return;
@@ -304,7 +356,7 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
         .from('job_source_health')
         .select('*')
         .order('consecutive_failures', { ascending: false })
-        .limit(200),
+        .limit(2000),
       supabase.from('ingest_state').select('*'),
     ]);
     if (!mounted.current) return;
@@ -337,17 +389,21 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
   }, [loadHealth]);
 
   /** Refresh now: pull the career boards, then re-run the current search. */
-  const refreshNow = useCallback(async () => {
+  const refreshNow = useCallback(async (): Promise<RefreshResult> => {
     setIsRefreshing(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('ingest-jobs', {
         body: { force: true },
       });
       if (err) throw err;
+      if ((data as { skipped?: boolean } | null)?.skipped) {
+        await loadHealth();
+        return data as RefreshResult;
+      }
       await loadHealth();
       checkedRef.current = null;
       await runQuery(0, false);
-      return data as { sources_polled?: number; jobs_inserted?: number; sources_failed?: number; errors?: string[] };
+      return data as RefreshResult;
     } finally {
       if (mounted.current) setIsRefreshing(false);
     }
@@ -370,6 +426,11 @@ export function useJobSearch(filters: JobSearchFilters, options: JobSearchOption
     hasMore: jobs.length < total,
     /** True when more vacancies matched in the database than were checked here. */
     capped,
+    /** Vacancies in this search first seen since the previous visit. */
+    newCount,
+    widenings,
+    weekCount,
+    labelFor,
     error,
     loadMore,
     reload: () => {

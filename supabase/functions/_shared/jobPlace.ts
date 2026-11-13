@@ -165,7 +165,7 @@ export function parsePlace(text: string, workplaceType?: string | null): Place {
   const parts = raw
     .replace(/\(([^)]*)\)/g, ', $1')
     .split(/\s*(?:,|\s[-\u2013\u2014|]\s|:|\s\/\s)\s*/)
-    .map((p) => squash(p.replace(NOISE, ' ').replace(/^(?:in|within|from|across|-)\s+/i, '').replace(/^[-\s]+|[-\s]+$/g, '')))
+    .map((p) => squash(squash(p.replace(NOISE, ' ')).replace(/^(?:(?:in|within|from|across|anywhere in)\s+)+/i, '').replace(/^[-\s]+|[-\s]+$/g, '')))
     .filter(Boolean);
 
   let city: string | null = null;
