@@ -382,7 +382,7 @@ export const combinedSkillsPreview = (skills: SkillLike[] = []): string[] => {
   const seen = new Set<string>();
   const out: string[] = [];
   [...competencies, ...technical].forEach((s) => {
-    const name = tidyText(s.name);
+    const name = skillName(s);
     const k = skillKey(name);
     if (!name || !k || seen.has(k)) return;
     seen.add(k);
@@ -492,6 +492,55 @@ const deepDeDash = (value: any): any => {
   return value;
 };
 
+/** The printed name of a saved skill, whether it was stored as text or as { name }. */
+export const skillName = (skill: unknown): string =>
+  tidyText(
+    typeof skill === 'string'
+      ? skill
+      : skill && typeof skill === 'object'
+        ? String((skill as { name?: unknown }).name ?? '')
+        : '',
+  );
+
+/**
+ * Skills as saved: empty entries dropped, and a term repeated with different
+ * case or spacing kept once (the first one, with its years and category).
+ */
+export const tidySkillsForSave = <T,>(skills: T[]): T[] => {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const skill of skills) {
+    const name = skillName(skill);
+    const key = skillKey(name);
+    if (!name || !key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(skill);
+  }
+  return out;
+};
+
+/** "Shield AI" / "shieldai" and "chainalysis" / "chainalysis-careers" are one employer. */
+export const excludedCompanyKey = (name: string): string =>
+  String(name ?? '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[\s_-]*careers?$/i, '')
+    .replace(/[^a-z0-9]/g, '');
+
+/** Excluded companies collapsed by case, spacing and a "-careers" suffix, first spelling kept. */
+export const tidyExcludedCompanies = (companies: string[]): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of companies) {
+    const name = tidyText(String(raw ?? ''));
+    const key = excludedCompanyKey(name);
+    if (!name || !key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+};
+
 export const normaliseProfileForSave = <T extends Record<string, any>>(profile: T): T => {
   const next: Record<string, any> = deepDeDash({ ...profile });
 
@@ -530,6 +579,9 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
       graduation_year: /present|current/i.test(end_year) ? '' : ((end_year.match(/(?:19|20)\d{2}/g) || []).pop() || ''),
     };
   });
+
+  if (Array.isArray(next.skills)) next.skills = tidySkillsForSave(next.skills);
+  if (Array.isArray(next.excluded_companies)) next.excluded_companies = tidyExcludedCompanies(next.excluded_companies);
 
   next.relevant_projects = (next.relevant_projects || []).map((p: any) => ({
     ...p,
@@ -603,7 +655,7 @@ const GROUP_TERMS: Record<Exclude<SkillGroup, 'Additional' | 'Core Competencies'
     'nltk', 'tensorflow.js', 'streamlit',
   ],
   'Cloud & DevOps': [
-    'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'terraform', 'ansible',
+    'aws', 'azure', 'gcp', 'google cloud', 'google cloud platform', 'docker', 'kubernetes', 'terraform', 'ansible',
     'jenkins', 'github actions', 'gitlab ci', 'circleci', 'ci/cd', 'helm', 'prometheus',
     'grafana', 'datadog', 'nginx', 'linux', 'git', 'lambda', 'ec2', 's3', 'cloudformation',
     'openshift', 'vagrant', 'pulumi', 'argocd', 'sre', 'observability',
@@ -611,8 +663,8 @@ const GROUP_TERMS: Record<Exclude<SkillGroup, 'Additional' | 'Core Competencies'
   'Data & AI': [
     'machine learning', 'deep learning', 'artificial intelligence', 'ai', 'ml', 'nlp',
     'natural language processing', 'computer vision', 'pytorch', 'tensorflow', 'keras',
-    'scikit-learn', 'sklearn', 'pandas', 'numpy', 'scipy', 'spark', 'pyspark', 'hadoop',
-    'presto', 'airflow', 'dbt', 'kafka', 'databricks', 'snowflake', 'power bi', 'tableau',
+    'scikit-learn', 'sklearn', 'pandas', 'numpy', 'scipy', 'spark', 'apache spark', 'pyspark', 'hadoop',
+    'presto', 'airflow', 'apache airflow', 'dbt', 'kafka', 'apache kafka', 'databricks', 'snowflake', 'power bi', 'tableau',
     'looker', 'etl', 'data engineering', 'data science', 'llm', 'llms', 'rag', 'langchain',
     'mlops', 'openai', 'hugging face', 'transformers', 'xgboost', 'statistics', 'forecasting',
     'feature engineering', 'model evaluation', 'aws transcribe', 'flux kontext',
@@ -643,6 +695,11 @@ const GROUP_TERMS: Record<Exclude<SkillGroup, 'Additional' | 'Core Competencies'
   ],
 };
 
+/** Every term the grouped preview knows, used to read skills out of a job description. */
+export const SKILL_VOCABULARY: string[] = Array.from(
+  new Set(Object.values(GROUP_TERMS).flat()),
+);
+
 const GROUP_LOOKUP: Map<string, SkillGroup> = (() => {
   const map = new Map<string, SkillGroup>();
   (Object.keys(GROUP_TERMS) as Array<keyof typeof GROUP_TERMS>).forEach((group) => {
@@ -671,7 +728,7 @@ export const groupedSkillsPreview = (skills: SkillLike[] = []): GroupedSkills[] 
 
   const { competencies, technical } = splitSkillLists(skills);
   [...competencies, ...technical].forEach((s) => {
-    const name = tidyText(s.name);
+    const name = skillName(s);
     const k = skillKey(name);
     if (!name || !k || seen.has(k)) return;
     seen.add(k);

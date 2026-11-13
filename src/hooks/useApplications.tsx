@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import { displayJob } from '@/lib/jobRecords';
+import { loadCompanyAliases } from './companyAliases';
 
 export interface Application {
   id: string;
@@ -39,6 +41,7 @@ export function useApplications() {
 
     try {
       setIsLoading(true);
+      const aliasesPromise = loadCompanyAliases(user.id);
       const { data, error } = await supabase
         .from('applications')
         .select(`
@@ -50,7 +53,12 @@ export function useApplications() {
 
       if (error) throw error;
 
-      setApplications(data || []);
+      // Old rows can hold page-title wrappers, web-address company names or
+      // "Dublin, US"; they are shown tidy without rewriting what is stored.
+      const aliases = await aliasesPromise;
+      setApplications(
+        (data || []).map((app: any) => (app.job ? { ...app, job: displayJob(app.job, aliases) } : app)),
+      );
     } catch (error) {
       console.error('Error fetching applications:', error);
       toast.error('Failed to load applications');

@@ -85,28 +85,13 @@ import {
   tidyLocation,
   type JobSearchFilters,
 } from '@/lib/jobSearch';
+import { tidyJobForSave } from '@/lib/jobRecords';
+import { plainDescription, searchCountry } from '@/lib/liveFeedFilter';
+import { profileSkillNames } from '@/lib/profileMatch';
 
-/**
- * Career boards hand us HTML. We show the employer's own words as readable
- * text, keeping paragraph and list breaks, and never inject their markup.
- */
-function plainDescription(raw: string): string {
-  return raw
-    .replace(/<\s*(br|\/p|\/li|\/div|\/h[1-6])\s*\/?\s*>/gi, '\n')
-    .replace(/<\s*li[^>]*>/gi, '- ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&rsquo;/gi, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .split('\n')
-    .map((line) => line.trim())
-    .join('\n')
-    .trim();
-}
+// Career boards hand us HTML. plainDescription shows the employer's own words
+// as readable text, keeping paragraph and list breaks and every apostrophe, and
+// never injects their markup.
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never';
@@ -466,7 +451,13 @@ const ExplorePage = () => {
     verify,
     refreshNow,
     isRefreshing,
-  } = useJobSearch(filters);
+    capped,
+  } = useJobSearch(filters, {
+    // Saved preferences are applied before the first search runs, so an
+    // unfiltered page can never arrive late and replace the filtered one.
+    enabled: !prefsLoading && prefsApplied,
+    country: searchCountry(profile?.country, filters.location),
+  });
 
   const orderedJobs = useMemo(
     () => (spread && filters.sort === 'newest' ? spreadByEmployer(jobs) : jobs),
@@ -484,17 +475,8 @@ const ExplorePage = () => {
     [orderedJobs, selectedId],
   );
 
-  const confirmedSkills = useMemo(() => {
-    const raw = profile?.skills as unknown;
-    if (Array.isArray(raw)) {
-      return raw
-        .flatMap((group: any) =>
-          typeof group === 'string' ? [group] : Array.isArray(group?.items) ? group.items : [],
-        )
-        .filter((s: unknown): s is string => typeof s === 'string');
-    }
-    return [];
-  }, [profile]);
+  // Every saved skill, including "Technical: Python, Java, ..." group lines.
+  const confirmedSkills = useMemo(() => profileSkillNames(profile?.skills), [profile]);
 
   const runSearch = useCallback(() => {
     setFilters((f) => ({ ...f, query: queryDraft, location: locationDraft, company: companyDraft }));
@@ -559,11 +541,12 @@ const ExplorePage = () => {
     if (!user) return;
     setSavingId(job.id);
     try {
+      const tidy = tidyJobForSave({ title: job.title, company: job.company, location: tidyLocation(job.location) });
       const { error: saveError } = await supabase.from('jobs').insert({
         user_id: user.id,
-        title: job.title,
-        company: job.company,
-        location: tidyLocation(job.location),
+        title: tidy.title,
+        company: tidy.company,
+        location: tidy.location,
         description: job.description,
         url: job.resolved_url ?? job.url,
         platform: job.provider,
@@ -1182,7 +1165,7 @@ const ExplorePage = () => {
                 ? 'Results unavailable'
                 : total === 0
                   ? 'No vacancies'
-                  : `${from}-${to} of ${total.toLocaleString()} vacancies`}
+                  : `${from}-${to} of ${capped ? 'at least ' : ''}${total.toLocaleString()} vacancies`}
           </span>
           {!error && synonyms.length > 0 && <span>Also searched: {synonyms.slice(0, 5).join(', ')}</span>}
           {!error && isStrictWindow(filters.posted) && (

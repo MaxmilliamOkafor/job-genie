@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { Job } from './useJobs';
 import { toast } from 'sonner';
+import { displayJob } from '@/lib/jobRecords';
+import { loadCompanyAliases } from './companyAliases';
 
 // Reasonable page size to prevent browser crashes
 const PAGE_SIZE = 200;
@@ -93,8 +95,10 @@ export function useJobScraper() {
         return INVALID_PATTERNS.some(pattern => pattern.test(textToCheck));
       };
 
+      const aliases = await loadCompanyAliases(user.id);
       const formattedJobs: Job[] = (data || [])
         .filter(job => !isInvalidJob(job))
+        .map(job => displayJob(job, aliases))
         .map(job => ({
           id: job.id,
           title: job.title,

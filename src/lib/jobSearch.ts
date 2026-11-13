@@ -384,8 +384,9 @@ export function skillOverlap(
   for (const skill of skills) {
     const needle = skill.toLowerCase();
     // Boundaries are non-word characters, but +, # and . belong to the term itself.
+    // A full stop that ends the sentence ("and Kafka.") is a boundary, not part of the term.
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(^|[^a-z0-9+#.])${escaped}([^a-z0-9+#.]|$)`, 'i');
+    const re = new RegExp(`(^|[^a-z0-9+#.])${escaped}([^a-z0-9+#.]|\\.(?![a-z0-9])|$)`, 'i');
     if (re.test(haystack)) matched.push(skill);
     else missing.push(skill);
   }

@@ -4,6 +4,7 @@
  * function, which holds the API key; this file never sees it.
  */
 import type { JobPreferences } from './jobPreferences';
+import { tidyJobForSave } from './jobRecords';
 
 export interface EttCard {
   jobId: number;
@@ -111,11 +112,12 @@ export function isNew(card: EttCard, lastSeen: number | null): boolean {
 /** The row a job you apply to is kept as in Saved jobs. */
 export function savedJobOf(card: EttCard, url: string, userId: string) {
   const workplace = card.workplace === 'hybrid' ? 'Hybrid' : card.workplace === 'onsite' ? 'Onsite' : /remote/.test(card.workplace) ? 'Remote' : null;
+  const tidy = tidyJobForSave({ title: card.title, company: card.company, location: card.location });
   return {
     user_id: userId,
-    title: card.title,
-    company: card.company,
-    location: card.location,
+    title: tidy.title,
+    company: tidy.company,
+    location: tidy.location,
     url,
     platform: 'eurotoptech',
     source_name: 'Euro Top Tech',

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { isSupportedJobUrl } from '@/lib/jobSites';
+import { tidyJobForSave } from '@/lib/jobRecords';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -257,11 +258,16 @@ const JobQueuePage = () => {
         if (error) throw error;
 
         if (data.jobTitle) {
-          await supabase.from('jobs').insert({
-            user_id: user?.id,
+          const tidy = tidyJobForSave({
             title: data.jobTitle || 'Unknown Position',
             company: data.company || 'Unknown Company',
             location: data.location || 'Remote',
+          });
+          await supabase.from('jobs').insert({
+            user_id: user?.id,
+            title: tidy.title,
+            company: tidy.company || 'Unknown Company',
+            location: tidy.location || 'Remote',
             description: data.description,
             url: item.url,
             match_score: data.matchScore || 0,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { AIProviderStatus } from '@/components/dashboard/AIProviderStatus';
@@ -14,6 +14,12 @@ import { useJobs } from '@/hooks/useJobs';
 import { useProfile } from '@/hooks/useProfile';
 import { useApplications } from '@/hooks/useApplications';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useJobPreferences } from '@/hooks/useJobPreferences';
+import { loadCompanyAliases } from '@/hooks/companyAliases';
+import { displayJob } from '@/lib/jobRecords';
+import { countSubmitted } from '@/lib/documentGroups';
+import { matchLabel, rankTopMatches } from '@/lib/profileMatch';
 import {
   Briefcase,
   CheckCircle2,
@@ -41,18 +47,47 @@ const Dashboard = () => {
     pending: 0,
   });
 
+  const { preferences } = useJobPreferences();
+
   useEffect(() => {
-    const applied = jobs.filter(j => j.status === 'applied').length;
+    // Applied counts submissions the extension reported (an application with a
+    // sent date), one per job; a job only marked or tailored is not "applied".
+    const applied = countSubmitted(applications || []);
     const interviewing = jobs.filter(j => j.status === 'interviewing').length;
     const offered = jobs.filter(j => j.status === 'offered').length;
     const pending = jobs.filter(j => j.status === 'pending').length;
     setStats({ applied, interviewing, offered, pending });
-  }, [jobs]);
+  }, [jobs, applications]);
 
-  const topMatches = jobs
-    .filter(j => j.status === 'pending')
-    .sort((a, b) => b.match_score - a.match_score)
-    .slice(0, 10);
+  // Candidates for Top Matches: the newest saved jobs still waiting to be applied to.
+  const [candidates, setCandidates] = useState<any[]>([]);
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    (async () => {
+      const aliasesPromise = loadCompanyAliases(user.id);
+      const { data } = await supabase
+        .from('jobs')
+        .select('id, title, company, location, url, salary, description, created_at')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      const aliases = await aliasesPromise;
+      if (live) setCandidates((data ?? []).map((j) => displayJob(j, aliases)));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [user]);
+
+  // Scored from the saved profile (skills, bullets, projects) against each
+  // description, ranked by score and the user's preferred locations.
+  const topMatches = useMemo(() => {
+    if (!profile) return [];
+    const preferred = [...preferences.locations, profile.city ?? ''].filter(Boolean);
+    return rankTopMatches(candidates, profile, preferred, 10);
+  }, [candidates, profile, preferences.locations]);
 
   // Get the most recent application's job info for interview prep
   const latestApplication = applications?.[0];
@@ -135,6 +170,7 @@ const Dashboard = () => {
           <StatsCard
             title="Applied"
             value={stats.applied}
+            subtitle="Submissions reported"
             icon={<CheckCircle2 className="h-5 w-5" />}
           />
           <StatsCard
@@ -169,14 +205,14 @@ const Dashboard = () => {
               Top Matches Ready to Apply
             </CardTitle>
             <CardDescription>
-              Highest scoring jobs for auto-apply
+              Your saved jobs scored against your profile's skills, bullets and projects, preferred locations first
             </CardDescription>
           </CardHeader>
           <CardContent>
             {topMatches.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
-                  {topMatches.map(job => (
+                  {topMatches.map(({ job, match }) => (
                     <a
                       key={job.id}
                       href={job.url || '#'}
@@ -187,12 +223,12 @@ const Dashboard = () => {
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate group-hover:text-primary transition-colors">{job.title}</p>
                         <p className="text-sm text-muted-foreground truncate">
-                          {job.company}{job.salary ? ` • ${job.salary}` : ''} - {job.location}
+                          {job.company}{job.salary ? ` • ${job.salary}` : ''}{job.location ? ` - ${job.location}` : ''}
                         </p>
                       </div>
                       <Badge className="ml-2 bg-primary/10 text-primary shrink-0">
                         <Sparkles className="h-3 w-3 mr-1" />
-                        {job.match_score || 0}%
+                        {matchLabel(match)}
                       </Badge>
                     </a>
                   ))}
@@ -252,7 +288,7 @@ const Dashboard = () => {
                 </div>
               </Link>
               <Link
-                to="/jobs"
+                to="/apply?tab=live"
                 className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
               >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
@@ -261,7 +297,7 @@ const Dashboard = () => {
                 <div>
                   <p className="font-medium">Find Jobs</p>
                   <p className="text-sm text-muted-foreground">
-                    Search across 60+ ATS platforms instantly
+                    Open Live feed for vacancies from employers' own career boards, or follow a Greenhouse, Lever or Ashby board in Job search
                   </p>
                 </div>
               </Link>

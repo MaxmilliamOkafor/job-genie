@@ -16,6 +16,8 @@ interface CategoryScore {
   earned: number;
   max: number;
   suggestion: string | null;
+  /** Shown instead of earned/max, e.g. when the section is left off the CV. */
+  note?: string;
 }
 
 function computeCategories(profile: Profile): CategoryScore[] {
@@ -92,11 +94,14 @@ function computeCategories(profile: Profile): CategoryScore[] {
 
   // Certifications present: 10 points
   const hasCerts = (profile.certifications?.length ?? 0) > 0;
+  // Certifications switched off for the CV are not a 10/10 strength on the CV.
+  const certsHidden = Boolean(profile.certifications_hidden);
   categories.push({
     label: 'Certifications',
     earned: hasCerts ? 10 : 0,
     max: 10,
-    suggestion: hasCerts ? null : 'List any certifications to stand out from other applicants.',
+    suggestion: hasCerts || certsHidden ? null : 'List any certifications to stand out from other applicants.',
+    note: certsHidden ? 'Hidden from CV' : undefined,
   });
 
   // Achievements present: 5 points
@@ -194,7 +199,9 @@ export function ResumeStrengthAnalyzer({ profile }: ResumeStrengthAnalyzerProps)
               <div key={cat.label} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5">
-                    {cat.earned === cat.max ? (
+                    {cat.note ? (
+                      <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : cat.earned === cat.max ? (
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                     ) : cat.earned > 0 ? (
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
@@ -204,13 +211,13 @@ export function ResumeStrengthAnalyzer({ profile }: ResumeStrengthAnalyzerProps)
                     {cat.label}
                   </span>
                   <span className="text-muted-foreground tabular-nums">
-                    {cat.earned}/{cat.max}
+                    {cat.note ?? `${cat.earned}/${cat.max}`}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${barColor(cat.earned, cat.max)}`}
-                    style={{ width: `${pct}%` }}
+                    className={`h-full rounded-full transition-all duration-500 ${cat.note ? 'bg-muted-foreground/40' : barColor(cat.earned, cat.max)}`}
+                    style={{ width: `${cat.note ? 0 : pct}%` }}
                   />
                 </div>
               </div>

@@ -50,6 +50,7 @@ import {
   includedCertifications,
   printedCertifications,
   certificationsBelowLine,
+  skillName,
 } from '@/lib/profileValidation';
 
 
@@ -1160,10 +1161,10 @@ const Profile = () => {
                     .slice(0, 12)
                     .map(({ skill, index }) => (
                       <span
-                        key={`${skill.name}-${index}`}
+                        key={`${skillName(skill)}-${index}`}
                         className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground"
                       >
-                        {skill.name}
+                        {skillName(skill)}
                         <X
                           className="h-3 w-3 cursor-pointer hover:text-destructive"
                           onClick={() => removeSkill(index)}
@@ -1179,7 +1180,9 @@ const Profile = () => {
               const skills = localProfile.skills || [];
               const grouped: Record<string, any[]> = {};
               skills.forEach((skill: any) => {
-                const cat = skill.category || 'technical';
+                // Empty entries print nothing, so they never leave a stray ", ," behind.
+                if (!skillName(skill)) return;
+                const cat = (typeof skill === 'object' && skill?.category) || 'technical';
                 if (!grouped[cat]) grouped[cat] = [];
                 grouped[cat].push(skill);
               });
@@ -1199,8 +1202,8 @@ const Profile = () => {
                       <span className="text-sm font-medium text-foreground">{categoryLabels[category] || category}: </span>
                       <span className="text-sm text-muted-foreground">
                         {categorySkills.map((skill: any, i: number) => (
-                          <span key={skill.name}>
-                            {skill.name}
+                          <span key={`${skillName(skill)}-${i}`}>
+                            {skillName(skill)}
                             {editMode && (
                               <X 
                                 className="inline-block h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
@@ -1279,9 +1282,11 @@ const Profile = () => {
                             ))}
                           </div>
                         )}
-                        <p className="text-[11px] text-muted-foreground">
-                          Prints as one section: {competencies.length} competencies first, then technical terms.
-                        </p>
+                        {competencies.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Prints as one section: {competencies.length} {competencies.length === 1 ? 'competency' : 'competencies'} first, then technical terms.
+                          </p>
+                        )}
                       </div>
                     );
                   })()}

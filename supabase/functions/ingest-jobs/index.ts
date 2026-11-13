@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
+import { employerPlainText } from '../_shared/employerText.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,18 +47,10 @@ interface SourceRow {
   board_token: string;
 }
 
+// Entities are decoded before tags are removed, and curly apostrophes are kept,
+// so "We’re looking" is never stored as "We re looking".
 function clean(html: unknown, max = 4000): string | null {
-  if (typeof html !== 'string' || !html) return null;
-  const text = html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#\d+;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return text ? text.slice(0, max) : null;
+  return employerPlainText(html, max);
 }
 
 function workplaceFrom(location: string | null, extra?: string | null): string | null {

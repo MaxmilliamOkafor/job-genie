@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import { displayJob, tidyJobForSave } from '@/lib/jobRecords';
+import { loadCompanyAliases } from './companyAliases';
 
 export interface Job {
   id: string;
@@ -38,6 +40,7 @@ export function useJobs() {
       const from = pageNum * JOBS_PER_PAGE;
       const to = from + JOBS_PER_PAGE - 1;
 
+      const aliasesPromise = loadCompanyAliases(user.id);
       const { data, error, count } = await supabase
         .from('jobs')
         .select('*', { count: 'exact' })
@@ -46,9 +49,10 @@ export function useJobs() {
         .range(from, to);
 
       if (error) throw error;
+      const aliases = await aliasesPromise;
 
       const typedData = (data || []).map(job => ({
-        ...job,
+        ...displayJob(job, aliases),
         requirements: job.requirements || [],
         status: job.status as Job['status']
       }));
@@ -92,7 +96,7 @@ export function useJobs() {
         (payload) => {
           console.log('New job received:', payload.new);
           const newJob = {
-            ...payload.new,
+            ...displayJob(payload.new as Job),
             requirements: payload.new.requirements || [],
             status: payload.new.status as Job['status']
           } as Job;
@@ -117,7 +121,7 @@ export function useJobs() {
         },
         (payload) => {
           const updatedJob = {
-            ...payload.new,
+            ...displayJob(payload.new as Job),
             requirements: payload.new.requirements || [],
             status: payload.new.status as Job['status']
           } as Job;
@@ -160,7 +164,7 @@ export function useJobs() {
     try {
       const { data, error } = await supabase
         .from('jobs')
-        .insert({ ...job, user_id: user.id })
+        .insert({ ...tidyJobForSave(job), user_id: user.id })
         .select()
         .single();
 
@@ -208,7 +212,7 @@ export function useJobs() {
     if (!user) return [];
 
     try {
-      const jobsWithUser = jobsToAdd.map(job => ({ ...job, user_id: user.id }));
+      const jobsWithUser = jobsToAdd.map(job => ({ ...tidyJobForSave(job), user_id: user.id }));
       
       const { data, error } = await supabase
         .from('jobs')

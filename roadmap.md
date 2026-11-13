@@ -6,6 +6,8 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
+- [x] Website brief (13 Nov, F-K): tidy job titles/companies/places on save and display; one Documents and Generation History entry per job; Overview Applied from reported submissions, Top Matches scored from the profile with "Not scored", certifications "Hidden from CV"; Live feed keyword/place/remote checks, counts after filtering, all saved skills, apostrophes kept; Quick Start wording; Profile skills and excluded-company tidy-ups; tests.
+- [ ] Deploy ingest-jobs so new imports keep apostrophes (waiting for the user's go-ahead; not deployed).
 - [x] Extension sync brief (13 Nov, c90da15): no function changes on the branch; section I (careerFocus leads the summary, never "Background in" with a focus, focus title only when held; education graduation year only; two-page bullet limits) and section E (Profile shows graduation year, Start date / Graduation date fields keep both stored dates); tests; deploy.
 - [x] Extension sync brief (12 Nov, 3fc7434): no function changes on the branch; section H Stripe Dublin lessons (no ability grafts, brackets at phrase ends, bare cities, no home relocation or US authorisation abroad, page-title wrapper, one entry per language, word-named tools, skill phrases, needs from the ad, no repeated "At" opener, language line); tests; deploy.
 - [x] Extension sync brief (11 Nov, e486e9d): no function changes since 500786a; user_integration_keys table for LeadOcean and Flow keys; Settings Connections card (ends in XXXX, Remove); privacy tests.

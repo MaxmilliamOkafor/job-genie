@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useApplications, type Application } from '@/hooks/useApplications';
 import { useProfile } from '@/hooks/useProfile';
 
-import { Copy, Download, Eye, FileText, Loader2, Search, RefreshCw } from 'lucide-react';
+import { ChevronDown, Copy, Download, Eye, FileText, Loader2, Search, RefreshCw } from 'lucide-react';
+import { groupDocumentsByJob } from '@/lib/documentGroups';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { refreshDocuments } from '@/lib/refreshDocuments';
@@ -62,16 +63,16 @@ export default function Documents() {
     setChanges([]);
   }, [open?.id]);
 
-  const docs = useMemo(() => {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  // One entry per job: the newest version leads, earlier versions stay reachable.
+  const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return applications
-      .filter((a) => a.tailored_resume || a.tailored_cover_letter)
-      .filter((a) =>
-        !q
-          ? true
-          : `${a.job?.title ?? ''} ${a.job?.company ?? ''}`.toLowerCase().includes(q)
-      )
-      .sort((a, b) => (Date.parse(b.updated_at || '') || 0) - (Date.parse(a.updated_at || '') || 0));
+    return groupDocumentsByJob(applications).filter((g) =>
+      !q
+        ? true
+        : `${g.latest.job?.title ?? ''} ${g.latest.job?.company ?? ''}`.toLowerCase().includes(q)
+    );
   }, [applications, query]);
 
   return (
@@ -97,7 +98,7 @@ export default function Documents() {
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading documents
           </div>
-        ) : docs.length === 0 ? (
+        ) : groups.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-start gap-3 py-10">
               <FileText className="h-6 w-6 text-muted-foreground" />
@@ -112,30 +113,65 @@ export default function Documents() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {docs.map((a) => (
-              <Card key={a.id} className="flex flex-col">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base leading-snug">
-                    {a.job?.title ?? 'Untitled role'}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">{a.job?.company ?? 'Unknown company'}</p>
-                </CardHeader>
-                <CardContent className="mt-auto space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {a.tailored_resume && <Badge variant="secondary">CV</Badge>}
-                    {a.tailored_cover_letter && <Badge variant="secondary">Cover letter</Badge>}
-                    {a.updated_at && (
-                      <Badge variant="outline">
-                        {new Date(a.updated_at).toLocaleDateString('en-GB')}
-                      </Badge>
+            {groups.map((g) => {
+              const a = g.latest;
+              const isOpen = !!expanded[g.key];
+              return (
+                <Card key={g.key} className="flex flex-col">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base leading-snug">
+                      {a.job?.title ?? 'Untitled role'}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">{a.job?.company ?? 'Unknown company'}</p>
+                  </CardHeader>
+                  <CardContent className="mt-auto space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {a.tailored_resume && <Badge variant="secondary">CV</Badge>}
+                      {a.tailored_cover_letter && <Badge variant="secondary">Cover letter</Badge>}
+                      <Badge variant="outline">{g.submitted ? 'Applied' : 'Prepared'}</Badge>
+                      {a.updated_at && (
+                        <Badge variant="outline">
+                          {new Date(a.updated_at).toLocaleDateString('en-GB')}
+                        </Badge>
+                      )}
+                    </div>
+                    <Button className="w-full" onClick={() => setOpen(a)}>
+                      <Eye className="mr-2 h-4 w-4" /> Review
+                    </Button>
+                    {g.earlier.length > 0 && (
+                      <div className="space-y-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-between"
+                          aria-expanded={isOpen}
+                          onClick={() => setExpanded((prev) => ({ ...prev, [g.key]: !isOpen }))}
+                        >
+                          {g.earlier.length} earlier {g.earlier.length === 1 ? 'version' : 'versions'}
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </Button>
+                        {isOpen && (
+                          <ul className="space-y-1.5">
+                            {g.earlier.map((v) => (
+                              <li key={v.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                                <span className="text-muted-foreground">
+                                  {v.updated_at ? new Date(v.updated_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date not recorded'}
+                                  {' - '}
+                                  {[v.tailored_resume && 'CV', v.tailored_cover_letter && 'cover letter'].filter(Boolean).join(' and ')}
+                                </span>
+                                <Button variant="outline" size="sm" onClick={() => setOpen(v)}>
+                                  Open
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )}
-                  </div>
-                  <Button className="w-full" onClick={() => setOpen(a)}>
-                    <Eye className="mr-2 h-4 w-4" /> Review
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
