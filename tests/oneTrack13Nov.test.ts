@@ -1,7 +1,8 @@
+import { readFileSync } from 'fs';
 import { describe, expect, it } from 'bun:test';
 import { buildSummary, enforceSummaryShape, findViolations, focusOpener, type SummaryContext } from '../supabase/functions/_shared/summaryShape.ts';
 import { enforceEducationSection } from '../supabase/functions/_shared/resumeSections.ts';
-import { educationDisplayDate, educationDisplayLine, educationYearOnly } from '../supabase/functions/_shared/educationDates.ts';
+import { educationDisplayDate, educationDisplayLine, educationStoredDates, educationYearOnly } from '../supabase/functions/_shared/educationDates.ts';
 import { condenseEarlierRoles } from '../supabase/functions/_shared/twoPages.ts';
 import { normaliseProfileForSave, validateEducationEntry } from '../src/lib/profileValidation';
 
@@ -83,11 +84,23 @@ describe('education shows the graduation year only', () => {
     expect(educationYearOnly(once)).toBe(once);
   });
 
-  it('the Profile page line reads "University of Derby, 2020" for an entry stored as 2016 to 2020', () => {
+  it('a saved row reduces to its graduation year for generated documents', () => {
     expect(educationDisplayDate(EDUCATION[1])).toBe('2020');
     expect(educationDisplayLine(EDUCATION[1])).toBe('BSc Computer Science, University of Derby, 2020');
     expect(educationDisplayLine(EDUCATION[0])).toBe('MSc Artificial Intelligence and Machine Learning, Imperial College London, 2021');
     expect(educationDisplayDate({ dates: 'Sept 2016 - June 2020' })).toBe('2020');
+  });
+
+  it('the Profile page keeps showing the full stored dates', () => {
+    expect(educationStoredDates({ ...EDUCATION[1], start_year: 'August 2016', end_year: 'July 2020' })).toBe('August 2016 - July 2020');
+    expect(educationStoredDates(EDUCATION[0])).toBe('August 2020 - June 2021');
+    expect(educationStoredDates(EDUCATION[2])).toBe('September 2025 - Present');
+    expect(educationStoredDates({ dates: 'Sept 2016 - June 2020' })).toBe('Sept 2016 - June 2020');
+    expect(educationStoredDates({ degree: 'BSc' })).toBe('');
+    const page = readFileSync('src/pages/Profile.tsx', 'utf8');
+    expect(page).toContain('educationStoredDates(edu)');
+    expect(page).not.toContain('educationDisplayDate');
+    expect(page).not.toContain('this page show the graduation year only');
   });
 
   it('both stored dates are still there after saving the profile', () => {

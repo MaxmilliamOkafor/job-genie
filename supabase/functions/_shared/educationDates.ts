@@ -47,6 +47,19 @@ export function educationDisplayDate(row: Record<string, unknown> | null | undef
   return lastYear(end) || lastYear(grad) || lastYear(free) || "";
 }
 
+/**
+ * The dates as the candidate saved them, for the Profile page:
+ * "August 2016 - July 2020". The Profile page shows the full stored dates;
+ * only generated documents reduce them to the graduation year.
+ */
+export function educationStoredDates(row: Record<string, unknown> | null | undefined): string {
+  if (!row || typeof row !== "object") return "";
+  const start = pick(row, ["start_year", "startYear", "start_date", "startDate", "start", "from"]);
+  const end = pick(row, ["end_year", "endYear", "end_date", "endDate", "graduation_date", "graduationDate", "end", "to"]);
+  if (start || end) return [start, end].filter(Boolean).join(" - ");
+  return pick(row, ["dates", "date", "dateRange", "date_range", "years"]) || pick(row, ["graduation_year", "graduationYear"]);
+}
+
 /** "Degree, Institution, 2020" for showing a saved row on the website. */
 export function educationDisplayLine(row: Record<string, unknown> | null | undefined): string {
   if (!row || typeof row !== "object") return "";

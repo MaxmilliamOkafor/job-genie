@@ -59,7 +59,7 @@ import {
 // extension payload and the chips below stay in sync.
 import { WORK_AUTH_OPTIONS } from '@/lib/workAuthCountries';
 import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
-import { educationDisplayDate } from '@/lib/educationDates';
+import { educationStoredDates } from '@/lib/educationDates';
 
 
 // Default ATS answers that pass knockout questions
@@ -2348,7 +2348,7 @@ const Profile = () => {
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Application forms such as Workday ask for both dates, so both are kept. Your CV and this page show the graduation year only.
+                          Application forms such as Workday ask for both dates, so both are kept. Your CV shows the graduation year only.
                         </p>
                       );
                     })()}
@@ -2381,10 +2381,11 @@ const Profile = () => {
                 ) : (
                   <>
                     <h3 className="font-semibold">{edu.degree}</h3>
-                    {/* Graduation year only ("University of Derby, 2020"); stored dates are unchanged. */}
-                    <p className="text-muted-foreground" data-testid="education-line">
-                      {[edu.institution || edu.school, educationDisplayDate(edu)].filter(Boolean).join(', ')}
-                    </p>
+                    <p className="text-muted-foreground" data-testid="education-line">{edu.institution || edu.school}</p>
+                    {/* Full stored dates ("August 2016 - July 2020"); only generated CVs show the graduation year. */}
+                    {educationStoredDates(edu) && (
+                      <p className="text-sm text-muted-foreground" data-testid="education-dates">{educationStoredDates(edu)}</p>
+                    )}
                     {edu.field_of_study && (
                       <p className="text-sm text-muted-foreground">{edu.field_of_study}</p>
                     )}
