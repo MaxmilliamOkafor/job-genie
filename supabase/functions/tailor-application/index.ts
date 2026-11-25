@@ -33,7 +33,7 @@ import {
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
 import { buildSummary, cleanCareerFocus, enforceSummaryShape, focusOpener, summaryRequirements, type SummaryContext } from "../_shared/summaryShape.ts";
-import { condenseEarlierRoles } from "../_shared/twoPages.ts";
+import { enforceBulletParity, tidySkills, tidyHeader, letterParity } from "../_shared/extensionParity.ts";
 import { educationDisplayDate } from "../_shared/educationDates.ts";
 import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { removeMonetaryClaims, removeMonetaryClaimsFromPayload } from "../_shared/monetaryClaims.ts";
@@ -2767,7 +2767,7 @@ KEYWORD PLACEMENT STRATEGY (this decides whether the CV wins): distribute the se
 - PROJECTS and CERTIFICATIONS: use them to reinforce two to four high-value posting terms that do not fit naturally into the experience section. Never create a SOFT SKILLS section anywhere.
 Loading the TECHNICAL SKILLS section with posting terms while leaving the experience bullets generic is a failure of this rule.
 
-THE CV FITS TWO PAGES: the latest role keeps all its bullets; every other role keeps at most four; a role that ended more than five years ago or lasted under a year keeps at most three. Keep the bullets most related to this posting.
+EVERY ROLE KEEPS EVERY BULLET: reword each bullet to fit the posting; never merge, shorten the list or drop a bullet, and never trim older roles.
 BULLET FORMULA AND WEIGHTING: every bullet follows [strong action verb] + [hard or soft skill in context] + [what was built or changed] + [outcome], one to two lines, never a dense paragraph. The posting's term sits in the FIRST HALF of the bullet, where a recruiter's eye lands ("Designed AWS reference architectures for..."), never at the end of it. Put the most important posting terms in the FIRST ONE OR TWO bullets of the most recent and most relevant role; weight keyword integration heavily towards that role and keep older, less relevant roles lighter. Vary how a term appears across bullets (design, implementation, optimisation, automation, leadership) instead of repeating the same phrase, while keeping the posting's core term intact. If a term fits naturally in only one role, leave it there rather than forcing it everywhere. Outcomes come only from the profile's own figures, kept exactly as written; where the profile records no figure, express impact qualitatively ("reduced manual effort", "improved reliability") and never invent a number.
 
 PARTIAL EXPOSURE PHRASING: when the profile evidences only light exposure to a term the posting wants, phrase it accurately rather than dropping or inflating it - for example "Introduced Terraform to automate infrastructure for a pilot service". If the posting term has no basis in the profile at all, emphasise the closest truthful adjacent skill instead and say nothing about the missing one.
@@ -5276,13 +5276,8 @@ ${
     // posting's name ("monthly close" becomes "month-end close").
     const renamed = renameToPostingWords(polished.cv, jdKeywords.allKeywords);
     if (renamed.renamed.length) console.log(`[KEYWORDS AT WORK] renamed to the posting's words: ${renamed.renamed.join(", ")}`);
-    // Two pages: the latest role keeps every bullet, other roles at most four,
-    // roles that ended over five years ago or lasted under a year at most three,
-    // dropping the bullets least related to the posting first. Before keyword
-    // placement, so the posting's terms land in bullets that stay.
-    const condensed = condenseEarlierRoles(renamed.cv, { asked: [...requiredTerms, ...jdKeywords.allKeywords] });
-    if (condensed.dropped.length) console.log(`[TWO PAGES] earlier roles condensed, ${condensed.dropped.length} bullet(s) left out`);
-    const atWork = keywordsAtWork(condensed.cv, {
+    // RULE 11b in code (v3.10.83): no bullet caps and no trimming of older roles.
+    const atWork = keywordsAtWork(renamed.cv, {
       must: requiredTerms,
       asked: jdKeywords.allKeywords,
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
@@ -5300,7 +5295,18 @@ ${
       jobCountry: jobCountry(location || extractedCity || ""),
     });
     if (finalCv.notes.length) console.log(`[FINAL CV RULES] ${finalCv.notes.join("; ")}`);
-    result.tailoredResume = removeMonetaryClaims(finalCv.cv);
+    // Extension v3.10.83 parity: every saved bullet back under its own role,
+    // saved wording where a rewrite lost a tool or posting term, evidenced
+    // skills only, two-line contact header.
+    const parity = enforceBulletParity(finalCv.cv, userProfile.professionalExperience || [], {
+      postingTerms: [...new Set([...requiredTerms, ...jdKeywords.allKeywords])],
+      skills: (userProfile.skills || []).map((s: any) => typeof s === "string" ? s : String(s?.name || "")).filter(Boolean),
+    });
+    result.bullets_restored = parity.restored;
+    console.log(`[BULLET PARITY] bullets_restored: ${parity.restored}, reverted ${parity.reverted}, replaced ${parity.replaced}; ${parity.counts.map((c) => `${c.role} ${c.source}/${c.output}`).join(", ")}`);
+    const skillsTidy = tidySkills(parity.cv, `${profileTextOf(userProfile)}\n${JSON.stringify(userProfile.skills || [])}`);
+    if (skillsTidy.dropped.length) console.log(`[SKILLS] left out: ${skillsTidy.dropped.join(", ")}`);
+    result.tailoredResume = removeMonetaryClaims(tidyHeader(skillsTidy.cv));
     summaryContext.experienceBullets = experienceBulletsOf(result.tailoredResume);
     const finalSummary = buildSummary(summaryContext);
     const finalSummarySection = summarySectionOf(result.tailoredResume);
@@ -5323,7 +5329,9 @@ ${
       jobCountry: jobCountry(location || extractedCity || ""),
     });
     if (letterRules.notes.length) console.log(`[FINAL LETTER RULES] ${letterRules.notes.join("; ")}`);
-    result.tailoredCoverLetter = removeMonetaryClaims(letterRules.letter);
+    const letterTidy = letterParity(tidyHeader(letterRules.letter), { roles: userProfile.professionalExperience || [], jobTitle: shortTitle(jobTitle), company });
+    if (letterTidy.notes.length) console.log(`[LETTER PARITY] ${letterTidy.notes.join("; ")}`);
+    result.tailoredCoverLetter = removeMonetaryClaims(letterTidy.letter);
     result.whatChanged = whatChanged({
       profileText: profileTextOf(userProfile),
       cvBefore: cvBeforeFinal,
