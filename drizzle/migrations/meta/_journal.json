@@ -29,6 +29,13 @@
       "when": 1794610343310,
       "tag": "0003_live_feed_places_phrases_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795577740195,
+      "tag": "0004_tighten_job_pool_sources_ingest_reads",
+      "breakpoints": true
     }
   ]
 }
