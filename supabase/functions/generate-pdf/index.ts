@@ -1,3 +1,4 @@
+import { formatContactPhone } from "../_shared/contactPhone.ts";
 import { documentEnvelope, documentFileName } from "./fileDelivery.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
@@ -308,7 +309,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const segs: Seg[] = [];
     const loc = (contact.location || "").trim();
     if (loc) segs.push({ text: loc, color: BODY });
-    if (contact.phone) segs.push({ text: contact.phone, color: BODY });
+    if (contact.phone) segs.push({ text: formatContactPhone(contact.phone), color: BODY });
     if (contact.email)
       segs.push({ text: contact.email, link: `mailto:${contact.email}`, color: LINK });
     if (contact.linkedin)
@@ -666,7 +667,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   const drawBlockHeader = (name: string, role: string, contact: ContactInfo, accent: string) => {
     const colour = rgb(parseInt(accent.slice(0, 2), 16) / 255, parseInt(accent.slice(2, 4), 16) / 255, parseInt(accent.slice(4, 6), 16) / 255);
     drawWrapped(name.toUpperCase(), MARGIN, 22, fonts.bold, colour);
-    for (const text of [role, contact.location, contact.phone, contact.email]) if (text) drawWrapped(text, MARGIN, 10.5, fonts.regular);
+    for (const text of [role, contact.location, formatContactPhone(contact.phone || ""), contact.email]) if (text) drawWrapped(text, MARGIN, 10.5, fonts.regular);
     y -= 12;
   };
 
@@ -2018,7 +2019,7 @@ function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHype
     out.push(node);
   };
   if (contact.location) push(TR({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
-  if (contact.phone) push(TR({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.phone) push(TR({ text: formatContactPhone(contact.phone), font: DOCX_FONT, size: 19, color: DOCX_BODY }));
   if (contact.email) {
     push(new ExternalHyperlink({
       link: `mailto:${contact.email}`,
@@ -2302,7 +2303,7 @@ async function buildCoverLetterDocxBytes(data: {
   const block = style.template === "block";
   if (block) {
     children.push(new Paragraph({ spacing: { after: 80 }, children: [TR({ text: data.personalInfo.name.toUpperCase(), font: DOCX_FONT, size: 44, bold: true, color: style.accent })] }));
-    for (const text of [data.jobTitle, data.personalInfo.contact.location, data.personalInfo.contact.phone, data.personalInfo.contact.email].filter(Boolean)) {
+    for (const text of [data.jobTitle, data.personalInfo.contact.location, formatContactPhone(data.personalInfo.contact.phone || ""), data.personalInfo.contact.email].filter(Boolean)) {
       children.push(new Paragraph({ spacing: { after: 60 }, children: [TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY })] }));
     }
     children.push(new Paragraph({ spacing: { after: 120 } }));

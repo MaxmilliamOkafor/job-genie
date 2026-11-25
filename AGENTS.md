@@ -31,3 +31,4 @@
 - Requirement section stripping lives in postingRequirements and is shared by keyword filters and prompts, so short list lead-ins cannot reintroduce excluded sections.
 - Final experience quality and skills evidence run through cvFinalQuality within finalCvRules, so role attribution, duplicate removal, tense and skills checks share tested logic.
 - All export handlers render PDF and Word from the same normalised content and return validated fileDelivery envelopes; primary bytes never fall back to another format.
+- Contact phones are formatted by the pure shared contactPhone helper in tailoring headers and every PDF/Word export, so documents cannot drift.

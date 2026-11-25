@@ -374,6 +374,9 @@ const FURNITURE = [
   "our mission", "why join", "reference number", "job id", "requisition id",
   "start date", "notice period", "relocation assistance", "visa sponsorship",
   "pension", "pension scheme", "life insurance", "employee discount",
+  "fsa", "hsa", "eap", "employee assistance program", "employee assistance programme",
+  "espp", "employee stock purchase plan", "paid holidays", "disability insurance",
+  "tuition", "tuition reimbursement", "referral bonus", "discounts", "employee discounts",
 ];
 
 const FURNITURE_SET = new Set(FURNITURE);

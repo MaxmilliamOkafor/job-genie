@@ -89,11 +89,11 @@ test('15: outcomes rank count, role fit, recency, then figures, including no dig
  equal(pickOutcomes(lines,['pre-sales','client delivery','handovers'],roles,'Senior Solutions Consultant')[0],lines[2]);
  equal(pickOutcomes(['Reduced latency by 30%'],[]),['Reduced latency by 30%']);
 });
-test('16: trunk zeros removed in both headers, Italy keeps zero', () => {
- equal(normaliseHeaderPhones('Sam\n+353 087 426 1508\nSUMMARY'), 'Sam\n+353 87 426 1508\nSUMMARY');
- equal(normaliseHeaderPhones('Sam\n+44 (0)20 7946 0958\nDear Hiring Team,'), 'Sam\n+44 20 7946 0958\nDear Hiring Team,');
+test('16: Irish phones read +353 087 426 1508; other countries keep their saved layout', () => {
+ equal(normaliseHeaderPhones('Sam\n+353 87 426 1508\nSUMMARY'), 'Sam\n+353 087 426 1508\nSUMMARY');
+ equal(normaliseHeaderPhones('Sam\n+44 (0)20 7946 0958\nDear Hiring Team,'), 'Sam\n+44 (0)20 7946 0958\nDear Hiring Team,');
  equal(normaliseHeaderPhones('Sam\n+39 06 123456\nSUMMARY'), 'Sam\n+39 06 123456\nSUMMARY');
- const good='Sam\n+353 87 426 1508\nSUMMARY\nRecorded +353 087 426 1508'; equal(normaliseHeaderPhones(good),good);
+ const good='Sam\n+353 087 426 1508\nSUMMARY\nRecorded +353 087 426 1508'; equal(normaliseHeaderPhones(good),good);
 });
 test('17: geography and plural people phrases are not job keywords', () => {
  for(const word of ['Ontario Provinces','Quebec','California','Ireland','EMEA','UTC','Ontario','engineering managers','stakeholders','clients']) equal(excludedKeyword(word),true);

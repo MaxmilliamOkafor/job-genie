@@ -1462,13 +1462,8 @@ export function moveDomainSkills(cv: string): string {
   return lines.join("\n");
 }
 
-/** Only contact headers are normalised, never body figures. */
-export function normaliseHeaderPhones(document: string): string {
-  const lines = document.split("\n");
-  const end = lines.findIndex((l) => /^(?:SUMMARY|PROFESSIONAL SUMMARY|PROFILE|PROFESSIONAL EXPERIENCE|Dear|Hello|Re:)/i.test(l.trim()));
-  return lines.map((l, i) => i < (end < 0 ? Math.min(lines.length, 10) : end)
-    ? l.replace(/\+(\d{1,3})\s+(?:\(0\)|0)(?=\d|\s*\d)\s*/g, (whole, code: string) => code === "39" ? whole : `+${code} `) : l).join("\n");
-}
+import { normaliseHeaderPhones } from "../_shared/contactPhone.ts";
+export { normaliseHeaderPhones };
 
 const TOOL_RELEASES: [string, number][] = [["FLUX Kontext", 2025], ["ChatGPT", 2022], ["GPT-4", 2023], ["Claude", 2023], ["LangChain", 2022], ["Llama", 2023]];
 export function toolChronologyNotes(experience: any[]): string[] {

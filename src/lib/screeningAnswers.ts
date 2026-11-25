@@ -177,6 +177,14 @@ export function similarity(a: string, b: string): number {
 }
 
 export const SUGGESTION_THRESHOLD = 0.6;
+/** Word overlap at which a similarly worded saved answer is filled in. */
+export const AUTOFILL_THRESHOLD = 0.75;
+
+const PERSONAL_DETAIL = /\b(?:password|passcode|ssn|social security|passport|national (?:id|identity|insurance)|pps(?:n)?|bank|iban|bic|sort code|account number|routing|card number|credit card|debit card|cvv|date of birth|dob|birth ?date|e-?mail|phone|mobile|telephone|first name|last name|surname|full name|given name|family name|your name|legal name|preferred name|address|street|postcode|post code|zip(?: code)?|eircode)\b/;
+/** Personal details are never stored as reusable screening answers. */
+export function isPersonalDetail(question: string): boolean {
+  return PERSONAL_DETAIL.test(normaliseQuestion(question)) || /^name$/.test(normaliseQuestion(question));
+}
 
 /**
  * Resolve one asked question against the memory.
@@ -213,6 +221,17 @@ export function matchAnswer(
       bestScore = score;
       best = a;
     }
+  }
+
+  if (best && bestScore >= AUTOFILL_THRESHOLD) {
+    const gate = confirmationGate(best, now);
+    return {
+      kind: 'suggestion',
+      answer: best,
+      confidence: Number(bestScore.toFixed(2)),
+      needsConfirmation: gate !== null,
+      reason: gate ?? 'Filled from a similarly worded saved answer',
+    };
   }
 
   if (best && bestScore >= SUGGESTION_THRESHOLD) {
@@ -311,7 +330,7 @@ export function buildMemoryPayload(
   answers: ScreeningAnswer[],
   now: Date = new Date()
 ): ScreeningMemoryPayload {
-  const usable = answers.filter((a) => a.question.trim() && a.answer.trim());
+  const usable = answers.filter((a) => a.question.trim() && a.answer.trim() && !isPersonalDetail(a.question));
   return {
     application_answers: Object.fromEntries(
       usable.filter((a) => !isStale(a, now)).map((a) => [a.question, a.answer])
@@ -330,6 +349,7 @@ export function mergeAnswers(
 ): ScreeningAnswer[] {
   const out = [...existing];
   for (const next of incoming) {
+    if (isPersonalDetail(next.question)) continue;
     const key = `${normaliseQuestion(next.question)}::${(next.scope ?? '').toLowerCase()}`;
     const i = out.findIndex(
       (a) => `${normaliseQuestion(a.question)}::${(a.scope ?? '').toLowerCase()}` === key
