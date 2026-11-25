@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { formatContactPhone } from "../supabase/functions/_shared/contactPhone";
 import { isFurniture } from "../supabase/functions/_shared/evidence";
-import { matchAnswer, mergeAnswers, isPersonalDetail } from "../src/lib/screeningAnswers";
+import { matchAnswer, mergeAnswers } from "../src/lib/screeningAnswers";
 
 test("Irish phone reads +353 087 426 1508", () => {
   for (const raw of ["+353 08 742 61508", "+3530874261508", "+353 87 426 1508"]) expect(formatContactPhone(raw)).toBe("+353 087 426 1508");
@@ -15,9 +15,7 @@ test("75% similar question is filled without confirmation", () => {
   expect(r.answer?.answer).toBe("5");
   expect(r.needsConfirmation).toBe(false);
 });
-test("personal details are never saved", () => {
-  expect(isPersonalDetail("Date of birth")).toBe(true);
-  expect(isPersonalDetail("IBAN")).toBe(true);
-  expect(mergeAnswers([], [{ question: "Phone number", answer: "1" }])).toEqual([]);
+test("ATS personal-detail answers can be saved", () => {
+  expect(mergeAnswers([], [{ question: "Phone number", answer: "1" }]).length).toBe(1);
   expect(mergeAnswers([], [{ question: "Do you need visa sponsorship?", answer: "No" }]).length).toBe(1);
 });
