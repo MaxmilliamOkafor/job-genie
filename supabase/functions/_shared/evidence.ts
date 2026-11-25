@@ -57,6 +57,7 @@ const CAPABILITY_SYNONYMS: Record<string, string[]> = {
   "data quality": ["data quality", "validation", "reconcil", "accuracy check", "integrity"],
   collaboration: ["collaborat", "partnered", "worked with", "cross-functional", "cross functional"],
   "cross-functional": ["cross-functional", "cross functional", "partnered", "worked with"],
+  "cross-functional collaboration": ["cross-functional", "cross functional", "partnered", "worked with"],
   mentoring: ["mentor", "coached", "onboarded", "trained"],
   mentorship: ["mentor", "coached", "onboarded", "trained"],
   automation: ["automat", "scheduled", "orchestrat"],
@@ -923,71 +924,4 @@ export function isGenericOutcome(term: string): boolean {
 // removed BEFORE the model ever sees the posting.
 // ============================================================
 
-const NON_REQUIREMENT_HEADING =
-  /(benefit|perks?|compensation|salary|remuneration|equity|stock|pension|what (?:we|you'll) (?:offer|get)|why (?:join|work)|about (?:us|the (?:company|role|team)|our)|who we are|our (?:story|values|culture|mission|team|people)|values|culture|diversity|inclusion|belonging|equal (?:employment )?opportunity|eeo|e-verify|legal|privacy|data protection|gdpr|accommodation|disability|how to apply|application (?:process|instructions)|hiring process|interview process|next steps|life at|our offer|package)/i;
-
-const REQUIREMENT_HEADING =
-  /(requirement|qualification|skills?|experience|responsibilit|duties|what you'?ll do|what you'?ll bring|what we'?re looking for|about you|you (?:will|should) have|must have|nice to have|the role|role overview|day to day|day-to-day|tech stack|technologies)/i;
-
-function looksLikeHeading(line: string): boolean {
-  const t = line.trim();
-  if (!t || t.length > 80) return false;
-  if (t.endsWith(":")) return true;
-  if (/[.!?]$/.test(t)) return false;
-  const words = t.split(/\s+/);
-  if (words.length > 8) return false;
-  return t === t.toUpperCase() || /^[A-Z]/.test(t);
-}
-
-/**
- * GDPR and data protection are legal boilerplate only when the text is about
- * the applicant's own data ("we process your personal data"). "Experience with
- * dbt and exposure to GDPR" asks for something and is read (10 Nov).
- */
-const APPLICANT_DATA = /\b(?:your|applicant(?:'s|s')?|candidate(?:'s|s')?)\s+(?:personal\s+)?(?:data|information)\b|\b(?:process|collect|store|hold|retain|use)\s+(?:your\s+)?personal\s+(?:data|information)\b|\bprivacy\s+(?:notice|policy|statement)\b|\b(?:applicant|candidate|recruitment)\s+privacy\b|\bdata\s+protection\s+(?:notice|policy|statement)\b/i;
-export function isApplicantDataNotice(line: string): boolean {
-  return APPLICANT_DATA.test(String(line || ""));
-}
-/** A heading-shaped line that names a regulation as something to know or have worked with. */
-function isRequirementAboutRegulation(line: string): boolean {
-  const t = String(line || "");
-  if (isApplicantDataNotice(t)) return false;
-  if (!/\b(?:gdpr|data protection|privacy|legal)\b/i.test(t)) return false;
-  if (/\b(?:benefit|perks?|compensation|salary|equity|pension|culture|values|diversity|inclusion|equal|eeo|accommodation|disability|apply|application|interview)\b/i.test(t)) return false;
-  return /\b(?:experience|exposure|knowledge|familiar(?:ity)?|understanding|working|work with|proficien|background|skills?|and|with)\b/i.test(t) || t.split(/\s+/).length > 4;
-}
-
-/**
- * Removes benefits, perks, compensation, company description, values and
- * culture, legal/EEO, privacy and application-instruction sections. A section
- * whose heading names requirements is always kept, and prose with no headings
- * at all is returned untouched rather than silently emptied.
- */
-export function stripNonRequirementSections(
-  jobDescription: string,
-): { text: string; removedSections: string[] } {
-  const lines = (jobDescription || "").split(/\r?\n/);
-  const kept: string[] = [];
-  const removedSections: string[] = [];
-  let skipping = false;
-
-  for (const line of lines) {
-    if (looksLikeHeading(line)) {
-      const heading = line.trim();
-      if (REQUIREMENT_HEADING.test(heading)) skipping = false;
-      else if (NON_REQUIREMENT_HEADING.test(heading) && !isRequirementAboutRegulation(heading)) {
-        skipping = true;
-        removedSections.push(heading.replace(/:$/, ""));
-        continue;
-      } else skipping = false;
-    }
-    if (!skipping && !isApplicantDataNotice(line)) kept.push(line);
-  }
-
-  const text = kept.join("\n").trim();
-  // Never hand the model an empty posting because the headings were unusual.
-  if (text.length < Math.min(400, (jobDescription || "").trim().length * 0.3)) {
-    return { text: (jobDescription || "").trim(), removedSections: [] };
-  }
-  return { text, removedSections };
-}
+export { stripNonRequirementSections, isApplicantDataNotice } from "./postingRequirements.ts";

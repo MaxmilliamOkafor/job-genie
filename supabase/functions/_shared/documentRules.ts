@@ -13,7 +13,7 @@ const EXP_HEAD = /^(?:PROFESSIONAL EXPERIENCE|EXPERIENCE|WORK EXPERIENCE|EMPLOYM
 const SKILLS_HEAD = /^(?:TECHNICAL SKILLS|SKILLS|CORE SKILLS|KEY SKILLS|TECHNICAL PROFICIENCIES)$/i;
 const SUMMARY_HEAD = /^(?:PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)$/i;
 const EXTRA_SKILLS_HEAD = /^(?:CORE COMPETENCIES|KEY COMPETENCIES|COMPETENCIES|ADDITIONAL SKILLS|OTHER SKILLS)$/i;
-const EXTRA_SKILLS_LABEL = /^(?:core competencies|key competencies|competencies|additional skills|other skills|other|miscellaneous|misc)$/i;
+const EXTRA_SKILLS_LABEL = /^(?:core|core competencies|key competencies|competencies|additional skills|other skills|other|miscellaneous|misc)$/i;
 const LONE_OK_LABEL = /^(?:languages?|spoken languages?|soft skills)$/i;
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -195,7 +195,7 @@ export function capKeywordAdditions(cv: string, profileBullets: string[], perCv 
 // C. THE SKILLS SECTION READS LIKE A PERSON WROTE IT.
 // ============================================================
 
-const QUALIFICATION = /\b(?:ACA|ACCA|CPA|CIMA|AAT|CGMA|CMA|CIA|CFA|CISSP|CISM|CKA|CKAD|PMP|PRINCE2)\b/;
+const QUALIFICATION = /\b(?:ACA|ACCA|CPA|CIMA|AAT|CGMA|CMA|CIA|CFA|CISSP|CISM|CKA|CKAD|PMP|PRINCE2|GIAC|Security\+)(?!\w)/;
 const QUALIFICATION_WORD = /\b(?:certified|certification|chartered|licen[cs]ed)\b/i;
 const COMPOUND_TAIL = /^(?:Actions|DevOps|Cloud|Functions|Pipelines|Analytics|BI|Copilot|Studio|Workspace|Data Factory)$/;
 
@@ -279,6 +279,7 @@ export function tidySkillsSection(cv: string, profileText: string): { cv: string
       || homes.slice().sort((a, b) => b.items.length - a.items.length)[0];
   };
   for (const item of loose) {
+    if (!termAppearsIn(profileText, item)) continue;
     if (entries.some((e) => e.items.some((x) => same(x, item)))) continue;
     const home = homeFor(item);
     if (home) home.items.push(item);
@@ -296,6 +297,13 @@ export function tidySkillsSection(cv: string, profileText: string): { cv: string
   // A tool named in a bullet keeps its full name in Skills.
   const outside = lines.filter((l, i) => kinds[i] !== "skills" && l !== "\u0000").join("\n");
   for (const e of entries) {
+    if (/^(?:tools?(?:\s*(?:&|and)\s*platforms?)?|certifications?|qualifications?)$/i.test(e.label)) {
+      e.items = e.items.filter((item) => {
+        const backed = termAppearsIn(profileText, item.replace(/\s*\([^)]*\)\s*$/, '').trim());
+        if (!backed) notes.push(`removed ${item}, not named in the profile`);
+        return backed;
+      });
+    }
     e.items = e.items.map((it) => {
       if (/\s/.test(it) && it.split(/\s+/).length > 2) return it;
       const re = new RegExp(`(?<![\\w])${esc(it)}(?![\\w])(\\s+[A-Z][\\w]*(?:\\s+Factory)?)?`, "g");
@@ -335,7 +343,7 @@ export function dropUnheldQualifications(cv: string, profileText: string): { cv:
   };
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
-    if (kinds[i] === "header" || kinds[i] === "head" || kinds[i] === "skills") { out.push(line); continue; }
+    if (kinds[i] === "header" || (kinds[i] === "head" && !QUALIFICATION.test(line)) || kinds[i] === "skills") { out.push(line); continue; }
     const hit = unheld(line);
     if (!hit) { out.push(line); continue; }
     line = line.replace(/\s*\(([^()]*)\)/g, (whole, inside: string) => {

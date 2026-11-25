@@ -1,4 +1,5 @@
 import { isGoLanguageMention } from './documentChecks.ts';
+import { stripNonRequirementSections } from './postingRequirements.ts';
 const REGIONS = new Set(`Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland and Labrador|Nova Scotia|Ontario|Prince Edward Island|Quebec|Saskatchewan|Northwest Territories|Nunavut|Yukon|EMEA|APAC|LATAM|Europe|Asia|Africa|North America|South America|Middle East|Caribbean`.toLowerCase().split('|'));
 const STATES = new Set('Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia|United Kingdom|United States|UK|USA|US|EU|European Union|Scotland|England|Wales|Northern Ireland'.toLowerCase().split("|"));
 const PLACE_WORDS = new Set(('uae ksa uk usa us eu emea apac mena gcc latam anz dach nordics benelux sar remote hybrid onsite global worldwide '
@@ -38,6 +39,8 @@ export function excludedKeyword(term: string): boolean {
   // "Dubai UAE", "Hong Kong SAR", "Kuala Lumpur, Malaysia", "UK Remote"
   // (Bybit, 5 Nov): every word a place, so the phrase is where the job is.
   if (placeOnly(key)) return true;
+  if (/\b(?:hsa|fsa|eap|401\s*\(?k\)?|pto|pension|dental|vision|gym|wellness|cycle to work|health savings|insurance|perks?)\b/i.test(key)) return true;
+  if (/^(?:take ownership of your work|thought leadership)$/i.test(key)) return true;
   const countries = new Intl.DisplayNames(['en'], { type: 'region' });
   for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
     const code = String.fromCharCode(a, b);
@@ -106,12 +109,16 @@ export function canonicalRequirement(term: string, posting: string): string {
 }
 
 export function filterJobKeywords(terms: string[], posting: string, company = ''): string[] {
+  const requirementText = stripNonRequirementSections(posting).text;
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of terms || []) {
     const term = canonicalRequirement(String(raw || ''), posting);
     if (!term) continue;
     if (excludedKeyword(term)) continue;
+    if (wholeTerm(term).test(posting) && !wholeTerm(term).test(requirementText)) continue;
+    const partnerPitch = new RegExp(`\\b(?:joint venture|partnership|partner(?:ed)?)\\s+(?:with|of)\\s+${escRe(term)}(?![\\w-])`, 'i');
+    if (partnerPitch.test(requirementText) && !wholeTerm(term).test(requirementText.replace(partnerPitch, ' '))) continue;
     if (term.toLowerCase() === 'go' && !isGoLanguageMention(posting)) continue;
     // Bare numbers and counts ("6+", "10", "6+ years") are never requirements.
     if (/^\d+(?:\.\d+)?\s*\+?\s*%?(?:\s*(?:yrs?|years?))?$/i.test(term)) continue;

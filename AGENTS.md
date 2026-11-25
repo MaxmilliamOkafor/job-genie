@@ -11,7 +11,7 @@
 - Final document checks share pure helpers and run after review, followed by monetary exclusion; source restoration cannot reintroduce financial claims.
 - Capability stem matching is separate from literal ATS coverage; only the explicit Go phrase disambiguation changes whole-term coverage.
 - Filter every extracted keyword category and strategy term before prompts or scores; final bullet-tool checks consume candidate evidence only, never posting strategy metadata.
-- Summary ranking counts posting responsibilities separately from the fixed ATS denominator, then uses held-role fit, recency and figures as tie-breakers.
+- Website summary ranking uses the target field before requirement count and CV order, with exactly one achievement from the final CV; legacy callers retain the existing focus shape for compatibility.
 - Final keyword placement (MUST tools in backed bullets, three-mention cap, project order) uses the shared pure keywordsAtWork helper after the polish pass and before monetary exclusion.
 - Final CV rules (posting-graft restore, keyword-addition caps, skills tidy-up, unheld qualifications, self-referential wording) run through finalCvRules, and letter rules through finalLetterRules, after keywordsAtWork and before monetary exclusion; both are pure and idempotent because the extension re-runs its own clean-up on every preview and download.
 - The "What changed" lines are computed server-side by the shared whatChanged helper with the coverage gauge's whole-term matcher and returned as plain strings; the website only renders them as text.
@@ -28,3 +28,6 @@
 - Vacancy places are read by the shared pure jobPlace helper (country, city, remote region); the import stores the first place in job_pool and the website checks every place, so stored columns only narrow candidates and never decide a match.
 - Live feed searches are planned by the pure planSearch helper and wider-search offers by wideningsFor; the hook counts offers with the same checks as results and never changes filters until the user presses one.
 - Career boards join job_sources through jp_add_job_source, called by triggers on job_companies and on CV-tailored applications; boards already present keep their state and breaker.
+- Requirement section stripping lives in postingRequirements and is shared by keyword filters and prompts, so short list lead-ins cannot reintroduce excluded sections.
+- Final experience quality and skills evidence run through cvFinalQuality within finalCvRules, so role attribution, duplicate removal, tense and skills checks share tested logic.
+- All export handlers render PDF and Word from the same normalised content and return validated fileDelivery envelopes; primary bytes never fall back to another format.

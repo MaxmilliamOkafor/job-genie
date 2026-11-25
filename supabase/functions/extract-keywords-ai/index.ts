@@ -1,4 +1,5 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { filterJobKeywords } from "../_shared/keywordChecks.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -397,7 +398,7 @@ serve(async (req) => {
     for (const key of [...PRIMARY, ...SECONDARY]) {
       const raw = Array.isArray(keywords[key]) ? keywords[key] : [];
       rawTotal += raw.length;
-      keywords[key] = clean(raw);
+      keywords[key] = filterJobKeywords(clean(raw), jobDescription, company);
     }
 
     // Build categorized output for the extension UI. The secondary buckets are

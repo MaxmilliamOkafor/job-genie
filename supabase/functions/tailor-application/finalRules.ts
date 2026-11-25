@@ -4,6 +4,8 @@
 // second pass here returns the same text.
 import { capKeywordAdditions, dropUnheldQualifications, removeSelfTalkFromCv, restorePostingGrafts, tidySkillsSection } from "../_shared/documentRules.ts";
 import { dropPageTitleWrapper, noForeignUsAuthorisation, noGraftedAbility, noHomeRelocation, oneEntryPerLanguage, skillsReadRight, strayGloss } from "../_shared/postingLessons.ts";
+import { evidencedSkillsOnly, finalExperienceQuality, type SavedQualityRole } from "../_shared/cvFinalQuality.ts";
+import { type EvidenceSource } from "../_shared/evidence.ts";
 
 const BULLET = /^(\s*(?:[•●▪◦‣∙·*]|-)\s+)(.*)$/;
 const LABEL_LINE = /^\s*[^:]{2,40}:\s/;
@@ -37,7 +39,7 @@ export function cvReadsRight(cv: string, ctx: { profileText: string; homeCity?: 
   return { cv: next === cv ? cv : next, notes };
 }
 
-export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[]; posting?: string; homeCity?: string; jobCountry?: string | null }): { cv: string; notes: string[]; summaryChanged: boolean } {
+export function finalCvRules(cv: string, ctx: { profileText: string; profileBullets: string[]; posting?: string; homeCity?: string; jobCountry?: string | null; savedRoles?: SavedQualityRole[]; evidenceSources?: EvidenceSource[] }): { cv: string; notes: string[]; summaryChanged: boolean } {
   const notes: string[] = [];
   const grafts = restorePostingGrafts(cv, ctx.profileBullets, ctx.posting || "", ctx.profileText);
   if (grafts.restored.length) notes.push(`posting duties grafted onto bullets, profile line restored: ${grafts.restored.join(" | ")}`);
@@ -51,5 +53,9 @@ export function finalCvRules(cv: string, ctx: { profileText: string; profileBull
   if (self.removed.length) notes.push(`self-referential wording removed: ${self.removed.join(" | ")}`);
   const right = cvReadsRight(self.cv, ctx);
   notes.push(...right.notes);
-  return { cv: right.cv, notes, summaryChanged: self.summaryChanged };
+  const quality = finalExperienceQuality(right.cv, ctx.profileText, ctx.savedRoles);
+  notes.push(...quality.notes);
+  const backed = evidencedSkillsOnly(quality.cv, ctx.evidenceSources || ctx.profileText.split('\n').map((text) => ({ label: 'saved profile', text, kind: 'achievement' as const })));
+  notes.push(...backed.notes);
+  return { cv: backed.cv, notes, summaryChanged: self.summaryChanged };
 }

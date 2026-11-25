@@ -1,4 +1,5 @@
 import { evidencePhraseAppears } from "./documentChecks.ts";
+import { canonicalToolNames } from "./cvFinalQuality.ts";
 /**
  * THE SUMMARY IS THE LINE THAT DECIDES WHETHER THE REST IS READ.
  *
@@ -30,6 +31,8 @@ import { evidencePhraseAppears } from "./documentChecks.ts";
  */
 
 export interface SummaryContext {
+  /** Website tailoring uses one target-field achievement from the finished CV. */
+  jobAppliedFor?: boolean;
   /** Titles the employment history actually contains, most relevant first is not required. */
   heldTitles: string[];
   /** Current role title, used when the posting shares no distinctive title words. */
@@ -597,8 +600,8 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   const problems: string[] = [];
   if (!text) return ["empty"];
 
-  if (text.length > MAX_LEN) problems.push(`over ${MAX_LEN} characters`);
-  if (text.length < MIN_LEN) problems.push(`under ${MIN_LEN} characters`);
+  if (!ctx.jobAppliedFor && text.length > MAX_LEN) problems.push(`over ${MAX_LEN} characters`);
+  if (!ctx.jobAppliedFor && text.length < MIN_LEN) problems.push(`under ${MIN_LEN} characters`);
   if (FIRST_PERSON.test(text)) problems.push("first person");
   if (YEARS_OF_EXPERIENCE.test(text)) problems.push("total years of experience");
 
@@ -617,7 +620,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   // application to another field it is the wrong one.
   const sentencesAll = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
   const firstSentence = sentencesAll[0] || "";
-  const focus = cleanCareerFocus(ctx.careerFocus);
+  const focus = ctx.jobAppliedFor ? "" : cleanCareerFocus(ctx.careerFocus);
   const focusHeld = focus ? heldFocusTitle(focus, ctx.heldTitles) : "";
   if (focus) {
     // With a career focus the first sentence presents that track; "Background
@@ -646,6 +649,13 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   // Two outcomes joined with a semicolon, both carrying a figure.
   const sentences = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
   const outcomeSentence = sentences[sentences.length - 1] || "";
+  if (ctx.jobAppliedFor) {
+    const normal = (s: string) => canonicalToolNames(stripBullet(s)).replace(/[.]+$/, "").trim();
+    const built = buildJobSummary(ctx);
+    if (text !== built) problems.push("does not use the closest evidenced field and CV achievement");
+    if (!ctx.experienceBullets.some((b) => normal(b) === normal(outcomeSentence))) problems.push("achievement not in this CV");
+    return problems;
+  }
   if (!outcomeSentence.includes(";")) problems.push("outcomes not joined with a semicolon");
   const halves = outcomeSentence.split(";").map((h) => h.trim()).filter(Boolean);
   if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0 && !ctx.experienceBullets.some((b) => evidencePhraseAppears(b, h)))) problems.push("fewer than two figures");
@@ -661,6 +671,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
 
 /** Builds the required shape from the profile and posting. Empty when no figure exists. */
 export function buildSummary(ctx: SummaryContext): string {
+  if (ctx.jobAppliedFor) return buildJobSummary(ctx);
   const focus = cleanCareerFocus(ctx.careerFocus);
   const opener = focus ? focusOpener(focus, ctx.heldTitles) : "";
   const field = deriveField(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle, ctx.field);
@@ -732,6 +743,35 @@ export function buildSummary(ctx: SummaryContext): string {
     return longest;
   }
   return attempts[attempts.length - 1];
+}
+
+/** Field fit wins over scale and recency; no achievement is taken from a removed bullet. */
+export function buildJobSummary(ctx: SummaryContext): string {
+  const fieldPatterns: Array<{ title: RegExp; evidence: RegExp; field: string }> = [
+    { title: /security|cyber|infosec/i, evidence: /security|incident|vulnerabilit|threat|access control|iso 27001/i, field: "IT security" },
+    { title: /data|analytics|business intelligence/i, evidence: /data|analytics|reporting|warehouse|pipeline|power bi|tableau/i, field: "data analysis" },
+    { title: /machine learning|artificial intelligence|\bAI\b/i, evidence: /machine learning|NLP|PyTorch|artificial intelligence|\bAI\b/i, field: "machine learning" },
+    { title: /cloud|infrastructure|devops/i, evidence: /cloud|infrastructure|terraform|AWS|Azure|provision/i, field: "cloud infrastructure" },
+  ];
+  const bullets = ctx.experienceBullets.map(stripBullet).filter(Boolean);
+  const target = fieldPatterns.find((f) => f.title.test(ctx.targetTitle) && bullets.some((b) => f.evidence.test(b)));
+  const field = target?.field || deriveField(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle, ctx.field);
+  const ranked = bullets.map((bullet, index) => ({
+    bullet, index,
+    fieldFit: target?.evidence.test(bullet) ? 1 : 0,
+    requirements: ctx.requirements.filter((r) => evidencePhraseAppears(bullet, r)).length,
+  })).filter((b) => isGrammaticalOutcome(b.bullet))
+    .sort((a, b) => b.fieldFit - a.fieldFit || b.requirements - a.requirements || a.index - b.index);
+  if (!field || !ranked.length) return "";
+  const relevant = target ? ranked.filter((b) => b.fieldFit).map((b) => b.bullet) : ranked.map((b) => b.bullet);
+  const rankedTerms = ctx.requirements.map((term, index) => ({ term, index, fit: relevant.filter((b) => evidencePhraseAppears(b, term)).length }))
+    .sort((a, b) => b.fit - a.fit || a.index - b.index).map((t) => t.term);
+  const strengths = evidencedRequirements(rankedTerms, relevant, 2).map(canonicalToolNames);
+  const lead = strengths.length === 2
+    ? `Background in ${field}, with strengths in ${strengths[0]} and ${strengths[1]}.`
+    : `Background in ${field}.`;
+  // Keep the entire CV achievement, including its context and exact figures.
+  return `${lead} ${canonicalToolNames(ranked[0].bullet).replace(/[.]+$/, "")}.`;
 }
 
 

@@ -48,6 +48,7 @@ import { criteriaTerms, extractCriteria, isStepDown, profileYearsSpan, runScreen
 import { letterSignOff, letterToolList, protectedSentences, withProtected, applySignOff, dropSentences, employerToolSentences, enforceLetterRightToWork, findFragments, applyBulletRewrites, applyLetterDate, bulletLimits, bulletRewritePrompt, dropClaimSentences, enforceBulletCounts, shapeCoverLetter, findCopiedSentences, letterRewordPrompt, acceptLetterRewording, findBadBullets, formatSkillsSection, markContractRoles, stripLetterBanned, stripSummaryFiller, applyRightToWork, checkCoverLetter, coverLetterBlock, coverLetterShapeBlock, cvContentBlock, fixGreeting, humanWordingBlock, restoreRoleHeadings, rightToWorkStatement, wordCount, isNotAJobTitle, originalCvText, originalRoles, protectedKeywords, protectionBlock, restoreProtected, stripDashes, stripInvisible } from "./guards.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 import { plainCvBullets, polishTailoredDocuments } from "./guards.ts";
+import { stripNonRequirementSections } from "../_shared/postingRequirements.ts";
 import { filterJobKeywords, filterJobKeywordLists } from "../_shared/keywordChecks.ts";
 import { toolChronologyNotes } from "./guards.ts";
 import { jobCountry } from "./guards.ts";
@@ -2275,9 +2276,9 @@ const handleTailor = async (req: Request): Promise<Response> => {
     const {
       jobTitle,
       company,
-      description,
+      description: originalDescription,
       requirements,
-      requiredTerms,
+      requiredTerms: unfilteredRequiredTerms,
       location,
       extractedCity,
       jobId,
@@ -2288,6 +2289,8 @@ const handleTailor = async (req: Request): Promise<Response> => {
       screenerCriteria,
       careerFocus,
     } = validateRequest(rawData);
+    const description = stripNonRequirementSections(originalDescription).text;
+    const requiredTerms = filterJobKeywords(unfilteredRequiredTerms, originalDescription, company);
 
     // Validate that profile has required info
     if (!userProfile.firstName || !userProfile.lastName) {
@@ -2342,18 +2345,18 @@ const handleTailor = async (req: Request): Promise<Response> => {
     // evidence map. Requirements it names are merged into the keyword pool
     // so coverage is measured against what the posting actually asks for.
     const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
-    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, description, company);
-    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), description, company));
+    atsStrategy.requirements = filterJobKeywords(atsStrategy.requirements, originalDescription, company);
+    const strategyTerms = new Set(filterJobKeywords(Object.keys(atsStrategy.evidence), originalDescription, company));
     atsStrategy.evidence = Object.fromEntries(Object.entries(atsStrategy.evidence).filter(([term]) => strategyTerms.has(term)));
     const mergedRequirements = filterJobKeywords(Array.from(
       new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
-    ), description, company);
+    ), originalDescription, company);
     console.log(
       `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
     );
 
     // Jobscan keyword extraction
-    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), description, company);
+    const jdKeywords = filterJobKeywordLists(extractJobscanKeywords(description, mergedRequirements), originalDescription, company);
 
     // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
     // Initial, per-revision and final coverage are only comparable when they
@@ -2361,7 +2364,7 @@ const handleTailor = async (req: Request): Promise<Response> => {
     // replaces the raw extraction immediately. Incidental employer names,
     // boilerplate and overlapping title phrases are dropped rather than being
     // counted as requirements the candidate has to satisfy.
-    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, description, company), [company], jobTitle);
+    const requirementList = buildRequirementList(filterJobKeywords(jdKeywords.allKeywords, originalDescription, company), [company], jobTitle);
     console.log(
       `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
     );
@@ -2402,7 +2405,7 @@ const handleTailor = async (req: Request): Promise<Response> => {
       jdKeywords.titles,
       jdKeywords.certifications,
       description,
-    ), description, company);
+    ), originalDescription, company);
     console.log(`Keyword priorities - High: ${weightedKeywords.high.length}, Medium: ${weightedKeywords.medium.length}, Low: ${weightedKeywords.low.length}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();
@@ -4847,6 +4850,7 @@ ${
       return !end || /present|current/i.test(end);
     }) || profileRoles[0];
     const summaryContext: SummaryContext = {
+      jobAppliedFor: true,
       heldTitles: profileRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean),
       currentTitle: String(currentRole?.title || "").trim(),
       field: String((userProfile as any).field || (userProfile as any).profession || (userProfile as any).discipline || "").trim(),
@@ -5287,6 +5291,8 @@ ${
     // Keyword limits, human skills lines, held qualifications only, and no
     // sentence about the document itself (10 Nov extension brief).
     const finalCv = finalCvRules(atWork.cv, {
+      savedRoles: userProfile.professionalExperience || [],
+      evidenceSources,
       profileText: profileTextOf(userProfile),
       profileBullets: profileBullets(userProfile.professionalExperience || []).map((b) => b.text),
       posting: description,
@@ -5295,10 +5301,11 @@ ${
     });
     if (finalCv.notes.length) console.log(`[FINAL CV RULES] ${finalCv.notes.join("; ")}`);
     result.tailoredResume = removeMonetaryClaims(finalCv.cv);
+    summaryContext.experienceBullets = experienceBulletsOf(result.tailoredResume);
     const finalSummary = buildSummary(summaryContext);
     const finalSummarySection = summarySectionOf(result.tailoredResume);
     const summaryNeedsRebuild = finalCv.summaryChanged && !!finalSummary && !hasSelfTalk(finalSummary);
-    if (finalSummary && finalSummarySection && (summaryNeedsRebuild || /consult|client|pre-sales|customer success/i.test(jobTitle))) {
+    if (finalSummary && finalSummarySection && (summaryContext.jobAppliedFor || summaryNeedsRebuild || /consult|client|pre-sales|customer success/i.test(jobTitle))) {
       const lines = result.tailoredResume.split("\n");
       lines.splice(finalSummarySection.start + 1, finalSummarySection.end - finalSummarySection.start - 1, removeMonetaryClaims(finalSummary), "");
       result.tailoredResume = lines.join("\n");
@@ -5508,8 +5515,9 @@ ${
           .replace(/\s+/g, "_")
           .replace(/[^a-zA-Z0-9_]/g, "") || "Applicant";
 
-      const resumeFileName = `${candidateNameForFile}_CV.pdf`;
-      const coverFileName = `${candidateNameForFile}_Cover_Letter.pdf`;
+      const jobForFile = jobTitle.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+      const resumeFileName = `${candidateNameForFile}_${jobForFile}_CV.pdf`;
+      const coverFileName = `${candidateNameForFile}_${jobForFile}_Cover_Letter.pdf`;
 
       const extractProfessionalSummary = (raw: string, structuredSummary?: string): string => {
         // PRIORITY 1: Use structured summary from AI response if available (most reliable)
@@ -5605,58 +5613,16 @@ ${
           )
         : [];
 
+      // Export the checked text, not an earlier structured draft or saved bullets.
       const resumePayload = {
-        type: "resume",
-        candidateName: candidateNameForFile,
-        customFileName: resumeFileName,
-        personalInfo: {
-          name: candidateName,
-          email: userProfile.email,
-          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
-          location: smartLocation,
-          linkedin: userProfile.linkedin,
-          github: userProfile.github,
-          portfolio: userProfile.portfolio,
-        },
+        type: "cv",
+        content: result.tailoredResume || "",
+        fileName: resumeFileName,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        jobTitle,
+        company,
         summary: extractProfessionalSummary(result.tailoredResume || ""),
-        coreCompetencies: Array.isArray(result.resumeStructured?.coreCompetencies) ? result.resumeStructured.coreCompetencies : [],
-        experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
-          company: exp?.company || "",
-          title: exp?.title || "",
-          location:
-            exp?.location || exp?.role_location || exp?.city || exp?.job_location || exp?.work_location || exp?.based_in || "",
-          dates:
-            exp?.dates || formatDateRangeATS(exp?.startDate || exp?.start_date, exp?.endDate || exp?.end_date, "Present"),
-          // PRIORITY: Use 'bullets' array first (clean structured data), fallback to 'description'
-          bullets:
-            Array.isArray(exp?.bullets) && exp.bullets.length > 0
-              ? exp.bullets
-              : Array.isArray(exp?.description)
-                ? exp.description
-                : typeof exp?.description === "string"
-                  ? exp.description
-                      .split("\n")
-                      .map((b: string) => b.replace(/^[▪•\-*]\s*/, "").trim())
-                      .filter((b: string) => b)
-                  : [],
-        })),
-        education: (Array.isArray(userProfile.education) ? userProfile.education : []).map((edu: any) => ({
-          degree: edu?.degree || "",
-          school: edu?.school || edu?.institution || "",
-          // Graduation year only; a course still running shows "2025 - Present".
-          dates: educationDisplayDate(edu),
-          gpa: edu?.gpa || "",
-        })),
-        skills: {
-          primary: primarySkills.map((s: any) => s?.name || s).filter(Boolean),
-          secondary: secondarySkills.map((s: any) => s?.name || s).filter(Boolean),
-        },
-        certifications: Array.isArray(userProfile.certifications) ? userProfile.certifications : [],
-        achievements: (Array.isArray(userProfile.achievements) ? userProfile.achievements : []).map((a: any) => ({
-          title: a?.title || "",
-          date: a?.date || "",
-          description: a?.description || "",
-        })),
       };
 
       // Clean the cover letter text - remove AI-generated headers/footers that duplicate our PDF formatting
@@ -5699,27 +5665,16 @@ ${
       });
 
       const coverPayload = {
-        type: "cover_letter",
-        candidateName: candidateNameForFile,
-        customFileName: coverFileName,
-        personalInfo: {
-          name: candidateName,
-          email: userProfile.email,
-          phone: polishTailoredDocuments("Contact\n" + (userProfile.phone || ""), "", "").cv.split("\n")[1] || userProfile.phone,
-          location: smartLocation,
-          linkedin: userProfile.linkedin,
-          github: userProfile.github,
-          portfolio: userProfile.portfolio,
-        },
-        coverLetter: {
-          recipientCompany: company || "",
-          jobTitle: jobTitle || "Position",
-          jobId: jobId || "",
-          paragraphs: paragraphs.length ? paragraphs : [coverText.trim()],
-        },
+        type: "coverletter",
+        content: result.tailoredCoverLetter || "",
+        fileName: coverFileName,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        jobTitle,
+        company,
       };
 
-      const generatePdf = async (payload: any): Promise<{ pdf: string | null; fileName: string }> => {
+      const generatePdf = async (payload: any): Promise<{ pdf: string | null; fileName: string; docx?: string; docxFileName?: string }> => {
         const pdfRes = await fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
           method: "POST",
           headers: {
@@ -5733,7 +5688,7 @@ ${
         if (!pdfRes.ok) {
           const t = await pdfRes.text();
           console.error(`generate-pdf failed: ${pdfRes.status} ${t}`);
-          return { pdf: null, fileName: payload.customFileName || "document.pdf" };
+          return { pdf: null, fileName: payload.fileName || "document.pdf" };
         }
 
         // The generate-pdf function returns binary PDF data, not JSON
@@ -5742,7 +5697,7 @@ ${
         const contentDisposition = pdfRes.headers.get("content-disposition") || "";
 
         // Extract filename from Content-Disposition header
-        let fileName = payload.customFileName || "document.pdf";
+        let fileName = payload.fileName || "document.pdf";
         const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/);
         if (filenameMatch) {
           fileName = filenameMatch[1];
@@ -5767,11 +5722,11 @@ ${
           // Treating that as an unexpected type made every attachment report
           // "failed" even though the document had been generated correctly.
           const body = await pdfRes.json().catch(() => null);
-          const base64 = body?.docx || body?.pdf || null;
+          const base64 = typeof body?.pdf === "string" && body.pdf.startsWith("JVBER") ? body.pdf : null;
           if (base64) {
             if (body?.fileName) fileName = body.fileName;
             console.log(`Document generated successfully: ${fileName}, base64 length: ${base64.length}`);
-            return { pdf: base64, fileName };
+            return { pdf: base64, fileName, docx: body.docx, docxFileName: body.docxFileName };
           }
           console.error(`generate-pdf returned JSON without document bytes: ${JSON.stringify(body)?.slice(0, 200)}`);
           return { pdf: null, fileName };
@@ -5791,6 +5746,10 @@ ${
       result.coverLetterPdf = coverPdfResult.pdf;
       result.resumePdfFileName = resumePdfResult.fileName;
       result.coverLetterPdfFileName = coverPdfResult.fileName;
+      result.resumeDocx = resumePdfResult.docx || null;
+      result.coverLetterDocx = coverPdfResult.docx || null;
+      result.resumeDocxFileName = resumePdfResult.docxFileName;
+      result.coverLetterDocxFileName = coverPdfResult.docxFileName;
       
       // CRITICAL: Include the extracted summary in the result for extension fallback
       // This ensures the extension can pass it to generate-pdf if downloading separately

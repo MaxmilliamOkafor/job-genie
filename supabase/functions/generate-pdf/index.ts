@@ -1,3 +1,4 @@
+import { documentEnvelope, documentFileName } from "./fileDelivery.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sanitizeText, candidateDocumentProperties, createCandidatePdf } from "./documentIntegrity.ts";
 import { normaliseLocation } from "../_shared/location.ts";
@@ -287,7 +288,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   };
 
   // ---- Header block (name + hyperlinked contact line + navy hairline) ----
-  const drawTopHeader = (name: string, contact: ContactInfo) => {
+  const drawTopHeader = (name: string, contact: ContactInfo, targetTitle?: string) => {
     ensureSpace(80);
     const nameClean = sanitizeText(name);
     page.drawText(nameClean, {
@@ -298,6 +299,10 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       color: NAVY,
     });
     y -= 22 + 8;
+    if (targetTitle) {
+      drawWrapped(sanitizeText(targetTitle), MARGIN, 12, fonts.bold, NAVY, CONTENT_W);
+      y -= 7;
+    }
 
     type Seg = { text: string; link?: string; color: ReturnType<typeof rgb> };
     const segs: Seg[] = [];
@@ -413,31 +418,16 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const loc = sanitizeText(entry.location || "");
     const size = 10.5;
 
-    let lx = MARGIN;
-    if (company) {
-      page.drawText(company, { x: lx, y, size, font: fonts.bold, color: BODY });
-      lx += fonts.bold.widthOfTextAtSize(company, size);
+    const dsize = 9.5;
+    const dw = dates ? fonts.italic.widthOfTextAtSize(dates, dsize) : 0;
+    const headingWidth = CONTENT_W - (dates ? dw + 14 : 0);
+    const headingLines = wrap([company, title].filter(Boolean).join(" | "), fonts.bold, size, headingWidth);
+    ensureSpace(Math.max(1, headingLines.length) * size * 1.4 + 30);
+    if (dates) page.drawText(dates, { x: MARGIN + CONTENT_W - dw, y: y + 0.5, size: dsize, font: fonts.italic, color: MUTED });
+    for (const heading of headingLines) {
+      page.drawText(heading, { x: MARGIN, y, size, font: fonts.bold, color: BODY });
+      y -= size * 1.4;
     }
-    if (title) {
-      const sepText = company ? " | " : "";
-      if (sepText) {
-        page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
-        lx += fonts.bold.widthOfTextAtSize(sepText, size);
-      }
-      page.drawText(title, { x: lx, y, size, font: fonts.bold, color: BODY });
-    }
-    if (dates) {
-      const dsize = 9.5;
-      const dw = fonts.italic.widthOfTextAtSize(dates, dsize);
-      page.drawText(dates, {
-        x: MARGIN + CONTENT_W - dw,
-        y: y + 0.5,
-        size: dsize,
-        font: fonts.italic,
-        color: MUTED,
-      });
-    }
-    y -= size * 1.4;
 
     if (loc) {
       ensureSpace(9 * 1.4);
@@ -502,6 +492,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       if (!b || !b.trim() || isMetadataLine(b)) continue;
       drawBullet(b);
     }
+    for (const link of p.links || []) drawWrapped(sanitizeText(link), MARGIN, 9.5, fonts.regular, MUTED, CONTENT_W);
     if (!isLast) y -= 7;
   };
 
@@ -764,7 +755,7 @@ function renderResume(
   data: NormalisedResume,
 ): PDFPage[] {
   const r = makeRenderer(pdfDoc, fonts);
-  r.drawTopHeader(data.personalInfo.name, data.personalInfo.contact);
+  r.drawTopHeader(data.personalInfo.name, data.personalInfo.contact, data.targetTitle);
 
   if (data.summary) {
     r.drawSectionHeader("Professional Summary");
@@ -1051,6 +1042,8 @@ serve(async (req) => {
         achievements: sanitizedData.achievements,
       };
       docxBytes = await buildResumeDocxBytes(norm);
+      renderResume(pdfDoc, fonts, norm);
+      letterPdf = await pdfDoc.save();
     } else if (sanitizedData.type === "cover_letter" && sanitizedData.coverLetter) {
       const contact: ContactInfo = {
         location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
@@ -1077,7 +1070,7 @@ serve(async (req) => {
     console.log(`Premium DOCX generated: ${fileName} Size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx, docx: base64Docx, fileName }),
+      JSON.stringify(documentEnvelope(letterPdf ? bytesToBase64(letterPdf) : "", base64Docx, fileName)),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
@@ -1201,13 +1194,13 @@ const sanitizeObject = (obj: unknown): unknown => {
 };
 
 function computeFileName(data: ResumeData): string {
-  if (data.customFileName) return data.customFileName;
+  if (data.customFileName) return documentFileName(data.customFileName);
   const candidateName =
     data.candidateName ||
     data.personalInfo.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
   return data.type === "resume"
-    ? `${candidateName}_CV.docx`
-    : `${candidateName}_Cover_Letter.docx`;
+    ? `${candidateName}_CV.pdf`
+    : `${candidateName}_Cover_Letter.pdf`;
 
 }
 
@@ -1231,7 +1224,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?
     let docxBytes: Uint8Array = new Uint8Array();
     let letterPdf: Uint8Array | undefined;
     const baseName = (fileName || `${candidateName}_${type === "resume" ? "CV" : "Cover_Letter"}`).replace(/\.(pdf|docx)$/i, "");
-    const outFileName = `${baseName}.docx`;
+    const outFileName = `${baseName}.pdf`;
 
     if (type === "resume" && structuredCv) {
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
@@ -1262,6 +1255,9 @@ async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?
         certifications: structuredCv.certifications || [],
       };
       docxBytes = await buildResumeDocxBytes(norm);
+      const { pdfDoc, fonts } = await setupPdf(`${candidateName} CV`, candidateName);
+      renderResume(pdfDoc, fonts, norm);
+      letterPdf = await pdfDoc.save();
     } else if (type === "coverletter") {
       if (!pInfo || !plainText) {
         return new Response(
@@ -1290,7 +1286,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest, letterStyle?
     console.log(`[generate-pdf] StructuredCv DOCX generated: ${outFileName}, size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ success: true, pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx, docx: base64Docx, fileName: outFileName }),
+      JSON.stringify({ success: true, ...documentEnvelope(letterPdf ? bytesToBase64(letterPdf) : "", base64Docx, outFileName) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 
@@ -1630,9 +1626,17 @@ async function handleRawContentRequest(body: {
         const jobs: Job[] = [];
 
         for (const line of section.content) {
+          const bulletLine = /^[-•*\u2022]/.test(line.trimStart());
+          // Company and location are separate fields even on a tabbed line.
+          const tabbed = line.split(/\t+/).map((part) => part.trim());
+          if (!bulletLine && tabbed.length > 1 && isLocation(tabbed[1])) {
+            if (currentJob?.bullets.length) jobs.push(currentJob);
+            currentJob = { company: tabbed[0], title: '', dates: '', location: tabbed[1], bullets: [] };
+            continue;
+          }
           // A location line belongs to the role above it, so it is kept rather
           // than discarded.
-          if (isLocation(line)) {
+          if (!bulletLine && isLocation(line)) {
             if (currentJob && !currentJob.location) currentJob.location = line.trim();
             continue;
           }
@@ -1640,7 +1644,7 @@ async function handleRawContentRequest(body: {
           // A bullet is a bullet whatever glyph it uses. Without "*" here, any
           // starred bullet containing a hyphen ("post-launch") was read as a
           // new job header and printed as a bold heading with no dates.
-          const isBulletLine = /^[-•*\u2022]/.test(line.trimStart());
+          const isBulletLine = bulletLine;
 
           // A role written on three lines (company / title / date range) put its
           // date line through the job-header split, so the exported CV showed
@@ -1829,6 +1833,14 @@ async function handleRawContentRequest(body: {
         const projs: ProjectEntry[] = [];
         let cur: ProjectEntry | null = null;
         for (const line of section.content) {
+          if (cur && /^\s*(?:code|live(?: demo)?|demo|repo|repository|source|url|link)\s*:/i.test(line) && /https?:\/\//i.test(line)) {
+            cur.links = [...(cur.links || []), ...line.split(/\s*\|\s*/).filter(Boolean)];
+            continue;
+          }
+          if (cur && !/^[-•*]/.test(line) && line.includes(',') && !cur.bullets.length) {
+            cur.technologies = line.split(/\s*,\s*/).filter(Boolean);
+            continue;
+          }
           if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*")) {
             const body = line.replace(/^[-•*]\s*/, "").trim();
             // Link lines are kept as links rather than dropped as bullets, so
@@ -1859,6 +1871,9 @@ async function handleRawContentRequest(body: {
     if (type === "cv") {
       if (jobTitle) norm.targetTitle = jobTitle;
       docxBytes = await buildResumeDocxBytes(norm);
+      const { pdfDoc, fonts } = await setupPdf(`${norm.personalInfo.name} CV`, norm.personalInfo.name);
+      renderResume(pdfDoc, fonts, norm);
+      letterPdf = await pdfDoc.save();
     } else {
       // The builder prints the letterhead, date, subject line, salutation and
       // sign-off itself. Any of those repeated inside the drafted text printed
@@ -1911,10 +1926,9 @@ async function handleRawContentRequest(body: {
       else nameForFile = "Applicant";
       nameForFile = nameForFile.replace(/[^a-zA-Z0-9_]/g, "");
       finalFileName =
-        type === "cv" ? `${nameForFile}_CV.docx` : `${nameForFile}_Cover_Letter.docx`;
+        type === "cv" ? `${nameForFile}_${(jobTitle || "").replace(/[^a-zA-Z0-9]+/g, "_")}_CV.pdf` : `${nameForFile}_${(jobTitle || "").replace(/[^a-zA-Z0-9]+/g, "_")}_Cover_Letter.pdf`;
     } else {
-      finalFileName = finalFileName.replace(/\.pdf$/i, ".docx");
-      if (!/\.docx$/i.test(finalFileName)) finalFileName = `${finalFileName}.docx`;
+      finalFileName = documentFileName(finalFileName);
     }
 
     console.log(
@@ -1923,9 +1937,7 @@ async function handleRawContentRequest(body: {
 
     return new Response(
       JSON.stringify({
-        pdf: letterPdf ? bytesToBase64(letterPdf) : base64Docx,
-        docx: base64Docx,
-        fileName: finalFileName,
+        ...documentEnvelope(letterPdf ? bytesToBase64(letterPdf) : "", base64Docx, finalFileName),
         location: tailoredLocation || "",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

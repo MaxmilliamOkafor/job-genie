@@ -44,7 +44,7 @@ const features = [
 const steps = [
   { title: 'Paste a job URL', description: 'Drop in any job posting from supported boards.' },
   { title: 'Review the tailor', description: 'The agent extracts requirements and matches them to your profile.' },
-  { title: 'Download & apply', description: 'Get a DOCX CV and cover letter ready to submit.' },
+  { title: 'Download & apply', description: 'Get a PDF CV and cover letter ready to submit, with Word versions available.' },
 ];
 
 export default function LandingPage() {
@@ -98,7 +98,7 @@ export default function LandingPage() {
             <div className="mx-auto max-w-3xl text-center">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
                 <Sparkles className="h-4 w-4" />
-                <span>Now generating DOCX CVs & cover letters</span>
+                <span>PDF CVs & cover letters, with Word versions available</span>
               </div>
               <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
                 Land more interviews with{' '}

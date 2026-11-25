@@ -19,9 +19,9 @@ import { toast } from 'sonner';
 import {
   documentSlug as slug,
   documentVersion,
-  downloadBase64Docx,
+  downloadBase64Document,
   downloadText,
-  generateDocx,
+  generateDocument,
   type DocKind,
 } from '@/lib/documentExport';
 
@@ -196,9 +196,7 @@ export default function Documents() {
             {(['cv', 'letter'] as const).map((kind) => {
               const text =
                 (kind === 'cv' ? open?.tailored_resume : open?.tailored_cover_letter) ?? '';
-              const base = `${slug(open?.job?.company ?? 'company')}-${
-                kind === 'cv' ? 'CV' : 'Cover-Letter'
-              }`;
+              const base = [profile?.first_name, profile?.last_name, open?.job?.title, kind === 'cv' ? 'CV' : 'Cover_Letter'].filter(Boolean).map((part) => slug(part ?? '').replace(/-/g, '_')).join('_');
               const docKind: DocKind = kind === 'cv' ? 'cv' : 'coverletter';
               const version = documentVersion(
                 text,
@@ -219,24 +217,27 @@ export default function Documents() {
                     >
                       <Copy className="mr-2 h-4 w-4" /> Copy
                     </Button>
-                    <Button
-                      disabled={!text || busy || refreshing}
+                    {(['pdf', 'docx'] as const).map((format) => <Button
+                      key={format}
+                      variant={format === 'pdf' ? 'default' : 'outline'}
+                      disabled={!text || !!exporting || refreshing}
                       onClick={async () => {
                         setExporting(`${open?.id}:${kind}`);
                         try {
-                          const out = await generateDocx({
+                          const out = await generateDocument({
                             text,
                             kind: docKind,
                             jobTitle: open?.job?.title,
                             company: open?.job?.company,
-                            fileName: `${base}.docx`,
+                            fileName: `${base}.${format}`,
+                            format,
                             firstName: profile?.first_name ?? '',
                             lastName: profile?.last_name ?? '',
                           });
 
-                          downloadBase64Docx(out.base64, out.fileName);
+                          downloadBase64Document(out.base64, out.fileName, format);
                           setExported((prev) => ({ ...prev, [`${open?.id}:${kind}`]: out.version }));
-                          toast.success('Word file downloaded');
+                          toast.success(`${format === 'pdf' ? 'PDF' : 'Word'} file downloaded`);
                         } catch (e) {
                           setExported((prev) => {
                             const next = { ...prev };
@@ -246,7 +247,7 @@ export default function Documents() {
                           toast.error(
                             e instanceof Error
                               ? e.message
-                              : 'The Word file could not be created. Nothing was downloaded.',
+                              : 'The file could not be created. Nothing was downloaded.',
                           );
                         } finally {
                           setExporting(null);
@@ -258,8 +259,8 @@ export default function Documents() {
                       ) : (
                         <Download className="mr-2 h-4 w-4" />
                       )}
-                      Download Word
-                    </Button>
+                      {format === 'pdf' ? 'Download PDF' : 'Download Word version'}
+                    </Button>)}
                     <Button
                       variant="outline"
                       disabled={!text || refreshing}

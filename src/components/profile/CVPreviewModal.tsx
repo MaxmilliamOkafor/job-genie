@@ -133,16 +133,16 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
         throw new Error(data.error);
       }
 
-      if (typeof data?.pdfBase64 !== 'string' || data.pdfBase64.length < 1000) {
+      if (typeof data?.pdf !== 'string' || !data.pdf.startsWith('JVBER') || data.pdf.length < 1000) {
         throw new Error('Invalid PDF data received');
       }
 
       // Guard against unusually large payloads that could crash the tab
-      if (data.pdfBase64.length > 25_000_000) {
+      if (data.pdf.length > 25_000_000) {
         throw new Error('PDF is too large to preview safely. Please download instead.');
       }
 
-      const url = await base64PdfToBlobUrl(data.pdfBase64);
+      const url = await base64PdfToBlobUrl(data.pdf);
 
       if (!isMountedRef.current || requestSeqRef.current !== currentRequest) {
         URL.revokeObjectURL(url);
