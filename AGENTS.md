@@ -32,3 +32,4 @@
 - Final experience quality and skills evidence run through cvFinalQuality within finalCvRules, so role attribution, duplicate removal, tense and skills checks share tested logic.
 - All export handlers render PDF and Word from the same normalised content and return validated fileDelivery envelopes; primary bytes never fall back to another format.
 - Contact phones are formatted by the pure shared contactPhone helper in tailoring headers and every PDF/Word export, so documents cannot drift.
+- Screening answers keep the contact details an ATS asks for, but the pure isSecretAnswer helper in screeningAnswers drops passwords, card and bank numbers and government ID numbers in mergeAnswers and buildMemoryPayload, so a secret is never saved, synced to the extension or filled in.

@@ -56,6 +56,43 @@ export const GLOBAL_SCOPE = 'Any employer';
 
 /* ------------------------------------------------------------------ text ---*/
 
+/* ---------------------------------------------------------------- secrets ---*/
+
+// Contact details an ATS asks for (name, phone, email, address, date of
+// birth) are saved and reused. Secrets are never saved: passwords, card and
+// bank numbers, and government ID numbers. A yes/no question that only
+// mentions one ("Do you hold a valid passport?") is not a secret.
+const SECRET_QUESTION = new RegExp(
+  '\\b(?:password|passcode|passphrase|pin(?: code| number)?|cvv|cvc|security code' +
+  '|(?:credit|debit|bank|payment)? ?card (?:number|no)|card number' +
+  '|iban|bic|swift(?: code)?|sort code|routing number|(?:bank )?account number' +
+  '|social security(?: number)?|ssn|ppsn?(?: number)?|national insurance(?: number)?|nino' +
+  '|national id(?:entity)?(?: card)? number|tax (?:id|identification) number' +
+  '|passport number|driv(?:er|ing) licen[cs]e number)\\b'
+);
+
+function luhn(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+/** An answer that is itself a card number or an IBAN. */
+function looksLikeSecretValue(answer: string): boolean {
+  const compact = (answer ?? '').replace(/[\s-]/g, '');
+  if (/^\d{13,19}$/.test(compact) && luhn(compact)) return true;
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/i.test(compact);
+}
+
+/** True for a password, card, bank or government ID number, which is never saved. */
+export function isSecretAnswer(question: string, answer = ''): boolean {
+  return SECRET_QUESTION.test(normaliseQuestion(question)) || looksLikeSecretValue(answer);
+}
+
 const PUNCTUATION = /[\u2018\u2019\u201c\u201d"'`()[\]{}.,;:!?*_/\\]+/g;
 
 /** Lowercase, strip punctuation and collapse whitespace. Keeps + and #. */
@@ -324,7 +361,7 @@ export function buildMemoryPayload(
   answers: ScreeningAnswer[],
   now: Date = new Date()
 ): ScreeningMemoryPayload {
-  const usable = answers.filter((a) => a.question.trim() && a.answer.trim());
+  const usable = answers.filter((a) => a.question.trim() && a.answer.trim() && !isSecretAnswer(a.question, a.answer));
   return {
     application_answers: Object.fromEntries(
       usable.filter((a) => !isStale(a, now)).map((a) => [a.question, a.answer])
@@ -341,8 +378,9 @@ export function mergeAnswers(
   existing: ScreeningAnswer[],
   incoming: ScreeningAnswer[]
 ): ScreeningAnswer[] {
-  const out = [...existing];
+  const out = existing.filter((a) => !isSecretAnswer(a.question, a.answer));
   for (const next of incoming) {
+    if (isSecretAnswer(next.question, next.answer)) continue;
     const key = `${normaliseQuestion(next.question)}::${(next.scope ?? '').toLowerCase()}`;
     const i = out.findIndex(
       (a) => `${normaliseQuestion(a.question)}::${(a.scope ?? '').toLowerCase()}` === key
